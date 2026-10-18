@@ -1,0 +1,47 @@
+# ===== 依赖 =====
+node_modules/
+.pnpm-store/
+
+# ===== 构建产物 =====
+dist/
+dist-ssr/
+*.local
+
+# ===== Tauri / Rust =====
+src-tauri/target/
+src-tauri/Cargo.lock          # 应用类项目可以提交 lock，按需开启
+src-tauri/gen/
+
+# ===== 本地数据（测试与真实数据应放在 D:\MyProject\Datas，不落地到仓库） =====
+data/
+
+# ===== 编辑器 =====
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ===== 日志与临时 =====
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 环境变量（本地覆盖） =====
+.env
+.env.local
+.env.*.local
+!.env.example
