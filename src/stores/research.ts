@@ -83,6 +83,8 @@ function flushReport(set: Set) {
 function applyEvent(ev: ipc.ResearchEvent, set: Set) {
   switch (ev.type) {
     case 'round_start':
+      // 简洁研究:每轮整稿重写,新一轮开始清空报告区与流式缓冲(旧稿已存档进时间线)
+      reportBuf = '';
       set((s) =>
         s.active
           ? {
@@ -90,6 +92,7 @@ function applyEvent(ev: ipc.ResearchEvent, set: Set) {
                 ...s.active,
                 currentRound: ev.round,
                 maxRounds: ev.max_rounds,
+                report: '',
                 trail: [...s.active.trail, ev],
               },
             }

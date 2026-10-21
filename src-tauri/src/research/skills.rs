@@ -16,7 +16,7 @@ use tauri::Manager;
 
 /// 技能文档清单(健康检查用;文件名与资源目录 `resources/skills/` 一一对应)。
 const SKILL_FILES: [&str; 25] = [
-    "00-运作模式总览.md",
+    "00-overview.md",
     "README.md",
     "skills/nature-academic-search.md",
     "skills/nature-citation.md",

@@ -3,7 +3,7 @@ import { searchAll, type AttachmentMeta, type ReasoningCapability } from '../lib
 import { registerAtRef } from '../lib/atRefs';
 import { THINKING_LEVEL_LABEL, effortHint } from '../lib/thinkingHint';
 import type { ThinkingLevel, ThinkingSelection } from '../stores/thinking';
-import { IconAttach, IconBrain, IconNote, IconX, IconDoc, IconImage, IconGlobe, IconSend, IconChevronDown } from './icons';
+import { IconAttach, IconBrain, IconNote, IconX, IconDoc, IconImage, IconGlobe, IconSend, IconStop, IconChevronDown } from './icons';
 
 /** F9:光标前活跃的 @ 触发词(@ 须在行首/空白后,其后 ≥1 个非空白字符)。 */
 function findAtTrigger(text: string, cursor: number): { start: number; query: string } | null {
@@ -68,6 +68,21 @@ interface Props {
 const ACCEPT =
   '.docx,.xlsx,.xls,.pdf,.txt,.md,.markdown,.csv,.tsv,.log,.json,.yaml,.yml,.png,.jpg,.jpeg,.gif,.webp,.bmp';
 
+/** 输入框高度:用户拖拽顶部把手调整,持久化到 localStorage(主页/对话页共用)。 */
+const HEIGHT_KEY = 'composer-h';
+const MIN_BOX_H = 48;
+const MAX_BOX_H = 420;
+
+function readStoredHeight(): number {
+  try {
+    const v = Number(localStorage.getItem(HEIGHT_KEY));
+    if (Number.isFinite(v) && v >= MIN_BOX_H && v <= MAX_BOX_H) return Math.round(v);
+  } catch {
+    /* ignore */
+  }
+  return 0; // 0 = 未设置,使用 rows 默认高度
+}
+
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
@@ -95,6 +110,40 @@ export default function Composer({
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [thinkMenu, setThinkMenu] = useState(false);
+
+  // ---------- 输入框高度拖拽 ----------
+  const [boxH, setBoxH] = useState(() => readStoredHeight());
+  const [resizing, setResizing] = useState(false);
+  const hStart = useRef({ y: 0, h: 0 });
+
+  const onResizeDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    hStart.current = { y: e.clientY, h: boxH || ref.current?.clientHeight || MIN_BOX_H };
+    setResizing(true);
+  };
+  const onResizeMove = (e: React.PointerEvent) => {
+    if (!resizing) return;
+    const raw = hStart.current.h + (hStart.current.y - e.clientY);
+    setBoxH(Math.min(MAX_BOX_H, Math.max(MIN_BOX_H, Math.round(raw))));
+  };
+  const onResizeUp = (e: React.PointerEvent) => {
+    if (!resizing) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    setResizing(false);
+    setBoxH((h) => {
+      try {
+        localStorage.setItem(HEIGHT_KEY, String(h));
+      } catch {
+        /* ignore */
+      }
+      return h;
+    });
+  };
 
   /** 从 clipboard event 中抽取 file items,转成 FileList 供 onPickFiles 统一处理。 */
   const extractPasteFiles = (e: React.ClipboardEvent): FileList | null => {
@@ -220,6 +269,14 @@ export default function Composer({
       }}
     >
       <div className="composer-box">
+        {/* 可拖拽的顶部把手:上下拖动调整输入框高度 */}
+        <div
+          className={`composer-resize${resizing ? ' dragging' : ''}`}
+          title="拖动调整输入框高度"
+          onPointerDown={onResizeDown}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeUp}
+        />
         {hasAttachments && (
           <div className="attach-list">
             {attachments!.map((a, i) => (
@@ -244,6 +301,7 @@ export default function Composer({
         <textarea
           ref={ref}
           rows={2}
+          style={boxH ? { height: boxH } : undefined}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
@@ -441,8 +499,8 @@ export default function Composer({
           {children}
           <span className="spacer" />
           {sending && onStop ? (
-            <button type="button" className="stop-btn" onClick={onStop}>
-              停止
+            <button type="button" className="stop-btn" onClick={onStop} title="停止">
+              <IconStop size={14} />
             </button>
           ) : (
             <button

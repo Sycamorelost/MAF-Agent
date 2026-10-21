@@ -9,7 +9,7 @@ mod provider;
 mod research;
 mod selection;
 mod settings;
-mod text_commands;
+mod study;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
@@ -60,6 +60,7 @@ pub fn run() {
     .plugin(navguard::init())
     .manage(memory::watcher::WatcherState::default())
     .manage(commands::research::ResearchRegistry::default())
+    .manage(commands::study::StudyRegistry::default())
     .manage(provider::rotation::RotationState::default())
     .manage(commands::provider::StreamCancelState::default())
     .manage(commands::research::ExportPathTokens::default())
@@ -93,6 +94,10 @@ pub fn run() {
         Ok(conn) => {
           if let Err(e) = research::store::mark_interrupted(&conn) {
             log::error!("mark interrupted research failed: {e}");
+          }
+          // 学习规划同款:generating 中的计划重启后无法恢复
+          if let Err(e) = study::store::mark_interrupted(&conn) {
+            log::error!("mark interrupted plans failed: {e}");
           }
         }
         Err(e) => log::error!("db lock failed: {e}"),

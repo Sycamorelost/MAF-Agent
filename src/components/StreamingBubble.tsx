@@ -33,7 +33,6 @@ export default function StreamingBubble({
 
   return (
     <div className="msg assistant" ref={rootRef}>
-      <div className="avatar">AI</div>
       <div className="content">
         <div className="bubble">
           {(reasoningText || rInfo?.tokens) && (

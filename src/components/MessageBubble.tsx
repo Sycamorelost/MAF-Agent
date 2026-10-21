@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import React from 'react';
-import 'highlight.js/styles/github.css';
+// 代码块语法高亮:VS Code Dark+ 配色。必须用深色主题——代码面为深底(见 app.css),
+// 若导入浅色主题(github.css),其 `.hljs{color:#24292e}` 会把灰字压到深底上,可读性崩塌。
+import 'highlight.js/styles/vs2015.css';
 import * as ipc from '../lib/ipc';
 import type { AttachmentMeta, MessageRow, SourceItem } from '../lib/ipc';
 import { sanitizeHttpUrl } from '../lib/url';
@@ -205,7 +207,6 @@ function MessageBubbleInner({
   onPin,
 }: Props) {
   const isUser = msg.role === 'user';
-  const label = isUser ? '我' : 'AI';
   const [copied, setCopied] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
   const reasoning = !isUser ? (msg.reasoning ?? '') : '';
@@ -225,7 +226,6 @@ function MessageBubbleInner({
 
   return (
     <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
-      <div className="avatar">{label}</div>
       <div className="content">
         <AttachmentCards attachments={msg.attachments} />
         {msg.content && (

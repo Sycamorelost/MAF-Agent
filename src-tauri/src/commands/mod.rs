@@ -9,7 +9,7 @@ pub mod provider;
 pub mod research;
 pub mod search;
 pub mod settings;
-pub mod text_cmds;
+pub mod study;
 pub mod translate;
 pub mod tutorial;
 
@@ -142,6 +142,10 @@ macro_rules! all_commands {
             crate::commands::research::research_export_html,
             crate::commands::research::research_figure_data,
             crate::commands::research::pick_save_path,
+            // 研究参考资料(本地文件解析与注入)
+            crate::commands::research::import_research_reference,
+            crate::commands::research::delete_research_reference,
+            crate::commands::research::list_research_references,
             // 全局搜索
             crate::commands::search::search_all,
             // 知识库 / 笔记库(迭代 D8)
@@ -157,11 +161,29 @@ macro_rules! all_commands {
             crate::commands::agents::apply_agent_prompt,
             // 教程卡(迭代 D7.2)
             crate::commands::tutorial::list_tutorials,
-            // AI 指令库(迭代 B3 / F1)
-            crate::commands::text_cmds::list_text_commands,
-            crate::commands::text_cmds::save_text_command,
-            crate::commands::text_cmds::delete_text_command,
-            crate::commands::text_cmds::render_text_command,
+            // 学习规划(板块 P0)
+            crate::commands::study::study_preflight,
+            crate::commands::study::study_start,
+            crate::commands::study::study_cancel,
+            crate::commands::study::study_pause,
+            crate::commands::study::study_resume,
+            crate::commands::study::study_list,
+            crate::commands::study::study_get,
+            crate::commands::study::study_delete,
+            crate::commands::study::study_deep_dig,
+            crate::commands::study::study_export_markdown,
+            crate::commands::study::study_nodes,
+            crate::commands::study::study_unit_generate,
+            crate::commands::study::study_quiz_new,
+            crate::commands::study::study_quiz_submit,
+            crate::commands::study::study_mastery_set,
+            crate::commands::study::study_node_done,
+            crate::commands::study::study_review_queue,
+            crate::commands::study::study_review_done,
+            crate::commands::study::study_today,
+            crate::commands::study::study_focus_log,
+            crate::commands::study::study_stats,
+            crate::commands::study::study_memory_digest,
         ]
     };
 }

@@ -89,12 +89,13 @@
   --font-mono: "JetBrains Mono","Cascadia Code","Consolas","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",monospace;
 
   /* ---- 布局（跨页面硬约束） ---- */
-  --rail-w:       56px;
-  --sidebar-w:    248px;
   --mempanel-w:   320px;
-  --topbar-h:     52px;
+  --sidebar-w:    280px;   /* 会话抽屉宽度(窄窗降档) */
+  --aside-w:      300px;   /* 页面左栏抽屉宽度(窄窗降档) */
   --titlebar-h:   38px;
-  --main-max-w:   clamp(280px, 80%, 860px);
+  /* 对话页两档内容宽度:消息列更宽(间隔减半),输入框最宽(间隔≈原 2/5) */
+  --chat-max-w:      clamp(320px, 90%, 1120px);
+  --composer-max-w:  clamp(340px, 92%, 1200px);
 
   /* ---- 水平间距系统（v3 · 所有栏/块/版统一约束） ----
      --pad-x:         主内容栏内水平 padding（主区、记忆面板、弹窗主区）
@@ -221,11 +222,12 @@ body{
   user-select:none;
 }
 .titlebar .logo{width:20px;height:20px;flex-shrink:0}
-.titlebar .appname{font-size:var(--font-caption);font-weight:600;color:var(--text-1)}
 .titlebar .cname{font-size:var(--font-micro);color:var(--text-3)}
 .titlebar .spacer{flex:1}
+/* 窗口控制按钮紧凑排布:贴右侧、无多余留白;左侧导航区整体左移 */
+.titlebar{padding-right:0;padding-left:var(--space-2)}
 .win-btn{
-  width:40px;height:var(--titlebar-h);
+  width:30px;height:var(--titlebar-h);
   border:none;background:transparent;color:var(--text-3);
   cursor:pointer;display:flex;align-items:center;justify-content:center;
   transition:.1s;
@@ -234,50 +236,86 @@ body{
 .win-btn.close:hover{background:#C93B3B;color:#fff}
 .win-btn.pinned{color:var(--brand)}
 
-/* 图标轨（Rail） */
-.rail{
-  width:var(--rail-w);flex-shrink:0;
-  background:var(--bg-side);
-  border-right:1px solid var(--border);
-  display:flex;flex-direction:column;align-items:center;
-  padding:var(--space-3) 0;gap:var(--space-1);
+/* 图标轨(Rail)已移除:主导航收进标题栏 ⋮ 下拉菜单(NavMenu) */
+.nav-menu{position:relative;flex-shrink:0}
+.menu-btn{
+  width:30px;height:30px;padding:0;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--text-2);
+  border-radius:var(--radius-s);cursor:pointer;transition:.15s;
 }
-.rail-btn{
-  width:40px;height:40px;
-  border:none;background:transparent;
-  border-radius:var(--radius-s);
-  cursor:pointer;display:flex;
-  align-items:center;justify-content:center;
-  color:var(--text-3);font-family:var(--font);
-  transition:.15s;position:relative;
+.menu-btn:hover,.menu-btn.on{background:var(--bg-hover);color:var(--text-1)}
+.nav-pop{
+  position:absolute;top:calc(100% + 6px);left:0;z-index:30;
+  min-width:168px;padding:6px;
+  display:flex;flex-direction:column;gap:2px;
+  background:rgba(255,255,255,.82);
+  backdrop-filter:blur(18px) saturate(1.5);
+  -webkit-backdrop-filter:blur(18px) saturate(1.5);
+  border:1px solid var(--border);
+  border-radius:var(--radius-l);
+  box-shadow:var(--shadow-card-h);
 }
-.rail-btn:hover{background:var(--bg-hover);color:var(--text-1)}
-.rail-btn.active{background:var(--bg-active);color:var(--text-1)}
-.rail-btn.active::before{
-  content:"";position:absolute;left:-9px;top:50%;transform:translateY(-50%);
-  width:3px;height:16px;border-radius:2px;background:var(--brand);
+.nav-item{
+  display:flex;align-items:center;gap:var(--space-2);
+  padding:7px 10px;border:none;background:transparent;
+  border-radius:var(--radius-s);cursor:pointer;
+  font-size:var(--font-sub);color:var(--text-2);
+  font-family:var(--font);text-align:left;transition:.15s;
 }
-.rail .spacer{flex:1}
+.nav-item:hover{background:var(--bg-hover);color:var(--text-1)}
+.nav-item.active{background:var(--bg-active);color:var(--text-1);font-weight:600}
+.nav-item.active svg{color:var(--brand)}
+.nav-sep{height:1px;margin:4px 6px;background:var(--border)}
 
-/* 侧栏 */
+/* 玻璃组件组(标题栏内):会话抽屉 / 全局搜索 / 新建对话 */
+.tb-pill{
+  display:flex;align-items:center;gap:2px;
+  /* 负外边距抵消标题栏 8px gap,紧靠左侧 ⋮ 菜单 */
+  margin-left:-6px;padding:2px;
+  background:rgba(255,255,255,.65);
+  backdrop-filter:blur(14px) saturate(1.4);
+  -webkit-backdrop-filter:blur(14px) saturate(1.4);
+  border:1px solid var(--border);
+  border-radius:var(--radius-m);
+  box-shadow:var(--shadow-card);
+}
+.tb-pill-btn{
+  width:26px;height:24px;padding:0;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--text-3);
+  border-radius:var(--radius-s);cursor:pointer;transition:.15s;
+}
+.tb-pill-btn:hover{background:var(--bg-hover);color:var(--text-1)}
+
+/* 会话历史抽屉(玻璃浮层,固定在标题栏下方左侧,不再占据布局列) */
 .sidebar{
+  position:fixed;top:var(--titlebar-h);left:0;bottom:0;z-index:9;
   width:var(--sidebar-w);flex-shrink:0;
-  background:var(--bg-side);
+  background:rgba(255,255,255,.86);
+  backdrop-filter:blur(20px) saturate(1.5);
+  -webkit-backdrop-filter:blur(20px) saturate(1.5);
   border-right:1px solid var(--border);
+  box-shadow:var(--shadow-card-h);
   display:flex;flex-direction:column;
   padding:var(--space-4) var(--pad-x-narrow);
+  /* 抽屉滑入/滑出:关闭时整体左移出屏,与主区让位动画同步 */
+  transform:translateX(-100%);
+  visibility:hidden;
+  pointer-events:none;
+  transition:transform .2s ease, visibility 0s linear .2s;
 }
+.sidebar.open{transform:translateX(0);visibility:visible;pointer-events:auto;transition:transform .2s ease, visibility 0s}
 .side-head{display:flex;align-items:center;justify-content:space-between;padding:0 0 var(--space-3)}
 .side-head h1{font-size:var(--font-h3);font-weight:600;color:var(--text-1)}
-.new-chat{
-  display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);
-  background:var(--ink);color:#fff;border:none;
-  border-radius:var(--radius-m);
-  font-size:var(--font-caption);font-weight:500;
-  padding:10px 12px;cursor:pointer;font-family:var(--font);
-  transition:.15s;
+/* 面板折叠:统一的收起/展开小按钮与折叠后的窄条入口 */
+.panel-toggle{
+  width:22px;height:22px;padding:0;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--text-3);
+  border-radius:var(--radius-s);cursor:pointer;transition:.15s;
 }
-.new-chat:hover{background:var(--ink-hover);transform:translateY(-1px)}
+.panel-toggle:hover{background:var(--bg-hover);color:var(--text-1)}
 .side-section{margin-top:var(--space-5)}
 .side-label{font-size:var(--font-micro);color:var(--text-3);font-weight:500;padding:0 0 var(--space-2);display:flex;align-items:center;gap:var(--space-1)}
 .side-item{
@@ -298,16 +336,8 @@ body{
   border:1px solid var(--brand);border-radius:var(--radius-xs, 4px);
   padding:1px 6px;outline:none;
 }
-.side-foot{margin-top:auto;padding-top:var(--space-3)}
 
-/* 顶部栏 */
-.topbar{
-  height:var(--topbar-h);flex-shrink:0;
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 var(--space-4);
-  border-bottom:1px solid var(--border);
-  background:var(--bg-main);
-}
+/* 顶部栏已移除:搜索/新建对话收进标题栏玻璃 pill(Topbar 组件已删除) */
 .model-switch{
   display:flex;align-items:center;gap:var(--space-2);
   border:none;background:transparent;
@@ -369,9 +399,21 @@ body{
 .composer-box textarea{
   width:100%;border:none;outline:none;resize:none;background:transparent;
   font-family:var(--font);font-size:var(--font-body);
-  color:var(--text-1);padding:var(--space-3) var(--pad-x) var(--space-2);line-height:1.55;max-height:160px;
+  color:var(--text-1);padding:var(--space-3) var(--pad-x) var(--space-2);line-height:1.55;max-height:420px;
 }
 .composer-box textarea::placeholder{color:var(--text-4)}
+/* 输入框高度拖拽把手:置于外框顶部,上下拖动调整 textarea 高度 */
+.composer-resize{
+  height:8px;flex-shrink:0;cursor:ns-resize;
+  display:flex;align-items:center;justify-content:center;
+  touch-action:none;
+}
+.composer-resize::after{
+  content:"";width:40px;height:3px;border-radius:2px;
+  background:var(--border-strong);opacity:.35;
+  transition:opacity .15s,background .15s;
+}
+.composer-resize:hover::after,.composer-resize.dragging::after{opacity:1;background:var(--brand)}
 .composer-bar{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--pad-x) var(--space-3);flex-wrap:wrap;row-gap:var(--space-1)}
 .composer-bar .spacer{flex:1}
 
@@ -488,23 +530,29 @@ body{
 .stat-dot.err{background:var(--err)}
 .stat-dot.info{background:var(--brand)}
 
-/* ---- 响应式断点（统一所有页面） ---- */
-@media (min-width:1600px){
-  .cards{max-width:960px}
-  .composer{max-width:960px}
+/* ---- 响应式断点（统一所有页面） ----
+   ★ 栏宽策略:只「降档」、不硬隐藏。
+     面板可见性由折叠态决定,优先级:用户手动展开 > 断点默认。
+     面板默认宽度由 usePanelWidth 读取 --mempanel-w,token 降档即生效;
+     另配合按视口比例(45%)的限宽,确保窄窗下主区不被挤到不可用。 */
+@media (max-width:1100px){
+  :root{ --mempanel-w:280px; }
 }
-@media (max-width:1024px){
-  .mempanel{display:none}
-  .sidebar{width:200px}
-}
-@media (max-width:768px){
-  .sidebar{display:none}
-  .rail{display:none}
+@media (max-width:900px){
+  :root{ --mempanel-w:260px; --sidebar-w:240px; --aside-w:260px; }
   .cards{flex-direction:column;max-width:480px}
 }
 @media (max-width:560px){
+  :root{ --sidebar-w:220px; --aside-w:240px; }
   .stage{padding:var(--space-6) var(--pad-x-narrow) var(--space-3)}
   .cards{gap:var(--space-2)}
+  .composer-bar{padding:var(--space-2) var(--space-3) var(--space-3)}
+}
+/* 宽窗:栏宽升档,避免大屏下内容仍被限制在窄列 */
+@media (min-width:1600px){
+  :root{ --mempanel-w:360px; }
+  .cards{max-width:960px}
+  .composer{max-width:960px}
 }
 
 /* ---- 窗口尺寸自适应:字号/按钮/栏高随窗口宽度缩放,不再固定 ---- */
@@ -513,7 +561,7 @@ body{
     --font-hero:23px; --font-h2:15px; --font-h3:14px;
     --font-body:13px; --font-body-em:13px; --font-sub:12px;
     --font-caption:11px; --font-micro:10px;
-    --topbar-h:46px; --titlebar-h:34px;
+    --titlebar-h:34px;
   }
   .btn-primary,.btn-brand{padding:6px 11px}
   .btn-ghost{padding:5px 8px}
@@ -526,7 +574,7 @@ body{
     --font-hero:30px; --font-h2:18px; --font-h3:16px;
     --font-body:15px; --font-body-em:15px; --font-sub:14px;
     --font-caption:13px; --font-micro:12px; --font-mini:11px;
-    --topbar-h:56px; --titlebar-h:42px;
+    --titlebar-h:42px;
   }
   .btn-primary,.btn-brand{padding:10px 18px}
   .btn-ghost{padding:9px 13px}

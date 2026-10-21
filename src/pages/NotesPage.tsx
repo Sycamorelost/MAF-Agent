@@ -4,8 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import * as ipc from '../lib/ipc';
-import { ResizeHandle } from '../components/ResizeHandle';
-import { usePanelWidth } from '../lib/usePanelWidth';
+import AsideDrawer from '../components/AsideDrawer';
 import {
   IconNote,
   IconPlus,
@@ -23,7 +22,6 @@ import {
  */
 export default function NotesPage() {
   const [params, setParams] = useSearchParams();
-  const listPanel = usePanelWidth('notes-list', 260, 200, 420);
 
   const [metas, setMetas] = useState<ipc.NoteMeta[]>([]);
   const [selId, setSelId] = useState<string | null>(null);
@@ -203,7 +201,8 @@ export default function NotesPage() {
 
   return (
     <div className="notes-page">
-      <div className="notes-list" style={{ width: listPanel.width }} data-narrow={listPanel.narrow}>
+      <AsideDrawer>
+      <div className="notes-list drawer">
         <div className="notes-list-head">
           <span className="t">知识库</span>
           <button className="new" onClick={createNote} disabled={busy} title="新建笔记">
@@ -211,6 +210,7 @@ export default function NotesPage() {
             新建
           </button>
         </div>
+        <div className="drawer-hint">点标题栏「面板」可开合本栏</div>
         <div className="notes-search">
           <IconSearch size={14} />
           <input
@@ -249,7 +249,7 @@ export default function NotesPage() {
           ))}
         </div>
       </div>
-      <ResizeHandle panel={listPanel} />
+      </AsideDrawer>
 
       <div className="notes-detail">
         {selId ? (

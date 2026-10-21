@@ -50,7 +50,7 @@ fn ensure_in_attachments_dir(p: &std::path::Path) -> Result<(), String> {
 
 /// 文件名安全化:只保留字母数字/点/下划线/中横线与 CJK,其余替换为下划线,最长 60 字符。
 /// 额外把 ".." 序列替换为 "__",防御纵深(虽然有 ts 前缀,但避免任何穿越歧义)。
-fn sanitize_name(name: &str) -> String {
+pub(crate) fn sanitize_name(name: &str) -> String {
     let cleaned: String = name
         .chars()
         .map(|c| {

@@ -42,23 +42,76 @@ a:hover { text-decoration: underline; }
   overflow: hidden;
 }
 
-/* Topbar(应用顶栏):基础样式由 _tokens.css 提供(.topbar/.model-switch/.tag),
-   此处仅补充右侧动作区。 */
-.topbar .spacer { flex: 1; }
-.top-actions { display: flex; align-items: center; gap: var(--space-1); }
-.top-actions .btn-primary { margin-left: var(--space-2); }
+/* Topbar 已删除:搜索/新建对话收进 Titlebar 玻璃 pill(样式见 _tokens.css .tb-pill) */
 
-/* 主体:Rail + Sidebar + Main + MemPanel */
+/* 主体:Main + 浮层(会话抽屉/记忆面板) */
 .body {
   flex: 1;
   display: flex;
   min-height: 0;
 }
 
-/* Rail(左窄图标栏):容器与按钮样式由 _tokens.css 提供(.rail/.rail-btn/.brand) */
+/* 抽屉挤出式(会话抽屉/页面左栏):打开时主区整体让位,内容不被遮挡;
+   关闭途径 = 标题栏 pill 再点 / 抽屉 ✕ / Esc(无遮罩,点击主区不关闭) */
+.main { transition: padding-left .2s ease; }
+body.sidebar-open .main { padding-left: var(--sidebar-w); }
+body.aside-open .main { padding-left: var(--aside-w); }
 
-/* Sidebar(会话侧栏):基础样式由 _tokens.css 提供(.sidebar/.side-head/.new-chat/.side-item),
-   此处补充分组容器与底部卡片。 */
+/* 页面左栏抽屉 ✕(AsideDrawer 渲染,定位于抽屉右上角) */
+.aside-close {
+  position: fixed;
+  top: calc(var(--titlebar-h) + 8px);
+  left: calc(var(--aside-w) - 32px);
+  z-index: 10;
+}
+
+/* 抽屉内通用开合提示行(记忆/知识库/设置等无描述段的抽屉头部) */
+.drawer-hint {
+  padding: 0 var(--pad-x-narrow) var(--space-2);
+  font-size: var(--font-micro);
+  color: var(--text-4);
+}
+
+/* 标题栏搜索/菜单浮层的透明遮罩 */
+.tb-pop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+}
+/* 全局搜索玻璃卡片:挂在 pill 下方 */
+.tb-search-pop {
+  position: absolute;
+  top: calc(var(--titlebar-h) + 4px);
+  left: var(--space-2);
+  z-index: 26;
+  width: 340px;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  background: rgba(255,255,255,.88);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-card-h);
+}
+.tb-search-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-1);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--text-3);
+}
+.tb-search-pop .global-search {
+  width: 100%;
+}
+/* 窄窗:搜索卡片收窄 */
+@media (max-width: 620px) {
+  .tb-search-pop { width: min(340px, calc(100vw - 24px)); }
+}
+
+/* Sidebar(会话历史抽屉):基础样式由 _tokens.css 提供(.sidebar/.side-head/.side-item),
+   此处补充分组容器。 */
 .side-list {
   flex: 1;
   overflow-y: auto;
@@ -84,35 +137,6 @@ a:hover { text-decoration: underline; }
   font-size: var(--font-caption);
   line-height: 1.6;
 }
-.side-foot-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-l);
-  background: var(--bg-main);
-  cursor: pointer;
-  transition: .15s;
-}
-.side-foot-card:hover { border-color: var(--brand-line); background: var(--brand-soft); }
-.side-foot-card .row1 {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-caption);
-  font-weight: 600;
-  color: var(--brand-deep);
-}
-.side-foot-card .spacer { flex: 1; }
-.side-foot-card .row2 {
-  font-size: var(--font-micro);
-  color: var(--text-3);
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
 /* Main(聊天主区) */
 .main {
   flex: 1;
@@ -143,7 +167,7 @@ a:hover { text-decoration: underline; }
   gap: var(--space-4);
 }
 .chat-inner {
-  max-width: var(--main-max-w);
+  max-width: var(--chat-max-w);
   margin: 0 auto;
   width: 100%;
   display: flex;
@@ -151,48 +175,25 @@ a:hover { text-decoration: underline; }
   gap: var(--space-4);
 }
 
-/* ============ 消息气泡(对齐模板 02) ============ */
+/* ============ 消息渲染(平铺式,对齐 DeepSeek) ============ */
 
 .msg {
   display: flex;
+  flex-direction: column;
   width: 100%;
-  gap: var(--space-3);
-  align-items: flex-start;
-}
-.msg.user { flex-direction: row-reverse; }
-.avatar {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-sub);
-  font-weight: 700;
-  margin-top: 2px;
-}
-.msg.user .avatar {
-  background: var(--brand-soft);
-  color: var(--brand);
-  border: 1px solid var(--brand-line);
-}
-.msg.assistant .avatar {
-  background: linear-gradient(135deg, var(--brand), var(--brand-deep));
-  color: #fff;
+  gap: var(--space-1);
 }
 .msg .content {
   flex: 1;
   min-width: 0;
-  max-width: 70%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
 }
-.msg.user .content { align-items: flex-end; }
-.msg.assistant .content { align-items: flex-start; }
+.msg.user .content { align-items: flex-start; }
+.msg.assistant .content { align-items: stretch; }
 .msg .bubble {
   max-width: 100%;
-  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-l);
   font-size: var(--font-body);
   line-height: 1.65;
@@ -201,13 +202,15 @@ a:hover { text-decoration: underline; }
   text-align: left;
   color: var(--text-1);
 }
+/* 用户消息:浅底块、左对齐、无描边 */
 .msg.user .bubble {
-  background: var(--brand-soft);
-  border: 1px solid var(--brand-line);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-side);
 }
+/* 助手消息:无底色无描边,正文与容器同宽 */
 .msg.assistant .bubble {
-  background: var(--bg-main);
-  border: 1px solid var(--border);
+  padding: 0;
+  background: transparent;
 }
 .msg .meta {
   font-size: var(--font-micro);
@@ -229,7 +232,6 @@ a:hover { text-decoration: underline; }
   word-break: break-word;
   white-space: normal;
 }
-.msg.user .meta { justify-content: flex-end; }
 
 /* Markdown 内容(字号/间距全部走 token,与全局阶梯一致) */
 .bubble .md { font-size: var(--font-body); line-height: 1.7; overflow-wrap: anywhere; }
@@ -317,6 +319,9 @@ a:hover { text-decoration: underline; }
 .bubble .md hr { border: none; border-top: 1px solid var(--border); margin: var(--space-3) 0; }
 .bubble .md img { max-width: 100%; border-radius: var(--radius-m); }
 .bubble .md a { color: var(--brand); }
+/* KaTeX:行内公式略放大;块级公式超宽时横向滚动,避免撑破气泡/报告容器 */
+.bubble .md .katex { font-size: 1.05em; }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
 
 /* ============ Mermaid 图表 ============ */
 .mermaid-block {
@@ -348,22 +353,26 @@ a:hover { text-decoration: underline; }
 
 /* ============ Composer(对齐模板 01/02) ============
    基础样式 .composer / .composer-box / .composer-bar / .tool-chip 由 _tokens.css 提供;
-   对话页底部使用 .composer-docked(带分隔线,不自动顶到底)。 */
+   对话页底部使用 .composer-docked(悬浮卡片,无分隔线)。 */
 
 .composer.composer-docked {
   max-width: none;
   margin-top: 0;
-  padding: var(--space-3) var(--pad-x);
-  border-top: 1px solid var(--border);
-  background: var(--bg-main);
+  padding: var(--space-2) var(--pad-x) var(--space-3);
+  background: transparent;
   flex-shrink: 0;
 }
 .composer-docked .composer-box {
-  /* 输入栏跟随窗口铺满底部,不做内容列宽限制 */
-  max-width: none;
-  margin: 0;
+  /* 悬浮卡片:与消息内容列等宽,靠阴影与内容区分隔(不再使用 border-top) */
+  max-width: var(--composer-max-w);
+  margin: 0 auto;
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-card-h);
 }
 .composer-box { position: relative; }
+
+/* 主页输入框:与文案同列居中,不再顶到底部 */
+.home .composer { margin-top: var(--space-4); padding-top: 0; }
 
 /* 拖拽文件进入 composer 的高亮反馈 */
 .composer.composer-drag .composer-box {
@@ -388,30 +397,8 @@ a:hover { text-decoration: underline; }
   padding-bottom: var(--space-1);
 }
 .composer-box .attach-list {
-  padding: var(--space-3) var(--pad-x) 0;
+  padding: var(--space-2) var(--pad-x) 0;
 }
-
-/* B3 / F1:指令面板浮层(对话页 Composer 工具条) */
-.cmd-chip-wrap { position: relative; display: inline-flex; }
-.cmd-backdrop { position: fixed; inset: 0; z-index: 42; }
-.cmd-popover {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  z-index: 43;
-  width: 200px;
-  max-height: 260px;
-  overflow-y: auto;
-  background: var(--bg-main);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  box-shadow: var(--shadow-card-h);
-  padding: var(--space-1);
-}
-
-/* B3 / F1:设置页指令库行 — 适用范围下拉与内置标记 */
-.sel-btn-row .pg-field.scope-in { flex: 0 0 104px; width: 104px; }
-.cmd-builtin-tag { flex: 0 0 auto; padding: 0 var(--space-2); font-size: var(--font-caption); color: var(--text-3); }
 
 /* F4:会话分支指示条与分支列表浮层(对话页头部) */
 .branch-chip-wrap { position: relative; display: inline-flex; }
@@ -537,18 +524,18 @@ a:hover { text-decoration: underline; }
 .composer .stop-btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: 8px 14px;
-  background: transparent;
-  color: var(--text-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  font-size: var(--font-caption);
-  font-weight: 500;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: #e5484d;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
   cursor: pointer;
   transition: .15s;
 }
-.composer .stop-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+.composer .stop-btn:hover { background: #d13c41; }
 
 /* tool-chip 开启态别名(模板为 .on,兼容既有 .active) */
 .tool-chip.active {
@@ -1179,6 +1166,10 @@ a:hover { text-decoration: underline; }
   color: var(--text-3);
 }
 .gs-clear:hover { background: var(--bg-hover); color: var(--text-1); }
+/* 窄窗:搜索框按视口让位,避免与右侧「新建对话」按钮挤压 */
+@media (max-width: 620px) {
+  .global-search { width: min(280px, 38vw); }
+}
 .gs-dropdown {
   position: absolute;
   top: calc(100% + 4px);
@@ -1266,19 +1257,20 @@ a:hover { text-decoration: underline; }
 /* 主页:logo 放大 + 文案 */
 .home { justify-content: center; }
 .home-logo-img {
-  width: 64px;
-  height: 64px;
+  width: 128px;
+  height: 128px;
   border-radius: 22%;
-  box-shadow: 0 10px 26px rgba(27,108,168,.35);
+  box-shadow: 0 16px 40px rgba(27,108,168,.35);
   animation: float 4.5s ease-in-out infinite;
 }
-.home-copy {
-  max-width: 520px;
-  text-align: center;
-  color: var(--text-3);
-  font-size: var(--font-sub);
-  line-height: 1.9;
-  margin-top: var(--space-4);
+@media (max-width: 1100px) {
+  .home-logo-img { width: 96px; height: 96px; }
+}
+@media (max-width: 560px) {
+  .home-logo-img { width: 72px; height: 72px; }
+  .greeting { margin-top: var(--space-3); text-align: center; }
+  .agent-chip-text { max-width: 84px; }
+  .usage-bar-row .nm { width: 108px; }
 }
 
 /* 会话头部:标题 + 右侧模型选择 */
@@ -1298,6 +1290,30 @@ a:hover { text-decoration: underline; }
   font-size: var(--font-h3);
   font-weight: 600;
   color: var(--text-1);
+}
+/* 会话头部:记忆面板展开/收起开关 */
+.chat-panel-toggle {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--bg-main);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: .15s;
+}
+.chat-panel-toggle:hover { background: var(--bg-hover); color: var(--text-1); }
+.chat-panel-toggle.on { color: var(--brand); border-color: var(--brand-line); background: var(--brand-soft); }
+
+/* 极窄窗:会话头部让位,避免标题+模型+按钮溢出 */
+@media (max-width: 700px) {
+  .chat-head { gap: var(--space-2); }
+  .model-switch { min-width: 0; padding: 6px 8px; }
+  .model-switch .tag { display: none; }
 }
 
 /* ============ 深度研究(Phase 2) ============ */
@@ -2221,6 +2237,20 @@ a:hover { text-decoration: underline; }
   font-size: var(--font-micro);
   padding: 2px 8px;
 }
+/* 智能体完整编辑器:两列自适应表单行 + 记忆提炼勾选 */
+.agent-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-2);
+}
+.agent-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--text-2);
+  cursor: pointer;
+}
 .agent-chip-btn {
   background: var(--bg-hover);
   padding: 0 var(--space-2);
@@ -2276,11 +2306,19 @@ a:hover { text-decoration: underline; }
 }
 .resize-handle:hover, .resize-handle.dragging { background: var(--brand-line); }
 
-/* 全局会话侧栏 / 记忆页列表:窄档字体降档与换行跟随 */
-.sidebar[data-narrow="true"] .side-item { font-size: var(--font-caption); white-space: normal; align-items: flex-start; }
-.sidebar[data-narrow="true"] .side-item .txt { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
-.sidebar[data-narrow="true"] .new-chat { font-size: var(--font-micro); }
-.sidebar[data-narrow="true"] .side-head h1 { font-size: var(--font-body-em); }
+/* 页面左栏玻璃抽屉(布局统一改造):默认收起,标题栏「面板」按钮释放;
+   与会话抽屉同为玻璃浮层,300px 定宽,不占布局列 */
+.pg-aside.drawer, .memory-list.drawer, .notes-list.drawer, .set-nav.drawer {
+  position: fixed; top: var(--titlebar-h); left: 0; bottom: 0; z-index: 9;
+  width: var(--aside-w); max-width: none; flex-shrink: 0;
+  background: rgba(255,255,255,.86);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow-card-h);
+}
+
+/* 记忆页列表:窄档字体降档与换行跟随(会话抽屉已改定宽浮层,无窄档) */
 .memory-list[data-narrow="true"] .memory-item-title {
   font-size: var(--font-caption); white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
 }
@@ -2430,9 +2468,13 @@ a:hover { text-decoration: underline; }
 }
 .pg-main-head .topic {
   font-size: var(--font-h3); font-weight: 650; color: var(--text-1);
-  flex: 1; min-width: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* 翻译页顶栏:语言方向选择器(自动检测 · swap · 目标语言) */
+.pg-main-head .sp { flex: 1; }
+.tr-dir { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+.tr-dir .pg-field { width: 112px; padding: 5px 8px; }
+.tr-dir .pg-swap { width: 30px; height: 30px; }
 .pg-main-head .cost { font-size: var(--font-micro); color: var(--text-3); flex-shrink: 0; }
 .pg-main-head .cost b { color: var(--brand-deep); font-family: var(--font-mono); }
 .pg-main-head button {
@@ -2524,6 +2566,28 @@ a:hover { text-decoration: underline; }
   font-size: var(--font-micro); color: var(--text-4); line-height: 1.6;
 }
 
+/* 研究参考资料:已导入文件列表(名称 + 格式/字符数 + 移除) */
+.ref-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.ref-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--bg-main);
+  font-size: var(--font-caption);
+  color: var(--text-2);
+}
+.ref-item > svg { flex-shrink: 0; color: var(--brand); }
+.ref-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ref-meta { flex-shrink: 0; font-size: var(--font-micro); color: var(--text-4); }
+.ref-del {
+  flex-shrink: 0; width: 18px; height: 18px; padding: 0;
+  border: none; background: transparent; color: var(--text-4);
+  border-radius: var(--radius-s); cursor: pointer; line-height: 1;
+  font-size: 14px;
+}
+.ref-del:hover { background: var(--bg-hover); color: var(--err); }
+
 /* D6:右侧历史栏(复用 .pg-aside,换右边框) */
 .pg-aside.right { border-right: none; border-left: 1px solid var(--border); width: 260px; }
 
@@ -2614,19 +2678,29 @@ a:hover { text-decoration: underline; }
 .set-product-name { font-size: var(--font-h2); font-weight: 700; color: var(--text-1); line-height: 1.3; }
 .set-product-ver { font-size: var(--font-caption); color: var(--text-4); margin-top: 2px; }
 .set-product-tagline { font-size: var(--font-body); color: var(--text-2); margin-top: var(--space-2); line-height: 1.65; }
-.set-terms { font-size: var(--font-body); color: var(--text-2); line-height: 1.75; }
-.set-term { padding: var(--space-3) 0; }
+/* 条款文档:正文限宽保证可读行长;条目编号独立成列,正文悬挂缩进对齐 */
+.set-terms { font-size: var(--font-body); color: var(--text-2); line-height: 1.75; max-width: 74ch; }
+.set-term { padding: var(--space-4) 0; }
+.set-term:first-child { padding-top: var(--space-1); }
 .set-term + .set-term { border-top: 1px dashed var(--border); }
 .set-term-h {
   font-size: var(--font-body-em); font-weight: 650; color: var(--text-1);
   margin: 0 0 var(--space-2); padding-left: var(--space-3);
   border-left: 3px solid var(--brand, var(--accent)); line-height: 1.4;
 }
-.set-term-item { padding-left: calc(var(--space-3) + 3px); }
+.set-term-item {
+  display: flex; align-items: baseline; gap: var(--space-2);
+  padding-left: calc(var(--space-3) + 3px);
+}
 .set-term-item + .set-term-item { margin-top: var(--space-2); }
-.set-term-item p { margin: 0; }
-.set-term-item ul { margin: var(--space-1) 0 0; padding-left: var(--space-5); }
-.set-term-item li { margin: 2px 0; }
+.set-term-no {
+  flex: 0 0 auto; min-width: 2.2em; font-size: var(--font-caption); font-weight: 600;
+  color: var(--text-4); font-variant-numeric: tabular-nums;
+}
+.set-term-body { min-width: 0; }
+.set-term-body p { margin: 0; }
+.set-term-body ul { margin: var(--space-1) 0 0; padding-left: var(--space-5); }
+.set-term-body li { margin: 2px 0; }
 .set-term-foot {
   margin: var(--space-4) 0 0; padding: var(--space-3);
   background: var(--bg-side); border-radius: var(--radius-m);
@@ -2647,6 +2721,7 @@ a:hover { text-decoration: underline; }
   color: var(--ok); display: inline-flex; align-items: center; gap: var(--space-1);
 }
 .set-card-h .st.warn { color: var(--warn); }
+.set-card-h .st.date { color: var(--text-4); font-weight: 400; }
 .set-card-b { padding: var(--space-4) var(--pad-x); }
 .set-row { display: flex; gap: var(--space-3); align-items: center; }
 .set-row + .set-row { margin-top: var(--space-3); }
@@ -2956,15 +3031,16 @@ a:hover { text-decoration: underline; }
 .pg-seg.joined button:last-child { border-right: none; }
 .pg-seg.joined button.on { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
 
-/* 键值行(标签左 · 控件右) */
+/* 键值行(标签左 · 控件右):空间不足时控件换行/收缩,不再溢出卡片 */
 .pg-row {
   display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-2); margin-top: var(--space-2);
   font-size: var(--font-caption); color: var(--text-2);
 }
 .pg-row > span { flex-shrink: 0; }
-.pg-row .pg-field { width: 132px; flex: 0 0 132px; }
-.pg-row .pg-field.num { width: 88px; flex: 0 0 88px; }
+.pg-row .pg-field { width: 132px; flex: 0 1 132px; min-width: 112px; }
+.pg-row .pg-field.num { width: 88px; flex: 0 0 88px; min-width: 0; }
 
 /* 文本域(配置栏通用,研究/绘画共用) */
 .pg-area {
@@ -3031,6 +3107,17 @@ a:hover { text-decoration: underline; }
 }
 .rp-tl .tt .pill.warn { color: var(--warn); border-color: #EBD9B8; background: #FCF6EA; }
 .rp-tl .dd { font-size: var(--font-caption); color: var(--text-2); margin-top: var(--space-1); line-height: 1.6; }
+/* 思考/阶段卡正文高度可调:全局高度存 CSS 变量 --rp-card-h(useCardResize 拖底缘写入) */
+.rp-tl > .dd, .trail-card > .trail-body { overflow-y: auto; max-height: var(--rp-card-h, none); }
+.card-resize {
+  height: 8px; margin-top: 2px; border-radius: var(--radius-s);
+  cursor: ns-resize; user-select: none; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .15s;
+}
+.rp-tl:hover > .card-resize, .trail-card:hover > .card-resize, .card-resize.dragging { opacity: 1; }
+.card-resize::before { content: ""; width: 40px; height: 3px; border-radius: 2px; background: var(--border-strong); }
+.card-resize:hover::before, .card-resize.dragging::before { background: var(--brand); }
 .rp-tl .rp-queries { margin-top: var(--space-2); display: flex; gap: var(--space-1); flex-wrap: wrap; }
 .rp-tl .rp-queries span {
   font-family: var(--font-mono); font-size: var(--font-micro); color: var(--text-3);
@@ -3044,6 +3131,21 @@ a:hover { text-decoration: underline; }
   padding: var(--space-4) var(--pad-x); background: var(--bg-main);
 }
 .rp-report .hd { font-size: var(--font-h3); font-weight: 650; color: var(--text-1); margin-bottom: var(--space-3); }
+
+/* 灰白分割条:时间线(灰)与研究报告(白)比例可拖拽,双击复位 */
+.rp-split {
+  flex-shrink: 0; height: 7px; cursor: ns-resize; user-select: none; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  border-top: 1px solid var(--border); background: #fff;
+}
+.rp-split::before {
+  content: ""; width: 40px; height: 3px; border-radius: 2px;
+  background: var(--border-strong); opacity: .55; transition: .15s;
+}
+.rp-split:hover::before, .rp-split.dragging::before { background: var(--brand); opacity: 1; }
+/* 拖拽后:时间线定高,报告吃掉剩余全部高度(替代默认 max-height:50%) */
+.rp-main.split-custom .rp-timeline { flex: none; }
+.rp-main.split-custom .rp-report { max-height: none; flex: 1; min-height: 0; }
 
 /* 报告导出(v1.9.0:Markdown + 自包含 HTML) */
 .rp-export-wrap { position: relative; display: flex; }
@@ -3303,6 +3405,7 @@ a:hover { text-decoration: underline; }
 }
 .mode-tag.staged { background: var(--ink); color: #fff; }
 .mode-tag.legacy { background: var(--bg-active); color: var(--text-3); }
+.mode-tag.concise { background: var(--brand-soft, var(--bg-active)); color: var(--brand); }
 .rp-hist-meta .mode-tag { margin-right: var(--space-1); }
 
 /* 阶段时间轴卡(运行页,复刻 trail-card) */

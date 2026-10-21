@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as ipc from '../lib/ipc';
 import { useProvidersStore } from '../stores/providers';
 import { TutorialList } from '../components/TutorialCard';
-import { ResizeHandle } from '../components/ResizeHandle';
-import { usePanelWidth } from '../lib/usePanelWidth';
+import AsideDrawer from '../components/AsideDrawer';
 import {
   IconImage,
   IconSparkles,
@@ -51,7 +50,6 @@ export default function DrawPage() {
   const { templates, hasKey, current } = useProvidersStore();
   const readyTemplates = templates.filter((t) => hasKey[t.id]);
   const nav = useNavigate();
-  const asidePanel = usePanelWidth('draw-aside', 340, 260, 500);
 
   const [providerId, setProviderId] = useState('');
   const [model, setModel] = useState('');
@@ -231,14 +229,15 @@ export default function DrawPage() {
 
   return (
     <div className="pg">
-      {/* 左:生成参数(宽度可拖拽,缓存本地) */}
-      <aside className="pg-aside dw-params" style={{ width: asidePanel.width }} data-narrow={asidePanel.narrow}>
+      {/* 左:生成参数(玻璃抽屉,标题栏「面板」按钮释放) */}
+      <AsideDrawer>
+      <aside className="pg-aside dw-params drawer">
         <div className="pg-aside-head">
           <h2>
             <IconImage size={18} />
             生成参数
           </h2>
-          <p>图片自动保存到 data/images/,参数留档同名 meta.json。</p>
+          <p>点标题栏「面板」可开合本栏;图片自动保存到 data/images/,参数留档同名 meta.json。</p>
         </div>
 
         <div className="pg-sec">
@@ -360,7 +359,7 @@ export default function DrawPage() {
         </div>
         <TutorialList page="draw" />
       </aside>
-      <ResizeHandle panel={asidePanel} />
+      </AsideDrawer>
 
       {/* 右:本次 2×2 画布 + 历史 */}
       <main className="dw-canvas">

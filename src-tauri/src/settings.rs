@@ -23,6 +23,9 @@ pub struct AppSettings {
     /// 主窗口最小化时隐藏到托盘(默认关:最小化保留任务栏图标,点 × 才进托盘)
     #[serde(default)]
     pub minimize_to_tray: bool,
+    /// 导航菜单中隐藏的功能项(对话/设置始终显示;空 = 全部显示)
+    #[serde(default)]
+    pub hidden_nav_items: Vec<String>,
 }
 
 impl Default for AppSettings {
@@ -32,6 +35,7 @@ impl Default for AppSettings {
             summarize_model: None,
             selection_ask_enabled: true,
             minimize_to_tray: false,
+            hidden_nav_items: Vec::new(),
         }
     }
 }
@@ -76,6 +80,7 @@ mod tests {
         assert_eq!(back.summarize_model.as_deref(), Some("deepseek-chat"));
         assert!(back.selection_ask_enabled);
         assert!(!back.minimize_to_tray);
+        assert!(back.hidden_nav_items.is_empty());
     }
 
     #[test]

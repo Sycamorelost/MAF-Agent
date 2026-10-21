@@ -158,6 +158,7 @@ export default function GlobalSearch() {
       <IconSearch size={16} className="gs-icon" />
       <input
         ref={inputRef}
+        autoFocus
         value={q}
         onChange={(e) => {
           setQ(e.target.value);

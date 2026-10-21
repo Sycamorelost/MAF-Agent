@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MemPanel from '../components/MemPanel';
-import { ResizeHandle } from '../components/ResizeHandle';
-import { usePanelWidth } from '../lib/usePanelWidth';
+import AsideDrawer from '../components/AsideDrawer';
 import { IconBrain } from '../components/icons';
 import { useSessionsStore } from '../stores/sessions';
 
@@ -14,7 +13,6 @@ export default function MemoryPage() {
   const nav = useNavigate();
   const { sessions, refresh } = useSessionsStore();
   const [selected, setSelected] = useState<string | null>(null);
-  const listPanel = usePanelWidth('memory-list', 260, 200, 420);
 
   useEffect(() => {
     refresh();
@@ -29,10 +27,12 @@ export default function MemoryPage() {
 
   return (
     <div className="memory-page">
-      <div className="memory-list" style={{ width: listPanel.width }} data-narrow={listPanel.narrow}>
+      <AsideDrawer>
+      <div className="memory-list drawer">
         <div className="memory-list-head">
           <span className="t">全部会话记忆</span>
         </div>
+        <div className="drawer-hint">点标题栏「面板」可开合本栏</div>
         <div className="memory-list-body">
           {sessions.length === 0 && (
             <div className="memory-empty">
@@ -54,7 +54,7 @@ export default function MemoryPage() {
           ))}
         </div>
       </div>
-      <ResizeHandle panel={listPanel} />
+      </AsideDrawer>
       <div className="memory-detail">
         {selected ? (
           <MemPanel sessionId={selected} />

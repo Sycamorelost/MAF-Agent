@@ -63,6 +63,31 @@ fn research_stage(id: &str, name: &str, goal: &str, max_rounds: Option<u32>) -> 
     }
 }
 
+/// 检索阶段 + 必覆盖角度(结束时校验缺失并发 AngleGap 提醒,不阻断)。
+fn research_stage_angles(
+    id: &str,
+    name: &str,
+    goal: &str,
+    max_rounds: Option<u32>,
+    angles: &[&str],
+) -> StageConfig {
+    let mut s = research_stage(id, name, goal, max_rounds);
+    s.constraints.must_cover_angles = angles.iter().map(|x| x.to_string()).collect();
+    s
+}
+
+/// 纯撰写阶段(不检索,只消费已收集资料)。
+fn synthesis_stage(id: &str, name: &str, goal: &str) -> StageConfig {
+    StageConfig {
+        id: id.into(),
+        name: name.into(),
+        goal: goal.into(),
+        kind: "synthesis".into(),
+        enabled: true,
+        ..StageConfig::default()
+    }
+}
+
 /// 内置:开发策略研究(四阶段 + 检查点 + 自定义终稿模板)。
 fn builtin_strategy() -> Blueprint {
     let s1 = research_stage(
@@ -139,8 +164,148 @@ fn builtin_academic() -> Blueprint {
     }
 }
 
+/// 内置:竞品情报速览(三阶段:竞品地图 → 功能/定价对比 → 竞争策略建议)。
+fn builtin_competitor() -> Blueprint {
+    let s1 = research_stage(
+        "bp-cp-1",
+        "竞品地图",
+        "识别主题领域的直接/间接竞品,收集各自的定位、目标用户与主要功能模块",
+        Some(5),
+    );
+    let s2 = research_stage_angles(
+        "bp-cp-2",
+        "功能与定价对比",
+        "提取各竞品的核心功能、定价模式、渠道与公开评价,形成可对比维度",
+        Some(6),
+        &["核心功能", "定价模式", "目标用户", "优势与短板"],
+    );
+    let s3 = synthesis_stage(
+        "bp-cp-3",
+        "竞争策略建议",
+        "基于竞品对比结果,给出定位建议、差异化方向与可执行动作",
+    );
+    Blueprint {
+        name: "竞品情报速览".into(),
+        desc: "三阶段:竞品地图 → 功能/定价对比 → 竞争策略建议。适合市场与产品竞品分析。".into(),
+        builtin: true,
+        params: ResearchParams {
+            mode: "staged".into(),
+            stages: vec![s1, s2, s3],
+            checkpoint: true,
+            read_length: "digest".into(),
+            ..ResearchParams::default()
+        },
+        created: "builtin".into(),
+    }
+}
+
+/// 内置:技术选型评估(三阶段:候选方案收集 → 指标对比验证 → 选型建议)。
+fn builtin_tech_choice() -> Blueprint {
+    let s1 = research_stage(
+        "bp-tc-1",
+        "候选方案收集",
+        "围绕选型目标收集候选技术/框架/供应商资料,记录版本、许可证与社区活跃度",
+        Some(5),
+    );
+    let s2 = research_stage_angles(
+        "bp-tc-2",
+        "指标对比验证",
+        "按统一指标横向对比候选方案,优先引用官方文档、基准测试与真实案例",
+        Some(6),
+        &["性能", "生态与依赖", "学习/迁移成本", "长期维护"],
+    );
+    let s3 = synthesis_stage(
+        "bp-tc-3",
+        "选型建议",
+        "给出推荐方案、适用前提、不适用场景与迁移/回退路径",
+    );
+    Blueprint {
+        name: "技术选型评估".into(),
+        desc: "三阶段:候选方案收集 → 指标对比验证 → 选型建议。产出推荐方案、适用前提与回退路径。".into(),
+        builtin: true,
+        params: ResearchParams {
+            mode: "staged".into(),
+            stages: vec![s1, s2, s3],
+            checkpoint: true,
+            read_length: "full".into(),
+            ..ResearchParams::default()
+        },
+        created: "builtin".into(),
+    }
+}
+
+/// 内置:市场与用户洞察(三阶段:市场规模 → 用户需求 → 机会点)。
+fn builtin_market() -> Blueprint {
+    let s1 = research_stage_angles(
+        "bp-mk-1",
+        "市场规模与增长",
+        "收集目标市场的规模、增速、结构与主要玩家的公开数据",
+        Some(6),
+        &["市场规模", "增长趋势", "主要玩家"],
+    );
+    let s2 = research_stage(
+        "bp-mk-2",
+        "用户需求与痛点",
+        "收集目标用户的画像、使用场景、显性需求与未被满足的痛点",
+        Some(6),
+    );
+    let s3 = synthesis_stage(
+        "bp-mk-3",
+        "机会点与建议",
+        "综合规模与需求,输出机会点、优先级判断与验证方式",
+    );
+    Blueprint {
+        name: "市场与用户洞察".into(),
+        desc: "三阶段:市场规模与增长 → 用户需求与痛点 → 机会点与建议。适合立项前调研。".into(),
+        builtin: true,
+        params: ResearchParams {
+            mode: "staged".into(),
+            stages: vec![s1, s2, s3],
+            checkpoint: true,
+            ..ResearchParams::default()
+        },
+        created: "builtin".into(),
+    }
+}
+
+/// 内置:政策与合规调查(两阶段:政策法规收集 → 合规要点提炼)。
+fn builtin_policy() -> Blueprint {
+    let s1 = research_stage_angles(
+        "bp-po-1",
+        "政策法规收集",
+        "收集主题相关的法律法规、部门规章与国家标准原文,优先官方发布渠道",
+        Some(5),
+        &["法律/行政法规", "部门规章", "国家或行业标准"],
+    );
+    let s2 = synthesis_stage(
+        "bp-po-2",
+        "合规要点提炼",
+        "逐条提炼适用条款、义务主体与生效时间,标注不确定处并列出待核实清单",
+    );
+    Blueprint {
+        name: "政策与合规调查".into(),
+        desc: "两阶段:政策法规收集(优先官方来源)→ 合规要点提炼。输出适用条款与待核实清单。".into(),
+        builtin: true,
+        params: ResearchParams {
+            mode: "staged".into(),
+            stages: vec![s1, s2],
+            checkpoint: true,
+            read_length: "full".into(),
+            ..ResearchParams::default()
+        },
+        created: "builtin".into(),
+    }
+}
+
 fn builtins() -> Vec<Blueprint> {
-    vec![builtin_strategy(), builtin_academic()]
+    vec![
+        builtin_strategy(),
+        builtin_academic(),
+        builtin_competitor(),
+        builtin_tech_choice(),
+        builtin_market(),
+        builtin_policy(),
+    ]
 }
 
 fn is_builtin_name(name: &str) -> bool {
@@ -301,5 +466,62 @@ mod tests {
         assert_eq!(b.params.read_length, "full");
         assert_eq!(b.params.stages.len(), 2);
         assert_eq!(b.params.stages[0].source_mode.as_deref(), Some("academic"));
+    }
+
+    /// 全部内置方案的公共不变量:数量、名称唯一、阶段 id 唯一、阶段启用、
+    /// 至少一个检索阶段与一个撰写阶段、模式为 staged。
+    #[test]
+    fn builtin_blueprints_shape() {
+        let list = builtins();
+        assert_eq!(list.len(), 6);
+        let mut names: Vec<&str> = list.iter().map(|b| b.name.as_str()).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), 6, "内置方案名必须唯一");
+        for b in &list {
+            assert!(b.builtin, "{} 必须标记 builtin", b.name);
+            assert_eq!(b.params.mode, "staged", "{} 必须是 staged 模式", b.name);
+            assert!(!b.desc.trim().is_empty(), "{} 缺 desc", b.name);
+            assert!(!b.params.stages.is_empty(), "{} 无阶段", b.name);
+            let ids: std::collections::HashSet<_> =
+                b.params.stages.iter().map(|s| s.id.as_str()).collect();
+            assert_eq!(ids.len(), b.params.stages.len(), "{} 阶段 id 必须唯一", b.name);
+            assert!(
+                b.params.stages.iter().all(|s| s.enabled),
+                "{} 内置阶段应全部启用",
+                b.name
+            );
+            assert!(
+                b.params.stages.iter().any(|s| s.kind == "research"),
+                "{} 缺少检索阶段",
+                b.name
+            );
+            assert!(
+                b.params.stages.iter().any(|s| s.kind == "synthesis"),
+                "{} 缺少撰写阶段",
+                b.name
+            );
+            assert!(
+                b.params.stages.iter().all(|s| !s.name.trim().is_empty() && !s.goal.trim().is_empty()),
+                "{} 阶段名/目标不能为空",
+                b.name
+            );
+        }
+        // 内置名全部受保护
+        for b in &list {
+            assert!(is_builtin_name(&b.name));
+        }
+    }
+
+    /// 必覆盖角度只出现在检索阶段(撰写阶段不检索)。
+    #[test]
+    fn must_cover_angles_only_on_research_stages() {
+        for b in builtins() {
+            for s in &b.params.stages {
+                if !s.constraints.must_cover_angles.is_empty() {
+                    assert_eq!(s.kind, "research", "{} 的 {} 非检索阶段不应带必覆盖角度", b.name, s.name);
+                }
+            }
+        }
     }
 }

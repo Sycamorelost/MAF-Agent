@@ -1,12 +1,12 @@
 //! SQLite schema 定义与迁移。
 //!
 //! 对应 plan/01-phase1-mvp.md §3.1。
-//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION(14)。
+//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION(16)。
 
 use rusqlite::Connection;
 
 /// 当前 schema 版本。每次结构变更 +1 并追加迁移 SQL。
-pub const SCHEMA_VERSION: i32 = 14;
+pub const SCHEMA_VERSION: i32 = 16;
 
 /// V1 初始建表。
 const MIGRATION_V1: &str = r#"
@@ -119,6 +119,101 @@ CREATE TABLE IF NOT EXISTS usage_record (
 );
 CREATE INDEX IF NOT EXISTS idx_usage_pm   ON usage_record(provider_id, model_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_usage_slot ON usage_record(slot_id, created_at);
+"#;
+
+/// V15(学习规划板块 P0):计划 / 知识点 / 行为日志三表。
+/// 计划完整载荷(阶段/排期/资料)存 plans.stages_json,同时镜像 data/study/{id}/plan.json;
+/// knowledge_nodes 供 P1 掌握度使用;study_logs 记录 学习/测验/复习/深挖研究 行为。
+const MIGRATION_STUDY: &str = r#"
+CREATE TABLE IF NOT EXISTS plans (
+  id TEXT PRIMARY KEY,             -- 8 位 hex
+  topic TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'generating', -- generating/active/done/archived/error/cancelled
+  level TEXT NOT NULL DEFAULT '',
+  goal TEXT NOT NULL DEFAULT '',
+  daily_minutes INTEGER NOT NULL DEFAULT 30,
+  deadline TEXT,
+  lang TEXT NOT NULL DEFAULT 'zh',
+  model_id TEXT,
+  error TEXT,
+  repaired INTEGER NOT NULL DEFAULT 0,
+  stages_json TEXT NOT NULL DEFAULT '[]',
+  created TEXT NOT NULL,
+  updated TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_nodes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  stage_index INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  difficulty INTEGER NOT NULL DEFAULT 3,
+  why TEXT NOT NULL DEFAULT '',
+  must_learn INTEGER NOT NULL DEFAULT 0,
+  prereq_json TEXT NOT NULL DEFAULT '[]',
+  mastery REAL NOT NULL DEFAULT 0,
+  done_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_nodes_plan ON knowledge_nodes(plan_id, stage_index);
+
+CREATE TABLE IF NOT EXISTS study_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  node_id INTEGER,
+  kind TEXT NOT NULL,              -- plan/learn/quiz/review/research
+  minutes INTEGER NOT NULL DEFAULT 0,
+  at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_study_logs_plan ON study_logs(plan_id, at);
+"#;
+
+/// V16(学习规划板块 P1):自学单元 / 测验 / 测验作答 / 复习队列四表。
+/// study_units 每个知识点一份自学材料(UNIQUE 幂等);quizzes 每次生成一行(保留作答历史);
+/// reviews 每个知识点一行 SM-2-lite 排期(due 为 YYYY-MM-DD,便于字符串比较)。
+const MIGRATION_STUDY_P1: &str = r#"
+CREATE TABLE IF NOT EXISTS study_units (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  node_id INTEGER NOT NULL,
+  node_name TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL DEFAULT '',
+  est_minutes INTEGER NOT NULL DEFAULT 30,
+  content_md TEXT NOT NULL DEFAULT '',
+  created TEXT NOT NULL,
+  UNIQUE(plan_id, node_id)
+);
+CREATE INDEX IF NOT EXISTS idx_units_plan ON study_units(plan_id);
+
+CREATE TABLE IF NOT EXISTS quizzes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  node_id INTEGER NOT NULL,
+  node_name TEXT NOT NULL DEFAULT '',
+  payload_json TEXT NOT NULL DEFAULT '[]',
+  created TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_quizzes_plan ON quizzes(plan_id);
+
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+  question_idx INTEGER NOT NULL,
+  user_answer TEXT NOT NULL DEFAULT '',
+  correct INTEGER NOT NULL DEFAULT 0,
+  answered_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_attempts_quiz ON quiz_attempts(quiz_id);
+
+CREATE TABLE IF NOT EXISTS reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  node_id INTEGER NOT NULL,
+  due TEXT NOT NULL,               -- YYYY-MM-DD,到期日
+  interval_days INTEGER NOT NULL DEFAULT 1,
+  last_result INTEGER NOT NULL DEFAULT 0, -- 1 记得 / 0 忘了
+  UNIQUE(plan_id, node_id)
+);
+CREATE INDEX IF NOT EXISTS idx_reviews_plan ON reviews(plan_id, due);
 "#;
 
 /// V4(迭代 D1)通过 ensure_column 自愈式加列,见 migrate():
@@ -237,6 +332,12 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     //   - usage_record.reasoning_tokens:思考 token 单列(append-only,旧记录为 NULL)
     ensure_column(&tx, "messages", "reasoning", "TEXT NOT NULL DEFAULT ''")?;
     ensure_column(&tx, "usage_record", "reasoning_tokens", "INTEGER")?;
+    // V15(学习规划板块 P0):plans / knowledge_nodes / study_logs
+    tx.execute_batch(MIGRATION_STUDY)?;
+    // V16(学习规划板块 P1):knowledge_nodes 增掌握度来源两列(自评 / 测验分,-1 = 未评)
+    ensure_column(&tx, "knowledge_nodes", "self_rating", "REAL NOT NULL DEFAULT -1")?;
+    ensure_column(&tx, "knowledge_nodes", "quiz_score", "REAL NOT NULL DEFAULT -1")?;
+    tx.execute_batch(MIGRATION_STUDY_P1)?;
     // 旧数据回填:main 分支内按 id 顺序形成线性链。
     // 仅回填 main:其他分支首条消息的 parent_id 可能合法为 NULL(从会话开头分叉),
     // 且 fork 消息的 parent 在写入时已显式设置,不在此 touched。
@@ -260,7 +361,7 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         migrate(&conn).unwrap();
 
-        for t in ["sessions", "messages", "memory_versions", "research_sessions", "messages_fts", "notes", "notes_fts", "branches", "usage_record"] {
+        for t in ["sessions", "messages", "memory_versions", "research_sessions", "messages_fts", "notes", "notes_fts", "branches", "usage_record", "plans", "knowledge_nodes", "study_logs", "study_units", "quizzes", "quiz_attempts", "reviews"] {
             let n: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",

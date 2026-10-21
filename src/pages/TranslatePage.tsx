@@ -5,6 +5,7 @@ import { useProvidersStore } from '../stores/providers';
 import { TutorialList } from '../components/TutorialCard';
 import { ResizeHandle } from '../components/ResizeHandle';
 import { usePanelWidth } from '../lib/usePanelWidth';
+import AsideDrawer from '../components/AsideDrawer';
 import {
   IconTranslate,
   IconSwap,
@@ -45,7 +46,6 @@ export default function TranslatePage() {
   const nav = useNavigate();
   const { templates, hasKey, current } = useProvidersStore();
   const readyTemplates = templates.filter((t) => hasKey[t.id]);
-  const asidePanel = usePanelWidth('translate-aside', 300, 240, 460);
   const histPanel = usePanelWidth('translate-hist', 260, 200, 420, 'right');
 
   const [providerId, setProviderId] = useState('');
@@ -70,6 +70,8 @@ export default function TranslatePage() {
   const accRef = useRef('');
   const timerRef = useRef<number | undefined>(undefined);
   const cancelRef = useRef<(() => void) | null>(null);
+  /** 跳过下一次自动翻译的签名(历史回填场景,避免覆盖已存译文) */
+  const skipSig = useRef<string | null>(null);
 
   const activeTemplate = readyTemplates.find((t) => t.id === providerId);
   /** 无对话模型的专用翻译 Provider(DeepL):隐藏模型选择。 */
@@ -154,7 +156,8 @@ export default function TranslatePage() {
   const canRun = !!providerId && (noModel || !!model) && !!text.trim() && !running;
 
   const run = async () => {
-    if (!canRun) return;
+    if (!providerId || (noModel ? false : !model) || !text.trim()) return;
+    if (running) stop(); // 重新翻译:先停旧流(自动触发 / 手动重试共用)
     setError(null);
     setResult('');
     setCopied(false);
@@ -220,6 +223,27 @@ export default function TranslatePage() {
     setRunning(false);
   };
 
+  // 自动翻译:输入原文 / 切换方向后 800ms 防抖触发,无需手动点击;
+  // 清空文本立即停止并清空译文;历史回填(签名匹配)跳过一次,保留已存译文。
+  useEffect(() => {
+    if (skipSig.current !== null) {
+      const sig = `${text}\u0000${srcLang}\u0000${dstLang}`;
+      const match = skipSig.current === sig;
+      skipSig.current = null;
+      if (match) return;
+    }
+    if (!providerId || (!noModel && !model)) return;
+    if (!text.trim()) {
+      if (running) stop();
+      setResult('');
+      setError(null);
+      return;
+    }
+    const t = window.setTimeout(() => void run(), 800);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, srcLang, dstLang, providerId, model]);
+
   const swap = () => {
     if (!srcLang) return; // 自动检测不可换到目标侧
     const a = srcLang;
@@ -266,6 +290,7 @@ export default function TranslatePage() {
 
   const applyHistory = (rec: ipc.TranslationRecord) => {
     if (running) stop();
+    skipSig.current = `${rec.source_text}\u0000${rec.source_lang ?? ''}\u0000${rec.target_lang}`;
     setText(rec.source_text);
     setResult(rec.result_text);
     setSrcLang(rec.source_lang ?? '');
@@ -313,55 +338,18 @@ export default function TranslatePage() {
   const srcChars = text.length;
   const srcParas = text.split(/\n+/).filter((s) => s.trim()).length;
   const outChars = result.length;
-  const topic = `原文 · ${srcLang ? langLabel(srcLang) : '自动检测'} → ${langLabel(dstLang)}`;
 
   return (
     <div className="pg">
-      {/* 左:翻译设置(宽度可拖拽,缓存本地) */}
-      <aside className="pg-aside" style={{ width: asidePanel.width }} data-narrow={asidePanel.narrow}>
+      {/* 左:翻译设置(玻璃抽屉,标题栏「面板」按钮释放) */}
+      <AsideDrawer>
+      <aside className="pg-aside drawer">
         <div className="pg-aside-head">
           <h2>
             <IconTranslate size={18} />
             翻译设置
           </h2>
-          <p>仅输出译文,保留原文格式与术语一致性。</p>
-        </div>
-
-        <div className="pg-sec">
-          <div className="pg-lab">翻译方向</div>
-          <div className="pg-pair">
-            <select
-              className="pg-field"
-              value={srcLang}
-              onChange={(e) => setSrcLang(e.target.value)}
-            >
-              <option value="">自动检测</option>
-              {LANGS.map((l) => (
-                <option key={l.value} value={l.value}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-            <button
-              className="pg-swap"
-              title={srcLang ? '交换语言' : '自动检测时不可交换'}
-              disabled={!srcLang}
-              onClick={swap}
-            >
-              <IconSwap size={16} />
-            </button>
-            <select
-              className="pg-field"
-              value={dstLang}
-              onChange={(e) => setDstLang(e.target.value)}
-            >
-              {LANGS.map((l) => (
-                <option key={l.value} value={l.value}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <p>点标题栏「面板」可开合本栏;仅输出译文,保留原文格式与术语一致性。</p>
         </div>
 
         <div className="pg-sec">
@@ -429,12 +417,48 @@ export default function TranslatePage() {
         </div>
         <TutorialList page="translate" />
       </aside>
-      <ResizeHandle panel={asidePanel} />
+      </AsideDrawer>
 
       {/* 右:翻译主区 */}
       <main className="pg-main">
         <div className="pg-main-head">
-          <span className="topic">{topic}</span>
+          {/* 语言方向选择器(从左栏移回主页):改动后自动重新翻译 */}
+          <div className="tr-dir">
+            <select
+              className="pg-field"
+              value={srcLang}
+              onChange={(e) => setSrcLang(e.target.value)}
+              title="源语言(自动检测 = 由模型识别)"
+            >
+              <option value="">自动检测</option>
+              {LANGS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <button
+              className="pg-swap"
+              title={srcLang ? '交换语言' : '自动检测时不可交换'}
+              disabled={!srcLang}
+              onClick={swap}
+            >
+              <IconSwap size={15} />
+            </button>
+            <select
+              className="pg-field"
+              value={dstLang}
+              onChange={(e) => setDstLang(e.target.value)}
+              title="目标语言"
+            >
+              {LANGS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <span className="sp" />
           <span className="cost">
             已输出 <b>{outChars}</b> 字
           </span>

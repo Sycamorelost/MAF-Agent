@@ -2,15 +2,14 @@ import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'r
 import { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
-import Topbar from './components/Topbar';
 import Titlebar from './components/Titlebar';
-import Rail from './components/Rail';
 import Sidebar from './components/Sidebar';
 import DataDirSetupDialog from './components/DataDirSetupDialog';
 import * as ipc from './lib/ipc';
 import HomePage from './pages/HomePage';
 import ChatPage from './pages/ChatPage';
 import ResearchPage from './pages/ResearchPage';
+import StudyPage from './pages/StudyPage';
 import DrawPage from './pages/DrawPage';
 import TranslatePage from './pages/TranslatePage';
 import MemoryPage from './pages/MemoryPage';
@@ -20,17 +19,15 @@ import SettingsPage from './pages/SettingsPage';
 import { useSessionsStore } from './stores/sessions';
 import { useProvidersStore } from './stores/providers';
 import './styles/app.css';
+import 'katex/dist/katex.min.css';
 
-/** 深度研究/绘画/翻译/记忆/设置页自带布局,隐藏会话侧栏(保持挂载不卸载,保留内部状态)。 */
+/** 深度研究/绘画/翻译/记忆/设置页自带布局,隐藏会话侧栏(条件挂载,抽屉 body class 随卸载清理)。 */
 function MaybeSidebar() {
   const loc = useLocation();
-  const bare = ['/research', '/draw', '/translate', '/memory', '/notes', '/attachments', '/settings'];
+  const bare = ['/research', '/plan', '/draw', '/translate', '/memory', '/notes', '/attachments', '/settings'];
   const hidden = bare.some((p) => loc.pathname.startsWith(p));
-  return (
-    <div style={{ display: hidden ? 'none' : 'contents' }}>
-      <Sidebar />
-    </div>
-  );
+  if (hidden) return null;
+  return <Sidebar />;
 }
 
 /** 数据目录引导门:未配置数据目录且非开发构建时,强制先选目录才能使用。 */
@@ -91,15 +88,14 @@ function MainApp() {
   return (
     <div className="window">
       <Titlebar />
-      <Topbar />
       <div className="body">
-        <Rail />
         <MaybeSidebar />
         <div className="main">
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/chat/:id" element={<ChatPage />} />
             <Route path="/research" element={<ResearchPage />} />
+            <Route path="/plan" element={<StudyPage />} />
             <Route path="/draw" element={<DrawPage />} />
             <Route path="/translate" element={<TranslatePage />} />
             <Route path="/memory" element={<MemoryPage />} />

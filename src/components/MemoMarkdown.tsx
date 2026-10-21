@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import { IconCheck, IconCopy } from './icons';
 import MermaidBlock from './MermaidBlock';
@@ -53,6 +55,36 @@ function extractCode(children: React.ReactNode): { lang: string; text: string } 
 }
 
 /**
+ * 把 LaTeX 原生定界符 \(...\) / \[...\] 归一化为 remark-math 支持的 $...$ / $$...$$。
+ *
+ * 不少模型直接输出 LaTeX 定界符,而 remark-math 只识别 $;且 CommonMark 会把
+ * \( \[ 当成转义字符渲染成字面 ( [。这里在解析前先归一化。
+ * 围栏代码块与行内 code 先占位保护,避免误伤其中的代码。
+ */
+function normalizeMathDelimiters(src: string): string {
+  if (!src.includes('\\(') && !src.includes('\\[')) return src;
+  const stashed: string[] = [];
+  const hide = (m: string) => {
+    stashed.push(m);
+    return `\u0000${stashed.length - 1}\u0000`;
+  };
+  let s = src
+    .replace(/```[\s\S]*?```/g, hide)
+    .replace(/~~~[\s\S]*?~~~/g, hide)
+    .replace(/`[^`\n]*`/g, hide);
+  // 独占整行的 \[...\](LaTeX 行间公式)转块级 $$,其余转行内 $;
+  // 行内公式不可跨行,故多行内容一律走块级。
+  const toBlock = (body: string) => `\n\n$$\n${body.trim()}\n$$\n\n`;
+  const toInline = (body: string) =>
+    body.includes('\n') ? toBlock(body) : `$${body.trim()}$`;
+  s = s
+    .replace(/(^[ \t]*)\\\[([\s\S]*?)\\\]([ \t]*$)/gm, (_m, _lead, body: string) => toBlock(body))
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_m, body: string) => toInline(body))
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_m, body: string) => toInline(body));
+  return s.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => stashed[Number(i)] ?? '');
+}
+
+/**
  * 缓存 Markdown 解析结果:content 不变时不重新解析。
  * 用于消息气泡 / 记忆面板等高频渲染场景,避免流式刷新导致历史内容重复解析。
  *
@@ -77,7 +109,17 @@ export const MemoMarkdown = React.memo(
     const hasMermaid = streaming
       ? false
       : /```(?:mermaid|echarts)[\s\S]*?```/.test(content);
-    const rehype = withCodeBlock && !streaming ? [rehypeHighlight] : undefined;
+    // 公式:流式期间跳过解析(与 mermaid 一致),流式结束后由完整渲染接管
+    const body = streaming ? content : normalizeMathDelimiters(content);
+    const remark: React.ComponentProps<typeof ReactMarkdown>['remarkPlugins'] = streaming
+      ? [remarkGfm]
+      : [remarkGfm, remarkMath];
+    // KaTeX 排在 highlight 之前;throwOnError:false 让个别非法公式只标红而不中断整篇渲染
+    const rehype: React.ComponentProps<typeof ReactMarkdown>['rehypePlugins'] = streaming
+      ? undefined
+      : withCodeBlock
+        ? [[rehypeKatex, { throwOnError: false, errorColor: '#cc0000' }], rehypeHighlight]
+        : [[rehypeKatex, { throwOnError: false, errorColor: '#cc0000' }]];
 
     // 表格外包一层横向滚动容器,避免宽表格撑破气泡(快慢路径共用)
     const tableWrap = ({ children }: { children?: React.ReactNode }) => (
@@ -90,7 +132,7 @@ export const MemoMarkdown = React.memo(
     if (!hasMermaid) {
       return (
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={remark}
           rehypePlugins={rehype}
           components={
             withCodeBlock || extraComponents
@@ -98,7 +140,7 @@ export const MemoMarkdown = React.memo(
               : { table: tableWrap }
           }
         >
-          {content}
+          {body}
         </ReactMarkdown>
       );
     }
@@ -121,8 +163,8 @@ export const MemoMarkdown = React.memo(
     };
 
     return (
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehype} components={components}>
-        {content}
+      <ReactMarkdown remarkPlugins={remark} rehypePlugins={rehype} components={components}>
+        {body}
       </ReactMarkdown>
     );
   },

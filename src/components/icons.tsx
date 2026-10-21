@@ -60,6 +60,14 @@ export const IconSearch = (p: IconProps) => (
   </I>
 );
 
+export const IconGraduation = (p: IconProps) => (
+  <I {...p}>
+    <path d="m22 9-10-5L2 9l10 5 10-5Z" />
+    <path d="M6 11.5V16c0 1.66 2.69 3 6 3s6-1.34 6-3v-4.5" />
+    <path d="M22 9v5" />
+  </I>
+);
+
 export const IconResearch = (p: IconProps) => (
   <I {...p}>
     <path d="M6 18h8" />
@@ -464,6 +472,30 @@ export function agentIconComponent(key: string) {
       return IconShield;
     case 'archive':
       return IconArchive;
+    case 'chat':
+      return IconChat;
+    case 'note':
+      return IconNote;
+    case 'brain':
+      return IconBrain;
+    case 'globe':
+      return IconGlobe;
+    case 'settings':
+      return IconSettings;
+    case 'image':
+      return IconImage;
+    case 'translate':
+      return IconTranslate;
+    case 'research':
+      return IconResearch;
+    case 'attach':
+      return IconAttach;
+    case 'doc':
+      return IconDoc;
+    case 'check':
+      return IconCheck;
+    case 'edit':
+      return IconEdit;
     default:
       return IconBot;
   }

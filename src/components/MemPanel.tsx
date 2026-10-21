@@ -11,9 +11,9 @@ interface Props {
   width?: number;
   /** 窄档(降字号/换行更紧凑) */
   narrow?: boolean;
+  /** 收起本面板(折叠后由会话头部的按钮重新展开) */
+  onCollapse?: () => void;
 }
-
-type ViewMode = 'preview' | 'source' | 'split';
 
 /** 从 frontmatter+body 拼出 memory.md 完整文件内容 */
 function renderFull(fm: ipc.Frontmatter, body: string): string {
@@ -41,13 +41,12 @@ function bodyOf(full: string): string {
   return full.slice(end + 4).replace(/^\s*\n/, '');
 }
 
-export default function MemPanel({ sessionId, width, narrow }: Props) {
+export default function MemPanel({ sessionId, width, narrow, onCollapse }: Props) {
   const { bySession, versions, load, write, loadVersions, rollback, startWatch, stopWatch } =
     useMemoryStore();
   const mem = bySession[sessionId];
   const verList = versions[sessionId] ?? [];
 
-  const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [draft, setDraft] = useState('');
   const [showVersions, setShowVersions] = useState(false);
   const [diffSel, setDiffSel] = useState<number[]>([]);
@@ -118,7 +117,6 @@ export default function MemPanel({ sessionId, width, narrow }: Props) {
   const onCancelEdit = () => {
     setDraft(savedFull);
     setUserDirty(false);
-    setViewMode('preview');
   };
 
   const statusInfo = useMemo(() => {
@@ -160,8 +158,6 @@ export default function MemPanel({ sessionId, width, narrow }: Props) {
     setDiffOpen({ left, right });
   };
 
-  const previewBody = useMemo(() => bodyOf(draft), [draft]);
-
   if (!mem) {
     return (
       <div className="mempanel" style={width ? { width } : undefined} data-narrow={!!narrow}>
@@ -185,44 +181,30 @@ export default function MemPanel({ sessionId, width, narrow }: Props) {
             style={{ background: statusInfo.color }}
             title={statusInfo.text}
           />
+          {onCollapse && (
+            <button
+              type="button"
+              className="panel-toggle"
+              title="收起记忆面板"
+              onClick={onCollapse}
+              style={{ marginLeft: 'auto' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
+                <path d="M5 3l4 4-4 4" />
+              </svg>
+            </button>
+          )}
         </div>
         <div className="mem-actions">
-          <div className="mem-mode-group">
-            {([
-              ['预览', 'preview'],
-              ['源码', 'source'],
-              ['分屏', 'split'],
-            ] as [string, ViewMode][]).map(([label, key]) => (
-              <button
-                key={key}
-                type="button"
-                className={viewMode === key ? 'active' : ''}
-                onClick={() => setViewMode(key)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {(viewMode === 'source' || viewMode === 'split') && (
-            <>
-              <button type="button" onClick={onSave} style={{ color: 'var(--brand)' }}>
-                保存
-              </button>
-              <button type="button" onClick={onCancelEdit}>
-                取消
-              </button>
-            </>
-          )}
-          {viewMode === 'preview' && (
-            <>
-              <button type="button" onClick={() => setShowVersions((v) => !v)}>
-                {showVersions ? '收起' : '历史'}
-              </button>
-              <button type="button" onClick={() => setViewMode('source')}>
-                编辑
-              </button>
-            </>
-          )}
+          <button type="button" onClick={onSave} style={{ color: 'var(--brand)' }}>
+            保存
+          </button>
+          <button type="button" onClick={onCancelEdit}>
+            取消
+          </button>
+          <button type="button" onClick={() => setShowVersions((v) => !v)}>
+            {showVersions ? '收起' : '历史'}
+          </button>
         </div>
       </div>
 
@@ -311,39 +293,15 @@ export default function MemPanel({ sessionId, width, narrow }: Props) {
         </div>
       )}
 
-      {/* 三态内容区(D3.4) */}
-      {viewMode === 'preview' && (
-        <div className="mem-view mem-preview">
-          <MemoMarkdown content={mem.body} />
-        </div>
-      )}
-
-      {viewMode === 'source' && (
-        <textarea
-          className="mem-view edit"
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            setUserDirty(true);
-          }}
-        />
-      )}
-
-      {viewMode === 'split' && (
-        <div className="mem-split">
-          <textarea
-            className="mem-view edit"
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              setUserDirty(true);
-            }}
-          />
-          <div className="mem-view mem-preview">
-            <MemoMarkdown content={previewBody} />
-          </div>
-        </div>
-      )}
+      {/* 内容区:直接编辑 memory.md(移除预览/源码/分屏三态切换) */}
+      <textarea
+        className="mem-view edit"
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setUserDirty(true);
+        }}
+      />
 
       {diffOpen && (
         <MemoryDiffDialog

@@ -65,9 +65,9 @@ export default function MermaidBlock({ code }: { code: string }) {
           setErr('Mermaid 未生成 SVG');
           return;
         }
-        // 移除固定尺寸,保留 viewBox,交给 CSS 原生缩放(防 resize 重绘闪烁)
-        svg.removeAttribute('width');
-        svg.removeAttribute('height');
+        // 保留 mermaid 原生的 width="100%" + style max-width(=图表自然宽) —— 实测:删掉 width
+        // 会让 SVG 失去内在宽度,在 .mermaid-svg(flex) 内塌陷为 0×0,整图压成左上角黑点。
+        // 高度不经属性约束,由 CSS height:auto + viewBox 比例推导,窗口 resize 零重绘。
         svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         setDone(true);
       } catch (e: unknown) {

@@ -1,1101 +1,13 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ComponentType, type ReactElement } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getVersion } from '@tauri-apps/api/app';
 import logoUrl from '../assets/logo.png';
 import * as ipc from '../lib/ipc';
-import { ResizeHandle } from '../components/ResizeHandle';
-import { usePanelWidth } from '../lib/usePanelWidth';
-import {
-  IconBot,
-  IconBrain,
-  IconGlobe,
-  IconArchive,
-  IconLogo,
-  IconCheck,
-  IconTranslate,
-  IconPlus,
-  IconTrash,
-  IconUpload,
-  IconChevronDown,
-  IconRefresh,
-  IconQuote,
-  IconChart,
-  IconEdit,
-} from '../components/icons';
+import AsideDrawer from '../components/AsideDrawer';
+import { IconCheck, IconPlus, IconRefresh, IconTrash, IconUpload } from '../components/icons';
 
-const ENGINES = [
-  { id: 'bocha', name: '博查 Bocha' },
-  { id: 'zhipu', name: '智谱 BigModel' },
-  { id: 'searxng', name: 'SearXNG' },
-  { id: 'tavily', name: 'Tavily' },
-];
-
-type NavItem = { id: string; label: string; icon: ComponentType<{ size?: number }> };
-type NavGroup = { grp: string; items: NavItem[] };
-
-const NAV: NavGroup[] = [
-  {
-    grp: '模型',
-    items: [
-      { id: 'providers', label: '模型服务商', icon: IconBot },
-      { id: 'memory', label: '记忆与提炼', icon: IconBrain },
-    ],
-  },
-  {
-    grp: '能力',
-    items: [
-      { id: 'search', label: '联网搜索', icon: IconGlobe },
-      { id: 'translate', label: '翻译', icon: IconTranslate },
-      { id: 'selection', label: '划词提问', icon: IconQuote },
-    ],
-  },
-  {
-    grp: '数据',
-    items: [
-      { id: 'usage', label: '用量统计', icon: IconChart },
-      { id: 'storage', label: '存储位置', icon: IconArchive },
-      { id: 'about', label: '关于', icon: IconLogo },
-    ],
-  },
-];
-
-/** 记忆注入策略选项(与 MemoryStrategy 对齐)。 */
-const MEMORY_STRATEGY_OPTIONS: { value: ipc.MemoryStrategy; label: string }[] = [
-  { value: 'full', label: '全文' },
-  { value: 'summary', label: '仅摘要' },
-  { value: 'hybrid', label: '摘要 + 事实 + 待办' },
-  { value: 'none', label: '不注入' },
-];
-
-/** 思考能力手动修正选项(v1.9.0 工作块 I;value → ReasoningCapability,auto = 清除修正回内置推断)。 */
-const THINK_CAP_OPTIONS: { value: string; label: string; cap: ipc.ReasoningCapability | null }[] = [
-  { value: 'auto', label: '自动(按规则表推断)', cap: null },
-  { value: 'full', label: '支持 · 可关 · 有档位', cap: { enabled: true, can_disable: true, levels: true } },
-  { value: 'toggle', label: '支持 · 可关 · 仅开关', cap: { enabled: true, can_disable: true, levels: false } },
-  { value: 'locked_levels', label: '支持 · 不可关 · 有档位', cap: { enabled: true, can_disable: false, levels: true } },
-  { value: 'locked_toggle', label: '支持 · 不可关 · 仅开关', cap: { enabled: true, can_disable: false, levels: false } },
-  { value: 'off', label: '不支持思考', cap: { enabled: false, can_disable: false, levels: false } },
-];
-
-/** ReasoningCapability → 选项 value(设置页回显用)。 */
-function capToValue(cap: ipc.ReasoningCapability | null): string {
-  if (!cap) return 'auto';
-  if (!cap.enabled) return 'off';
-  if (cap.can_disable) return cap.levels ? 'full' : 'toggle';
-  return cap.levels ? 'locked_levels' : 'locked_toggle';
-}
-
-/** 数字输入 → number | null(空串/非法值视为不覆盖)。 */
-function numOrNull(v: string): number | null {
-  const t = v.trim();
-  if (!t) return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** 成本档位选项。 */
-const COST_TIER_OPTIONS = Object.entries(ipc.COST_TIER_LABEL).map(([value, label]) => ({
-  value,
-  label,
-}));
-
-/** 价格与额度编辑器:厂家拉取缺价时的手动兜底,保存到 data/model_cards.json。 */
-function CardPriceEditor({
-  providerId,
-  model,
-  card,
-  onSaved,
-  onCancel,
-}: {
-  providerId: string;
-  model: string;
-  card: ipc.ModelCard | undefined;
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const p = card?.pricing;
-  const [ctx, setCtx] = useState(card?.context_window != null ? String(card.context_window) : '');
-  const [maxOut, setMaxOut] = useState(
-    card?.max_output != null ? String(card.max_output) : '',
-  );
-  const [tier, setTier] = useState(card?.cost_tier ?? 'standard');
-  const [input, setInput] = useState(p?.input != null ? String(p.input) : '');
-  const [output, setOutput] = useState(p?.output != null ? String(p.output) : '');
-  const [hit, setHit] = useState(
-    p?.input_cache_hit != null ? String(p.input_cache_hit) : '',
-  );
-  const [miss, setMiss] = useState(
-    p?.input_cache_miss != null ? String(p.input_cache_miss) : '',
-  );
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-
-  const save = async () => {
-    setErr('');
-    const inP = numOrNull(input);
-    const outP = numOrNull(output);
-    const hitP = numOrNull(hit);
-    const missP = numOrNull(miss);
-    let pricing: ipc.ModelPricing | null = null;
-    if (
-      inP != null ||
-      outP != null ||
-      hitP != null ||
-      missP != null ||
-      p?.per_image != null ||
-      p?.per_char != null
-    ) {
-      pricing = {
-        input: inP,
-        output: outP,
-        input_cache_hit: hitP,
-        input_cache_miss: missP,
-        per_image: p?.per_image ?? null,
-        per_char: p?.per_char ?? null,
-        note: p?.note ?? null,
-      };
-    }
-    const next: ipc.ModelCard = {
-      id: card?.id ?? ipc.vendorCardId(providerId, model),
-      display_name: card?.display_name || model,
-      provider: providerId,
-      official_model_id: card?.official_model_id ?? model,
-      context_window: numOrNull(ctx),
-      max_output: numOrNull(maxOut),
-      cost_tier: tier,
-      tags: card?.tags ?? [],
-      pricing,
-      defaults: card?.defaults ?? null,
-      memory_injection: card?.memory_injection ?? null,
-    };
-    setSaving(true);
-    try {
-      await ipc.saveModelCard(next);
-      onSaved();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="price-edit">
-      <div className="set-row">
-        <div className="set-fld">
-          <label className="lbl">上下文窗口</label>
-          <input
-            className="pg-field num"
-            type="number"
-            min="1"
-            value={ctx}
-            placeholder="如 1048576"
-            onChange={(e) => setCtx(e.target.value)}
-          />
-        </div>
-        <div className="set-fld">
-          <label className="lbl">最大输出</label>
-          <input
-            className="pg-field num"
-            type="number"
-            min="1"
-            value={maxOut}
-            placeholder="如 393216"
-            onChange={(e) => setMaxOut(e.target.value)}
-          />
-        </div>
-        <div className="set-fld">
-          <label className="lbl">成本档位</label>
-          <select className="pg-field" value={tier} onChange={(e) => setTier(e.target.value)}>
-            {COST_TIER_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div className="set-row">
-        <div className="set-fld">
-          <label className="lbl">输入价</label>
-          <input
-            className="pg-field num"
-            type="number"
-            min="0"
-            step="0.01"
-            value={input}
-            placeholder="未命中缓存"
-            onChange={(e) => setInput(e.target.value)}
-          />
-        </div>
-        <div className="set-fld">
-          <label className="lbl">输出价</label>
-          <input
-            className="pg-field num"
-            type="number"
-            min="0"
-            step="0.01"
-            value={output}
-            onChange={(e) => setOutput(e.target.value)}
-          />
-        </div>
-        <div className="set-fld">
-          <label className="lbl">缓存命中价</label>
-          <input
-            className="pg-field num"
-            type="number"
-            min="0"
-            step="0.01"
-            value={hit}
-            onChange={(e) => setHit(e.target.value)}
-          />
-        </div>
-        <div className="set-fld">
-          <label className="lbl">缓存未命中价</label>
-          <input
-            className="pg-field num"
-            type="number"
-            min="0"
-            step="0.01"
-            value={miss}
-            onChange={(e) => setMiss(e.target.value)}
-          />
-        </div>
-      </div>
-      <div className="set-hint price-edit-hint">
-        单价单位:元 / 百万 tokens,留空表示未知;缓存未命中价通常与输入价一致。保存后用于用量成本统计。
-      </div>
-      <div className="set-actions">
-        <button className="btn-primary" disabled={saving} onClick={save}>
-          <IconCheck size={13} />
-          {saving ? '保存中…' : '保存价格'}
-        </button>
-        <button className="btn-ghost" disabled={saving} onClick={onCancel}>
-          取消
-        </button>
-        {err && <span className="price-edit-err">{err}</span>}
-      </div>
-    </div>
-  );
-}
-
-/** 单模型可折叠配置卡(迭代 D8):显示名/排序/默认生成参数/记忆注入策略/价格与额度。 */
-function ModelConfigCard({
-  providerId,
-  model,
-  override,
-  card,
-  onPatch,
-  onSaveCard,
-}: {
-  providerId: string;
-  model: string;
-  override: ipc.ModelOverride | undefined;
-  card: ipc.ModelCard | undefined;
-  onPatch: (model: string, patch: Partial<ipc.ModelOverride>) => void;
-  onSaveCard: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [editingPrice, setEditingPrice] = useState(false);
-  // 思考能力手动修正回显(null = 未加载;'auto' = 未修正,按规则表推断)
-  const [capSel, setCapSel] = useState<string | null>(null);
-  const ov = override ?? ipc.EMPTY_MODEL_OVERRIDE;
-  const enabled = ov.enabled !== false;
-  const alias = ov.display_name?.trim() || '';
-  const name = alias || card?.display_name || model;
-  const p = card?.pricing;
-  const inPrice = p?.input ?? p?.input_cache_miss ?? p?.input_cache_hit ?? null;
-  const hasPerPrice = p?.per_image != null || p?.per_char != null;
-  const hasTokenPrice = inPrice != null && p?.output != null;
-  const hasAnyPrice = hasPerPrice || hasTokenPrice;
-
-  // 展开时加载手动修正原始值(与解析后能力区分,能准确显示「自动/手动」)
-  useEffect(() => {
-    if (!open || capSel !== null) return;
-    let alive = true;
-    ipc
-      .getReasoningOverride(providerId, model)
-      .then((c) => alive && setCapSel(capToValue(c)))
-      .catch(() => alive && setCapSel('auto'));
-    return () => {
-      alive = false;
-    };
-  }, [open, capSel, providerId, model]);
-
-  /** 应用手动修正:乐观更新,失败回退。 */
-  const applyCap = async (v: string) => {
-    const prev = capSel ?? 'auto';
-    setCapSel(v);
-    try {
-      await ipc.saveReasoningOverride(
-        providerId,
-        model,
-        THINK_CAP_OPTIONS.find((o) => o.value === v)?.cap ?? null,
-      );
-    } catch {
-      setCapSel(prev);
-    }
-  };
-
-  return (
-    <div className={`mcard${open ? ' open' : ''}${enabled ? '' : ' off'}`}>
-      <div className="mcard-h" onClick={() => setOpen((v) => !v)}>
-        <IconChevronDown size={14} className="arr" />
-        <span className="nm">{name}</span>
-        {alias && <span className="mid">{model}</span>}
-        <span className="sp" />
-        {card && <span className="mid">{ipc.formatTokens(card.context_window)} ctx</span>}
-        {card && (
-          <span className={`cost-badge tier-${card.cost_tier}`}>
-            {ipc.COST_TIER_LABEL[card.cost_tier] ?? card.cost_tier}
-          </span>
-        )}
-        <span
-          className={`mcard-toggle${enabled ? ' on' : ''}`}
-          title={enabled ? '停用后不出现在切换模型列表' : '重新启用'}
-          onClick={(e) => {
-            e.stopPropagation();
-            onPatch(model, { enabled: !enabled });
-          }}
-        >
-          <span className="dot" />
-          {enabled ? '启用' : '停用'}
-        </span>
-      </div>
-      <div className="mcard-b">
-        <div className="set-row">
-          <div className="set-fld">
-            <label className="lbl">显示名</label>
-            <input
-              className="pg-field"
-              defaultValue={ov.display_name ?? ''}
-              placeholder={card?.display_name ?? model}
-              spellCheck={false}
-              onBlur={(e) => onPatch(model, { display_name: e.target.value.trim() || null })}
-            />
-          </div>
-          <div className="set-fld">
-            <label className="lbl">排序</label>
-            <input
-              className="pg-field num"
-              type="number"
-              defaultValue={ov.order ?? ''}
-              placeholder="默认"
-              onBlur={(e) => onPatch(model, { order: numOrNull(e.target.value) })}
-            />
-          </div>
-        </div>
-        <div className="set-row">
-          <div className="set-fld">
-            <label className="lbl">temperature</label>
-            <input
-              className="pg-field num"
-              type="number"
-              step="0.1"
-              min="0"
-              max="2"
-              defaultValue={ov.temperature ?? ''}
-              placeholder="默认"
-              onBlur={(e) => onPatch(model, { temperature: numOrNull(e.target.value) })}
-            />
-          </div>
-          <div className="set-fld">
-            <label className="lbl">max_tokens</label>
-            <input
-              className="pg-field num"
-              type="number"
-              defaultValue={ov.max_tokens ?? ''}
-              placeholder="默认"
-              onBlur={(e) => onPatch(model, { max_tokens: numOrNull(e.target.value) })}
-            />
-          </div>
-          <div className="set-fld">
-            <label className="lbl">top_p</label>
-            <input
-              className="pg-field num"
-              type="number"
-              step="0.05"
-              min="0"
-              max="1"
-              defaultValue={ov.top_p ?? ''}
-              placeholder="默认"
-              onBlur={(e) => onPatch(model, { top_p: numOrNull(e.target.value) })}
-            />
-          </div>
-        </div>
-        <div className="set-row">
-          <label className="lbl">记忆注入</label>
-          <select
-            className="pg-field"
-            value={ov.memory_injection ?? ''}
-            onChange={(e) =>
-              onPatch(model, {
-                memory_injection: (e.target.value || null) as ipc.MemoryStrategy | null,
-              })
-            }
-          >
-            <option value="">默认(跟随会话)</option>
-            {MEMORY_STRATEGY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="set-row">
-          <label className="lbl">默认思考强度</label>
-          <select
-            className="pg-field"
-            value={ov.default_reasoning ?? ''}
-            onChange={(e) => onPatch(model, { default_reasoning: e.target.value || null })}
-            title="该模型新会话的初始思考档位;会话内手动调整后以会话选择为准"
-          >
-            <option value="">默认(Medium)</option>
-            <option value="light">Light</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="ultra">Ultra</option>
-          </select>
-        </div>
-        <div className="set-row">
-          <label className="lbl">思考能力</label>
-          <select
-            className="pg-field"
-            value={capSel ?? ''}
-            disabled={capSel === null}
-            onChange={(e) => void applyCap(e.target.value)}
-            title="内置规则表按模型名前缀推断;若推断不符(如新模型/中转站),可在此手动修正,立即生效"
-          >
-            {capSel === null && <option value="">加载中…</option>}
-            {THINK_CAP_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mcard-meta">
-          {card ? (
-            <>
-              官方 ID <code>{card.official_model_id}</code>
-              {card.max_output != null && <> · 最大输出 {ipc.formatTokens(card.max_output)}</>}
-              {card.tags.length > 0 && <> · {card.tags.join(' / ')}</>}
-              {hasPerPrice ? (
-                <>
-                  {' · 价格 '}
-                  {p?.per_image != null
-                    ? `${p.per_image} 元/张`
-                    : `${p?.per_char ?? '-'} 元/字符`}
-                </>
-              ) : hasTokenPrice ? (
-                <>
-                  {' · 价格 '}入 {inPrice ?? '-'} / 出 {p?.output ?? '-'} 元 / 百万 tokens
-                  {p?.input_cache_hit != null && p.input_cache_hit !== inPrice && (
-                    <>(缓存命中 {p.input_cache_hit})</>
-                  )}
-                </>
-              ) : (
-                <span className="price-missing"> · 价格未配置(可手动补充)</span>
-              )}
-            </>
-          ) : (
-            <>
-              官方 ID <code>{model}</code>
-              <span className="price-missing"> · 厂家未提供额度/价格,可手动补充</span>
-            </>
-          )}
-        </div>
-        {editingPrice ? (
-          <CardPriceEditor
-            providerId={providerId}
-            model={model}
-            card={card}
-            onSaved={() => {
-              setEditingPrice(false);
-              onSaveCard();
-            }}
-            onCancel={() => setEditingPrice(false)}
-          />
-        ) : (
-          <div className="price-edit-entry">
-            <button className="btn-ghost btn-xs" onClick={() => setEditingPrice(true)}>
-              <IconEdit size={12} />
-              {hasAnyPrice ? '编辑价格与额度' : '补充价格与额度'}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** 服务商卡片(迭代 D8):API Key 配置 + 从厂家拉取 + 内含可折叠单模型卡;支持编辑/删除。 */
-function ProviderSettingsCard({
-  tpl,
-  hasKey,
-  keyInput,
-  onKeyInput,
-  onClearKey,
-  savingKey,
-  overrides,
-  cards,
-  onPatch,
-  onFetch,
-  fetching,
-  fetchMsg,
-  savingTpl,
-  onEdit,
-  onDelete,
-  rotation,
-  slots,
-  onAddKey,
-  onPatchSlot,
-  onDeleteSlot,
-  onPatchRotation,
-  onSaveCard,
-}: {
-  tpl: ipc.ProviderTemplate;
-  hasKey: boolean;
-  keyInput: string;
-  onKeyInput: (v: string) => void;
-  onClearKey: () => void;
-  savingKey: boolean;
-  overrides: Record<string, ipc.ModelOverride>;
-  cards: ipc.ModelCard[];
-  onPatch: (model: string, patch: Partial<ipc.ModelOverride>) => void;
-  onFetch: () => void;
-  fetching: boolean;
-  fetchMsg: string;
-  savingTpl: boolean;
-  onEdit: (patch: Partial<ipc.ProviderTemplate>) => void;
-  onDelete: () => void;
-  /** 该 Provider 的轮换配置(未配置时为 undefined) */
-  rotation?: ipc.RotationConfig;
-  /** 已配置的 Key 槽位 */
-  slots: ipc.KeySlotView[];
-  onAddKey: (label: string) => void;
-  onPatchSlot: (
-    slot: number,
-    patch: { label?: string; enabled?: boolean; weight?: number; priority?: number },
-  ) => void;
-  onDeleteSlot: (slot: number) => void;
-  onPatchRotation: (patch: {
-    enabled?: boolean;
-    cooldown_secs?: number;
-    supports_stream_options?: boolean;
-  }) => void;
-  /** 模型卡价格/额度保存后,刷新卡片列表 */
-  onSaveCard: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [newModel, setNewModel] = useState('');
-  const [newLabel, setNewLabel] = useState('');
-  const models = tpl.all_models.length > 0 ? tpl.all_models : tpl.models;
-  const rot = rotation ?? {
-    enabled: false,
-    strategy: 'round_robin',
-    cooldown_secs: 60,
-    supports_stream_options: true,
-    keys: [],
-  };
-
-  const addModel = () => {
-    const m = newModel.trim();
-    if (!m) return;
-    if (!models.includes(m)) onEdit({ models: [...models, m] });
-    setNewModel('');
-  };
-
-  return (
-    <div className={`prov-card${open ? ' open' : ''}`}>
-      <div className="prov-card-h" onClick={() => setOpen((v) => !v)}>
-        <IconChevronDown size={15} className="arr" />
-        <span className="nm">{tpl.display_name}</span>
-        <span className={`settings-badge ${hasKey ? 'ok' : ''}`}>
-          {hasKey ? '已配置 Key' : '未配置'}
-        </span>
-        <span className="cnt">
-          {tpl.models.length} / {models.length} 个模型
-        </span>
-        <span className="url">{tpl.base_url}</span>
-        <button
-          className="prov-del"
-          title="删除该服务商(含内置模板)"
-          disabled={savingTpl}
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          <IconTrash size={14} />
-        </button>
-      </div>
-      <div className="prov-card-b">
-        <div className="set-row">
-          <div className="set-fld">
-            <label className="lbl">显示名</label>
-            <input
-              className="pg-field"
-              defaultValue={tpl.display_name}
-              spellCheck={false}
-              disabled={savingTpl}
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (v && v !== tpl.display_name) onEdit({ display_name: v });
-                else e.target.value = tpl.display_name;
-              }}
-            />
-          </div>
-          <div className="set-fld">
-            <label className="lbl">Base URL</label>
-            <input
-              className="pg-field"
-              defaultValue={tpl.base_url}
-              placeholder="https://api.example.com/v1"
-              spellCheck={false}
-              disabled={savingTpl}
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (v !== tpl.base_url) onEdit({ base_url: v });
-              }}
-            />
-          </div>
-        </div>
-        <div className="set-prov-line">
-          <input
-            className="pg-field"
-            type="password"
-            placeholder={hasKey ? '输入新 Key(追加为新槽位)' : '输入 API Key'}
-            value={keyInput}
-            onChange={(e) => onKeyInput(e.target.value)}
-          />
-          <input
-            className="pg-field"
-            style={{ maxWidth: 140 }}
-            placeholder="备注(可选)"
-            value={newLabel}
-            spellCheck={false}
-            onChange={(e) => setNewLabel(e.target.value)}
-          />
-          <button
-            className="btn-primary"
-            onClick={() => {
-              onAddKey(newLabel);
-              setNewLabel('');
-            }}
-            disabled={!keyInput || savingKey}
-          >
-            添加
-          </button>
-          {tpl.openai_compat && (
-            <button className="btn-ghost" onClick={onFetch} disabled={!hasKey || fetching}>
-              <IconRefresh size={13} />
-              {fetching ? '拉取中…' : '从厂家拉取'}
-            </button>
-          )}
-          {hasKey && (
-            <button className="btn-ghost" onClick={onClearKey}>
-              清除全部
-            </button>
-          )}
-        </div>
-        {slots.length > 0 && (
-          <div className="key-slots">
-            <div className="key-slots-h">
-              多 Key 轮换
-              <button
-                className={`mcard-toggle${rot.enabled ? ' on' : ''}`}
-                onClick={() => onPatchRotation({ enabled: !rot.enabled })}
-              >
-                <span className="dot" />
-                {rot.enabled ? '已启用' : '已停用'}
-              </button>
-              <label className="cool-num">
-                限流冷却
-                <input
-                  className="pg-field num"
-                  type="number"
-                  min={1}
-                  max={3600}
-                  defaultValue={rot.cooldown_secs}
-                  onBlur={(e) => {
-                    const v = parseInt(e.target.value, 10);
-                    if (Number.isFinite(v)) {
-                      onPatchRotation({ cooldown_secs: Math.min(3600, Math.max(1, v)) });
-                    }
-                  }}
-                />
-                秒
-              </label>
-              <span className="sp" />
-              <button
-                className={`mcard-toggle${rot.supports_stream_options ? ' on' : ''}`}
-                title="中转站不认 stream_options 时关闭(关闭后无法采集精确 Token 用量)"
-                onClick={() =>
-                  onPatchRotation({ supports_stream_options: !rot.supports_stream_options })
-                }
-              >
-                <span className="dot" />
-                兼容 stream_options
-              </button>
-            </div>
-            {slots.map((s) => (
-              <div className="key-slot" key={s.slot}>
-                <span className="idx">#{s.slot}</span>
-                <input
-                  className="pg-field"
-                  defaultValue={s.label}
-                  placeholder="备注"
-                  spellCheck={false}
-                  onBlur={(e) => {
-                    const v = e.target.value.trim();
-                    if (v !== s.label) onPatchSlot(s.slot, { label: v });
-                  }}
-                />
-                <label className="slot-num" title="权重:相对流量份额,越大承担越多请求">
-                  权重
-                  <input
-                    className="pg-field num"
-                    type="number"
-                    min={1}
-                    max={50}
-                    defaultValue={s.weight}
-                    onBlur={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (Number.isFinite(v) && v !== s.weight) {
-                        onPatchSlot(s.slot, { weight: Math.min(50, Math.max(1, v)) });
-                      }
-                    }}
-                  />
-                </label>
-                <label className="slot-num" title="优先级:越大越先使用,高优先级全冷却时才降级">
-                  优先级
-                  <input
-                    className="pg-field num"
-                    type="number"
-                    min={0}
-                    max={99}
-                    defaultValue={s.priority}
-                    onBlur={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (Number.isFinite(v) && v !== s.priority) {
-                        onPatchSlot(s.slot, { priority: Math.min(99, Math.max(0, v)) });
-                      }
-                    }}
-                  />
-                </label>
-                <code className="key-mask">{s.masked ?? '—'}</code>
-                {s.cooldown_remaining > 0 && <span className="cool">冷却 {s.cooldown_remaining}s</span>}
-                <button
-                  className={`mcard-toggle${s.enabled ? ' on' : ''}`}
-                  onClick={() => onPatchSlot(s.slot, { enabled: !s.enabled })}
-                >
-                  <span className="dot" />
-                  {s.enabled ? '启用' : '停用'}
-                </button>
-                <button className="prov-del" title="删除该 Key" onClick={() => onDeleteSlot(s.slot)}>
-                  <IconTrash size={13} />
-                </button>
-              </div>
-            ))}
-            <div className="set-hint" style={{ marginTop: 'var(--space-2)' }}>
-              仅在初始请求被限流/报错且尚未输出内容时切换到下一把 Key;已开始输出则保持当前 Key。
-              权重影响流量份额,优先级高的 Key 优先使用。
-              若另一个 Provider 的 base_url 与本服务商一致、且同样启用了轮换,其 Key 会自动并入同一编组共享轮换。
-            </div>
-          </div>
-        )}
-        {fetchMsg && (
-          <div
-            className="set-hint"
-            style={{
-              marginTop: 'var(--space-2)',
-              color: fetchMsg.startsWith('拉取失败') ? 'var(--err)' : undefined,
-            }}
-          >
-            {fetchMsg}
-          </div>
-        )}
-        {models.length > 0 ? (
-          <div className="mcard-list">
-            {models.map((m) => (
-              <ModelConfigCard
-                key={m}
-                providerId={tpl.id}
-                model={m}
-                override={overrides[m]}
-                card={cards.find((c) => c.provider === tpl.id && c.official_model_id === m)}
-                onPatch={onPatch}
-                onSaveCard={onSaveCard}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="set-hint" style={{ marginTop: 'var(--space-3)' }}>
-            暂无模型{hasKey ? ',可「从厂家拉取」获取' : ';配置 Key 后可「从厂家拉取」'}。
-          </div>
-        )}
-        <div className="set-prov-line">
-          <input
-            className="pg-field"
-            placeholder="手动添加模型 id,回车确认"
-            value={newModel}
-            spellCheck={false}
-            disabled={savingTpl}
-            onChange={(e) => setNewModel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') addModel();
-            }}
-          />
-          <button className="btn-ghost" onClick={addModel} disabled={!newModel.trim() || savingTpl}>
-            <IconPlus size={13} />
-            添加模型
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- 关于页:MAF Agent 使用条款(v1.9.0,对标 Microsoft 使用条款组织逻辑) ---------------- */
-
-/** 条款编号中文序号(一~十五) */
-const CN_NUM = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五'];
-
-type TermItem = { text: string; bullets?: string[] };
-const TERMS: { no: number; name: string; items: TermItem[] }[] = [
-  {
-    no: 1,
-    name: '条款的接受与修订',
-    items: [
-      {
-        text: '1.1 本使用条款(以下简称"本条款")是您(以下简称"用户"或"您")与 MAF Agent 开发者梧桐吾桐及其团队(以下简称"开发者")之间,就 MAF Agent 软件(以下简称"本软件")的安装、运行与使用所订立的协议。',
-      },
-      {
-        text: '1.2 您在安装、运行或以任何方式使用本软件前,应完整阅读本条款。您安装、运行或继续使用本软件,即视为您已阅读、理解并同意受本条款约束。若您不同意本条款的任何内容,请勿安装或使用本软件,并应将其卸载。',
-      },
-      {
-        text: '1.3 开发者保留不时修订本条款的权利。修订时,开发者将更新本页顶部的"最近更新日期"。修订后的条款自标注日期起随新版本生效;您在修订版本发布后继续使用本软件,即视为您同意修订后的条款。',
-      },
-    ],
-  },
-  {
-    no: 2,
-    name: '定义',
-    items: [
-      { text: '2.1 "本软件"指 MAF Agent 桌面应用程序,及其附带的界面、文档与本地功能模块。' },
-      {
-        text: '2.2 "模型服务商"指由用户自行配置、凭 API Key 接入的第三方大模型服务提供方,包括用户自行添加的兼容接口。',
-      },
-      {
-        text: '2.3 "用户数据"指用户使用本软件过程中在本机产生或保存的数据,包括会话记录、消息、记忆文件、知识库笔记、附件、生成图片及配置信息。',
-      },
-      { text: '2.4 "API Key"指用户向模型服务商申请、用于调用其模型服务的身份凭证。' },
-    ],
-  },
-  {
-    no: 3,
-    name: '软件描述与授权范围',
-    items: [
-      {
-        text: '3.1 本软件是一款专为学习、调研而创造的智能体框架软件,提供本地会话、文件即记忆、专项研究、知识库、翻译、绘画、划词提问等框架功能。本软件自身不生产、不持有大模型内容,模型能力由用户自行配置的模型服务商提供。',
-      },
-      {
-        text: '3.2 在您遵守本条款的前提下,开发者授予您一项有限的、可撤销的、非独占的、不可转让的许可,仅供您个人为学习与调研目的安装和使用本软件。(免费与无广告承诺见第十五条。)',
-      },
-      {
-        text: '3.3 未经开发者事先书面许可,您不得将本软件或其任何部分用于商业用途,包括但不限于商业转售、出租、有偿托管、捆绑销售,或将其部署于商业产品与商业服务中。本条款未明确授予您的所有权利,均由开发者保留。',
-      },
-    ],
-  },
-  {
-    no: 4,
-    name: '第三方技术依赖与开源组件',
-    items: [
-      {
-        text: '4.1 本软件基于开源技术构建,下列组件的著作权归各自权利人所有,其使用受各自随附许可证的约束:',
-        bullets: [
-          '应用与界面框架:Tauri、React、React DOM、React Router、Zustand、TypeScript、Vite;',
-          '本地数据:SQLite(经 rusqlite 以 bundled 方式编入,您无需另行安装数据库);',
-          '网络与本地调度:reqwest(采用 rustls)、futures、notify、tokio(Tauri 运行时);',
-          '加密与编码:操作系统提供的 Windows DPAPI,以及 aes-gcm、sha2、base64;',
-          '文档解析与图像:docx-rs、calamine、pdf-extract、image;',
-          '内容渲染:react-markdown、remark-gfm、rehype-highlight、highlight.js、mermaid、echarts。',
-        ],
-      },
-      {
-        text: '4.2 本软件在 Windows 上运行时使用系统提供的 WebView 运行时。该运行时由其权利人提供并适用其相应条款,不属于本软件的组成部分。',
-      },
-      {
-        text: '4.3 上述组件及全部依赖的具体名称与版本,以本软件源码工程内的清单文件(Cargo.toml、package.json)及各组件自带的许可证文本为准。如任一组件条款与您的使用场景存在冲突,应以该组件条款为准并停止相关使用。',
-      },
-      {
-        text: '4.4 开发者尊重知识产权。如您认为本软件包含的内容侵犯您的合法权益,可通过第十二条载明的联系方式提交权属证明与事实说明,开发者将在核实后依法处理。',
-      },
-    ],
-  },
-  {
-    no: 5,
-    name: '第三方模型服务与 API Key',
-    items: [
-      {
-        text: '5.1 本软件不提供任何大模型服务。您须自行向模型服务商注册、取得 API Key,并自行承担该服务商按其规则收取的费用。模型服务是否可用、输出内容质量、计费方式及对您数据的处理,均受您与该服务商之间协议及其服务条款、隐私政策的约束。',
-      },
-      {
-        text: '5.2 开发者不控制、不背书任何模型服务商及其输出内容,不对第三方服务的可用性、准确性、及时性或合法性作出任何陈述或保证。',
-      },
-      {
-        text: '5.3 您应妥善保管 API Key,并对在您的 Key 下发生的全部调用及由此产生的费用承担全部责任。因您保管不善、Key 泄露或自行向他人披露所造成的损失,开发者不承担责任。',
-      },
-      {
-        text: '5.4 模型请求由您的设备直接发送至您所配置的模型服务商;开发者不经手、不中转、不存储上述请求内容。',
-      },
-    ],
-  },
-  {
-    no: 6,
-    name: '数据存储与隐私',
-    items: [
-      {
-        text: '6.1 本软件为本地优先应用。用户数据保存于您的本机,保存位置由您在首次启动引导或设置中自行选定,您可在设置中查看与更换数据目录。',
-      },
-      {
-        text: '6.2 开发者不收集、不上传、不托管用户数据;本软件不包含由开发者运营的云端存储或账号体系。用户数据的保管、备份与保密由您自行负责。',
-      },
-      {
-        text: '6.3 API Key 在 Windows 上通过操作系统提供的 DPAPI 机制加密后保存于本机,本软件任何界面均不回显 Key 的明文;旧版本以其他方式保存的密钥文件按兼容方式读取。',
-      },
-      {
-        text: '6.4 与模型服务商之间的网络通信发生在您的设备与该服务商之间,通信内容可能被其按自身隐私政策处理,开发者对此不承担责任。',
-      },
-      { text: '6.5 卸载本软件或删除其数据目录可能导致用户数据不可恢复,请您事先自行备份。' },
-    ],
-  },
-  {
-    no: 7,
-    name: '用户行为规范',
-    items: [
-      {
-        text: '7.1 作为您使用本软件的条件,您承诺遵守所适用的法律法规,不得利用本软件从事任何违法或侵权行为,包括但不限于:',
-        bullets: [
-          '(1) 生成、复制、传播含有危害国家安全、破坏社会稳定、淫秽色情、暴力恐怖或其他法律法规禁止内容的信息;',
-          '(2) 侵害他人名誉权、隐私权、知识产权或其他合法权益;',
-          '(3) 对模型服务商或任何第三方系统实施未授权访问、干扰、攻击,或试图绕过其访问控制与计费规则;',
-          '(4) 对本软件实施反向工程后用于侵权分发,或移除、篡改软件中的署名与权利声明;',
-          '(5) 超出第三条授权范围的商业使用。',
-        ],
-      },
-      {
-        text: '7.2 大模型输出可能包含错误、过时或带有偏见的内容。您在将其用于学习、研究或其他决策前,应自行核实其准确性与适用性。',
-      },
-    ],
-  },
-  {
-    no: 8,
-    name: '知识产权与源码获取',
-    items: [
-      {
-        text: '8.1 本软件的著作权及其他知识产权归开发者所有。本软件源码不随安装包公开提供;如需获取源码用于学习或改造升级,适用第十五条 15.3 的约定。',
-      },
-      {
-        text: '8.2 获取源码不等于获得商业使用授权。您转载、分发本软件或其源码时,应保留本条款中的署名与权利声明,不得隐去或篡改软件来源。',
-      },
-      {
-        text: '8.3 本软件界面使用的图标、文案等素材的权利归开发者所有;第三方开源组件的权利归属适用第四条。',
-      },
-    ],
-  },
-  {
-    no: 9,
-    name: '生成内容',
-    items: [
-      {
-        text: '9.1 您对输入本软件的全部内容享有相应权利并承担责任,并保证其使用不侵犯任何第三方权益。',
-      },
-      {
-        text: '9.2 模型生成内容的权属与使用限制,适用您与模型服务商之间的约定及相关法律规定。开发者不对生成内容主张所有权,亦不对其合法性、准确性或可商用性作出保证。',
-      },
-      { text: '9.3 您因使用、复制、传播生成内容而产生的纠纷与责任,由您自行承担。' },
-    ],
-  },
-  {
-    no: 10,
-    name: '免责声明',
-    items: [
-      {
-        text: '10.1 本软件按"现状"和"现有"基础免费提供。在适用法律允许的最大范围内,开发者不就本软件作出任何明示或默示的保证,包括但不限于对适销性、特定用途适用性、不侵权、运行不中断或不存在错误的保证。',
-      },
-      {
-        text: '10.2 开发者不保证本软件与所有模型服务商接口持续兼容,亦不保证模型服务始终可用。因第三方服务变更、中断、限流、接口调整或计费变化导致的功能异常,不属于开发者的责任范围。',
-      },
-      {
-        text: '10.3 因您自行更改数据目录、删除数据文件、使用非开发者提供的版本,或未按软件说明操作而导致的数据丢失或软件异常,开发者不承担责任。',
-      },
-    ],
-  },
-  {
-    no: 11,
-    name: '责任限制',
-    items: [
-      {
-        text: '11.1 在适用法律允许的最大范围内,对于因使用或无法使用本软件、依赖模型输出内容、第三方服务故障,或用户数据丢失、泄露所引起的任何直接、间接、附带或后果性损失(包括但不限于数据损失、利润损失、业务中断),开发者在任何情况下均不承担赔偿责任。',
-      },
-      {
-        text: '11.2 本软件为免费软件,您理解并同意,前述责任限制是在免费提供软件的基础上作出的合理安排。',
-      },
-    ],
-  },
-  {
-    no: 12,
-    name: '其他',
-    items: [
-      {
-        text: '12.1 本条款任何条款被有权机关认定为无效或不可执行的,不影响其余条款的效力。',
-      },
-      { text: '12.2 因本条款或使用本软件所产生的争议,双方应首先友好协商解决。' },
-      { text: '12.3 联系方式:QQ 1425408561。' },
-    ],
-  },
-  {
-    no: 13,
-    name: '科研增强功能与技能来源',
-    items: [
-      {
-        text: '13.1 本软件研究功能中的「科研增强」能力,其方法论基于开源项目 nature-skills(作者 Yuan1z0825,项目地址:https://github.com/Yuan1z0825/nature-skills ,本功能对应其「其他 agent 场景」章节:https://github.com/Yuan1z0825/nature-skills#55-%E5%85%B6%E4%BB%96-agent-%E5%9C%BA%E6%99%AF )。上述技能方法论文档经本地化重构后随本软件内置,仅供本软件本地运行使用;其著作权归原作者所有。',
-      },
-      {
-        text: '13.2 科研增强功能的检索、生成、审计与导出全部在本机完成;本软件未移植、未启用该项目文档中面向任何第三方服务的路由,亦不为其建立任何网络连接。',
-      },
-    ],
-  },
-  {
-    no: 14,
-    name: '输出格式边界',
-    items: [
-      {
-        text: '14.1 研究报告导出仅提供 Markdown 与 HTML 两种格式,全部在本机生成。本软件不提供 PPTX、DOCX、PDF 等其他格式的导出,以保障输出的稳定性与质量。',
-      },
-      {
-        text: '14.2 本软件图示能力包括本地矢量图渲染与用户自行配置的模型服务图像生成;AI 生成图像仅作为概念草稿,不构成实验证据。',
-      },
-    ],
-  },
-  {
-    no: 15,
-    name: '无广告与去商业化声明',
-    items: [
-      {
-        text: '15.1 本软件完全免费,不提供任何第三方广告服务,不包含任何原生广告、推广位或赞助内容,亦无内购项目。',
-      },
-      {
-        text: '15.2 本软件现在不会、将来也不会参与任何商业化内容或商业化运作,将持续坚持开源免费的发展方向。',
-      },
-      {
-        text: '15.3 本软件源码不随安装包公开提供。如需获取源码用于学习或改造升级,请联系开发者本人(QQ 1425408561)并说明用途;开发者将评估申请者是否具备软件改造升级能力以及是否存在滥用软件的倾向,经确认后方可提供。未经开发者同意,源码获取者不得公开、转发源码,不得将其用于商业用途。',
-      },
-    ],
-  },
-];
+import { ENGINES, NAV, CN_NUM, TERMS, NAV_VISIBILITY } from './settings/constants';
+import { ProviderSettingsCard } from './settings/ProviderSettingsCard';
 
 export default function SettingsPage() {
   const [searchParams] = useSearchParams();
@@ -1108,7 +20,6 @@ export default function SettingsPage() {
       .then(setAppVersion)
       .catch(() => setAppVersion(''));
   }, []);
-  const navPanel = usePanelWidth('settings-nav', 200, 160, 320);
 
   // 已在设置页时,再次点击「设置」通过 query 切分区
   useEffect(() => {
@@ -1173,11 +84,6 @@ export default function SettingsPage() {
   const [savingGlossary, setSavingGlossary] = useState(false);
   const importRef = useRef<HTMLInputElement | null>(null);
 
-  // AI 指令库(迭代 B3 / F1):自定义指令在本地编辑,保存时 upsert 全量并补删已移除项
-  const [textCmds, setTextCmds] = useState<ipc.TextCommand[] | null>(null);
-  const [cmdMsg, setCmdMsg] = useState<string | null>(null);
-  const customCmdIdsRef = useRef<string[]>([]);
-
   // 加载
   useEffect(() => {
     ipc.listProviderTemplates().then(setTemplates);
@@ -1199,10 +105,6 @@ export default function SettingsPage() {
       setSearchDraft((d) => ({ ...d, engine: c.engine, base_url: c.base_url }));
     });
     ipc.glossaryList().then(setGlossary);
-    ipc.listTextCommands().then((list) => {
-      customCmdIdsRef.current = list.filter((c) => !c.builtin).map((c) => c.id);
-      setTextCmds(list);
-    });
   }, []);
 
   const keyedTemplates = useMemo(
@@ -1844,7 +746,13 @@ export default function SettingsPage() {
               type="password"
               value={searchDraft.api_key}
               onChange={(e) => setSearchDraft((d) => ({ ...d, api_key: e.target.value }))}
-              placeholder={searchCfg?.has_api_key ? '留空则保留已配置的 Key' : 'SearXNG 可留空'}
+              placeholder={
+                searchCfg?.has_api_key
+                  ? '留空则保留已配置的 Key'
+                  : searchDraft.engine === 'deepseek'
+                    ? '留空则自动复用模型服务商中的 DeepSeek Key'
+                    : 'SearXNG 可留空'
+              }
             />
           </div>
           <div className="set-actions" style={{ marginTop: 'var(--space-3)' }}>
@@ -2136,7 +1044,7 @@ export default function SettingsPage() {
         <div className="set-product-info">
           <div className="set-product-name">MAF Agent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.9.0'} · 桌面端 · Windows
+            版本 {appVersion || '1.9.3'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
@@ -2149,24 +1057,31 @@ export default function SettingsPage() {
       <div className="set-card">
         <div className="set-card-h">
           MAF Agent 使用条款
-          <span className="st">最近更新日期:2026 年 10 月 17 日</span>
+          <span className="st date">最近更新日期:2026 年 10 月 19 日</span>
         </div>
         <div className="set-card-b set-terms">
           {TERMS.map((t) => (
             <section key={t.no} className="set-term">
               <h3 className="set-term-h">第{CN_NUM[t.no]}条 · {t.name}</h3>
-              {t.items.map((it, i) => (
-                <div key={i} className="set-term-item">
-                  <p>{it.text}</p>
-                  {it.bullets && (
-                    <ul>
-                      {it.bullets.map((b, j) => (
-                        <li key={j}>{b}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
+              {t.items.map((it, i) => {
+                // 「1.1」这类编号独立成列,正文统一悬挂缩进,便于逐条对照
+                const m = /^(\d+\.\d+)\s+([\s\S]*)$/.exec(it.text);
+                return (
+                  <div key={i} className="set-term-item">
+                    <span className="set-term-no">{m?.[1] ?? ''}</span>
+                    <div className="set-term-body">
+                      <p>{m?.[2] ?? it.text}</p>
+                      {it.bullets && (
+                        <ul>
+                          {it.bullets.map((b, j) => (
+                            <li key={j}>{b}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </section>
           ))}
           <p className="set-term-foot">
@@ -2177,62 +1092,15 @@ export default function SettingsPage() {
     </>
   );
 
-  // ---- 划词提问(迭代 D9)+ AI 指令库(迭代 B3 / F1)----
+  // ---- 划词提问(迭代 D9)----
 
   const patchSettings = (patch: Partial<ipc.AppSettings>) =>
     setSettings((s) => (s ? { ...s, ...patch } : s));
 
-  const patchTextCmd = (id: string, patch: Partial<ipc.TextCommand>) =>
-    setTextCmds((list) =>
-      list ? list.map((c) => (c.id === id ? { ...c, ...patch } : c)) : list,
-    );
-
-  const addTextCmd = () =>
-    setTextCmds((list) =>
-      list
-        ? [
-            ...list,
-            {
-              id: `custom_${Date.now().toString(36)}`,
-              name: '新指令',
-              icon: 'sparkles',
-              prompt_template: '',
-              builtin: false,
-              sort: 1000 + list.length,
-              scope: 'both' as const,
-            },
-          ]
-        : list,
-    );
-
-  const removeTextCmd = (id: string) =>
-    setTextCmds((list) => (list ? list.filter((c) => c.id !== id) : list));
-
-  /** 保存:划词开关(settings)+ 指令库(upsert 自定义,删除已移除项)。 */
+  /** 保存:划词开关等 settings。 */
   const onSaveSelection = async () => {
     await onSaveSettings();
-    if (!textCmds) return;
-    setCmdMsg(null);
-    try {
-      const customs = textCmds.filter((c) => !c.builtin);
-      for (const c of customs) await ipc.saveTextCommand(c);
-      const kept = new Set(customs.map((c) => c.id));
-      for (const oldId of customCmdIdsRef.current) {
-        if (!kept.has(oldId)) await ipc.deleteTextCommand(oldId);
-      }
-      const list = await ipc.listTextCommands();
-      customCmdIdsRef.current = list.filter((c) => !c.builtin).map((c) => c.id);
-      setTextCmds(list);
-      setCmdMsg('指令库已保存');
-    } catch (e) {
-      setCmdMsg(`指令保存失败:${e instanceof Error ? e.message : String(e)}`);
-    }
   };
-
-  const SCOPE_OPTIONS = [
-    { value: 'both', label: '对话' },
-    { value: 'chat', label: '仅对话' },
-  ] as const;
 
   const selectionView = (
     <>
@@ -2267,6 +1135,12 @@ export default function SettingsPage() {
             </button>
             <span className="set-hint">关闭后连按两次 Ctrl+C 不再唤起主窗口</span>
           </div>
+          <div className="set-actions" style={{ marginTop: 'var(--space-3)' }}>
+            <span className="sp" />
+            <button className="btn-primary" onClick={onSaveSelection} disabled={savingSettings}>
+              保存划词设置
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2290,70 +1164,64 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+    </>
+  );
+
+  // ---- 导航菜单可见性(标题栏 ⋮ 菜单显示哪些功能) ----
+
+  const hiddenNav = settings?.hidden_nav_items ?? [];
+
+  const toggleNavItem = (key: string) =>
+    patchSettings({
+      hidden_nav_items: hiddenNav.includes(key)
+        ? hiddenNav.filter((k) => k !== key)
+        : [...hiddenNav, key],
+    });
+
+  const navmenuView = (
+    <>
+      <h2>导航菜单</h2>
+      <p className="set-desc">
+        控制标题栏 ⋮ 下拉菜单中显示的功能入口。「对话」与「设置」固定保留,其余项可自行决定是否展示;
+        隐藏后不影响功能本身,仍可从会话、搜索等入口访问对应内容。
+      </p>
 
       <div className="set-card">
         <div className="set-card-h">
-          AI 指令库
-          <span className="sp" />
-          {cmdMsg && <span className="st">{cmdMsg}</span>}
+          功能入口
+          {settingsSaved && (
+            <span className="st">
+              <IconCheck size={13} />
+              已保存
+            </span>
+          )}
         </div>
         <div className="set-card-b">
-          <p className="set-hint" style={{ marginTop: 0 }}>
-            指令会出现在对话页「指令」面板;模板支持 {'{selection}'}(划词文本)与{' '}
-            {'{clipboard}'}(剪贴板)变量,留空 = 只把选中内容作为引用带入对话。
-          </p>
-          {(textCmds ?? []).map((c) => (
-            <div className="sel-btn-row" key={c.id}>
-              <input
-                className="pg-field lbl-in"
-                value={c.name}
-                placeholder="指令名"
-                spellCheck={false}
-                disabled={c.builtin}
-                onChange={(e) => patchTextCmd(c.id, { name: e.target.value })}
-              />
-              <select
-                className="pg-field scope-in"
-                value={c.scope}
-                disabled={c.builtin}
-                onChange={(e) =>
-                  patchTextCmd(c.id, { scope: e.target.value as ipc.TextCommand['scope'] })
-                }
-              >
-                {SCOPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                className="pg-field"
-                value={c.prompt_template}
-                placeholder="指令模板(留空 = 只带入引用,由你自行提问)"
-                spellCheck={false}
-                disabled={c.builtin}
-                onChange={(e) => patchTextCmd(c.id, { prompt_template: e.target.value })}
-              />
-              {c.builtin ? (
-                <span className="cmd-builtin-tag">内置</span>
-              ) : (
-                <button className="prov-del" title="删除该指令" onClick={() => removeTextCmd(c.id)}>
-                  <IconTrash size={14} />
+          {NAV_VISIBILITY.map((it) => {
+            const shown = !hiddenNav.includes(it.key);
+            return (
+              <div className="set-row" key={it.key}>
+                <label className="lbl">{it.label}</label>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={shown}
+                  className={`set-switch${shown ? ' on' : ''}`}
+                  onClick={() => toggleNavItem(it.key)}
+                >
+                  <span className="knob" />
                 </button>
-              )}
-            </div>
-          ))}
-          {(textCmds ?? []).length === 0 && (
-            <div className="set-hint">暂无指令,点「新增指令」添加</div>
-          )}
+                <span className="set-hint">{shown ? '在菜单中显示' : '已隐藏'}</span>
+              </div>
+            );
+          })}
+          <div className="set-hint" style={{ marginTop: 'var(--space-2)' }}>
+            对话与设置始终显示,无需设置。
+          </div>
           <div className="set-actions" style={{ marginTop: 'var(--space-3)' }}>
-            <button className="btn-ghost" onClick={addTextCmd}>
-              <IconPlus size={14} />
-              新增指令
-            </button>
             <span className="sp" />
-            <button className="btn-primary" onClick={onSaveSelection} disabled={savingSettings}>
-              保存划词设置
+            <button className="btn-primary" onClick={onSaveSettings} disabled={savingSettings}>
+              保存界面设置
             </button>
           </div>
         </div>
@@ -2504,7 +1372,8 @@ export default function SettingsPage() {
           {usageHours.length === 0 ? (
             <div className="set-hint">该时间范围内暂无用量数据</div>
           ) : (
-            <div className="usage-heat">
+            <div className="usage-scroll">
+              <div className="usage-heat" style={{ minWidth: 520 }}>
               <div className="usage-heat-corner" />
               {Array.from({ length: 24 }, (_, h) => (
                 <div className="usage-heat-hd" key={`h${h}`}>
@@ -2529,6 +1398,7 @@ export default function SettingsPage() {
                   })}
                 </Fragment>
               ))}
+            </div>
             </div>
           )}
         </div>
@@ -2705,6 +1575,7 @@ export default function SettingsPage() {
     search: searchView,
     translate: translateView,
     selection: selectionView,
+    navmenu: navmenuView,
     usage: usageView,
     storage: storageView,
     about: aboutView,
@@ -2712,7 +1583,10 @@ export default function SettingsPage() {
 
   return (
     <div className="pg pg-settings">
-      <nav className="set-nav" style={{ width: navPanel.width }} data-narrow={navPanel.narrow}>
+      {/* 左:设置分区导航(玻璃抽屉,标题栏「面板」按钮释放) */}
+      <AsideDrawer>
+      <nav className="set-nav drawer">
+        <div className="drawer-hint">点标题栏「面板」可开合本栏</div>
         {NAV.map((g) => (
           <div key={g.grp}>
             <div className="grp">{g.grp}</div>
@@ -2732,7 +1606,7 @@ export default function SettingsPage() {
           </div>
         ))}
       </nav>
-      <ResizeHandle panel={navPanel} />
+      </AsideDrawer>
 
       <div className="set-content">{viewByNav[nav]}</div>
     </div>

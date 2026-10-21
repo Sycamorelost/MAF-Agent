@@ -9,7 +9,7 @@ import MemPanel from '../components/MemPanel';
 import MemoryHandoffDialog from '../components/MemoryHandoffDialog';
 import ModelSwitchDialog from '../components/ModelSwitchDialog';
 import AgentPickerDialog from '../components/AgentPickerDialog';
-import { IconChat, IconCheck, IconChevronDown, IconEdit, IconPullRequest, IconQuote, IconTrash, IconX, agentIconComponent } from '../components/icons';
+import { IconChat, IconCheck, IconChevronDown, IconEdit, IconPullRequest, IconTrash, IconX, IconBrain, agentIconComponent } from '../components/icons';
 import { useMessagesStore } from '../stores/messages';
 import { useSessionsStore } from '../stores/sessions';
 import { useProvidersStore } from '../stores/providers';
@@ -17,11 +17,11 @@ import { useMemoryStore } from '../stores/memory';
 import { useAgentsStore } from '../stores/agents';
 import { useAttachmentInsertStore } from '../stores/attachmentInsert';
 import { useThinkingStore, DEFAULT_THINKING_LEVEL } from '../stores/thinking';
-import { useTextCommandsStore, commandsFor } from '../stores/textCommands';
 import type { AttachmentMeta, MessageRow, MemoryStrategy } from '../lib/ipc';
 import * as ipc from '../lib/ipc';
 import { injectByStrategy, estimateTokens, enforceBudget, MEMORY_BUDGET_TOKENS } from '../lib/memoryInject';
 import { resolveAtRefs } from '../lib/atRefs';
+import { studyMemoryDigest } from '../lib/ipc/study';
 
 /** 正在提炼的会话,避免并发重复提炼。 */
 const summarizing = new Set<string>();
@@ -300,23 +300,6 @@ export default function ChatPage() {
     await loadBranches();
   };
 
-  // ---------- B3 / F1:AI 指令库(对话面板,scope=chat/both) ----------
-  const [cmdPanelOpen, setCmdPanelOpen] = useState(false);
-  const { commands: textCmds, loaded: textCmdsLoaded, load: loadTextCmds } = useTextCommandsStore();
-  const chatCmds = useMemo(() => commandsFor(textCmds, 'chat'), [textCmds]);
-
-  /** 选中指令:后端渲染模板({clipboard} 生效,{selection} 清空),填入输入框开头。 */
-  const applyTextCmd = async (cmd: ipc.TextCommand) => {
-    setCmdPanelOpen(false);
-    try {
-      const rendered = await ipc.renderTextCommand(cmd.id, null);
-      if (!rendered.trim()) return;
-      setComposerText((prev) => (prev.trim() ? `${rendered}\n\n${prev}` : rendered));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
   // ---------- D3.1/D3.2:模型切换交接 ----------
   /** 检测到模型切换时弹出的交接信息 */
   const [handoff, setHandoff] = useState<{ from: string; to: string } | null>(null);
@@ -484,13 +467,32 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, current?.providerId, current?.model, modelConfig]);
 
-  // 首页草稿接续:从首页创建会话后,一次性回填输入框
+  // 首页草稿接续:从首页创建会话后,一次性消费并**直接发送**(失败回填输入框,内容不丢失)
+  // 附件随草稿一并交接(首页无法在会话创建前落盘)
+  const draftSentRef = useRef(false);
   useEffect(() => {
+    if (draftSentRef.current) return;
     const d = sessionStorage.getItem('metaagent.draft');
+    const rawAtt = sessionStorage.getItem('metaagent.draft.att');
+    let draftAtt: { metas: AttachmentMeta[]; images: Record<string, string> } | undefined;
+    if (rawAtt) {
+      sessionStorage.removeItem('metaagent.draft.att');
+      try {
+        draftAtt = JSON.parse(rawAtt) as { metas: AttachmentMeta[]; images: Record<string, string> };
+      } catch {
+        draftAtt = undefined;
+      }
+    }
+    if (draftAtt) {
+      setPendingAttachments(draftAtt.metas);
+      setPendingImages(draftAtt.images);
+    }
     if (d) {
       sessionStorage.removeItem('metaagent.draft');
-      setComposerText(d);
+      draftSentRef.current = true;
+      void onSend(d, draftAtt);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 新消息到达 / 切换会话时:平滑滚动到底部
@@ -501,6 +503,18 @@ export default function ChatPage() {
   // 流式滚动跟随已移入 StreamingBubble 内部(随去抖刷新 auto 滚动)
 
   // ---------- 构建 system prompt ----------
+  // 学习进度摘要(P2 记忆注入):进页取一次,失败静默(学习板块为空时后端返回 null)
+  const [studyDigest, setStudyDigest] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    studyMemoryDigest()
+      .then((d) => alive && setStudyDigest(d))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   /** 用指定记忆正文 + 策略组 system(交接确认时用最新值,不等 state 生效)。
    *  B4:sessions.system_prompt 是唯一基座事实源(绑定 Agent / 应用为提示词时
    *  后端已把渲染变量的 prompt 写入);agent 模板原文仅在旧数据(绑定但会话 prompt 为空)时兜底。 */
@@ -510,15 +524,22 @@ export default function ChatPage() {
       agent?.system_prompt ||
       '你是 MAF Agent,一款专为学习、调研而创造的智能体框架软件。';
     const injected = injectByStrategy(memoryBody, strategy);
-    if (!injected) return base;
+    // 学习进度块:与记忆正文并列追加,超预算时同样受护栏约束
+    const studyBlock = studyDigest
+      ? `\n\n以下是用户当前的学习进度(来自学习规划板块),回答学习相关问题时请参考:\n${studyDigest}`
+      : '';
+    if (!injected && !studyBlock) return base;
+    if (!injected) return `${base}${studyBlock}`;
     // D3.5 注入预算护栏:超限硬截断兜底(正常路径已在发送前自动压缩)
-    return `${base}\n\n以下是关于当前会话的记忆(memory.md),请在回答时参考:\n\n${enforceBudget(injected)}`;
+    const memText = enforceBudget(injected);
+    if (!studyBlock) return `${base}\n\n以下是关于当前会话的记忆(memory.md),请在回答时参考:\n\n${memText}`;
+    return `${base}\n\n以下是关于当前会话的记忆(memory.md),请在回答时参考:\n\n${memText}${studyBlock}`;
   };
 
   const buildSystem = useCallback(
     (): string => buildSystemWith(memoryDto?.body ?? '', session?.memory_injection_strategy ?? 'full'),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memoryDto?.body, session?.memory_injection_strategy, session?.system_prompt, agent],
+    [memoryDto?.body, session?.memory_injection_strategy, session?.system_prompt, agent, studyDigest],
   );
 
   // ---------- 公共流式发送 ----------
@@ -835,13 +856,21 @@ export default function ChatPage() {
   };
 
   // ---------- onSend ----------
-  const onSend = async () => {
-    const text = composerText.trim();
-    if ((!text && pendingAttachments.length === 0) || sending) return;
+  /** overrideText:首页草稿直发用(绕过输入框状态);overrideAtt 同理携带首页已落盘的附件。
+   *  发送失败时回填输入框。 */
+  const onSend = async (
+    overrideText?: string,
+    overrideAtt?: { metas: AttachmentMeta[]; images: Record<string, string> },
+  ) => {
+    const atts = overrideAtt?.metas ?? pendingAttachments;
+    const imgs = overrideAtt?.images ?? pendingImages;
+    const text = (overrideText ?? composerText).trim();
+    if ((!text && atts.length === 0) || sending) return;
 
     // 会话可能已被空对话清理逻辑删除(如离开后返回),发送前校验存在性
     if (!session) {
       setError('会话不存在或已被删除，请返回首页重新创建对话');
+      if (overrideText !== undefined) setComposerText(text);
       return;
     }
 
@@ -850,9 +879,9 @@ export default function ChatPage() {
       // F9:LLM 注入侧把 [@note:..]/[@memory:..] 占位替换为检索片段正文;展示侧保留原始输入
       const userParts = text ? [resolveAtRefs(text)] : [];
       const images: string[] = [];
-      for (const a of pendingAttachments) {
+      for (const a of atts) {
         if (a.kind === 'image') {
-          const du = pendingImages[a.path];
+          const du = imgs[a.path];
           if (du) images.push(du);
           userParts.push(`[图片附件:${a.name}]`);
         } else if (a.extracted_text) {
@@ -863,7 +892,7 @@ export default function ChatPage() {
       }
       const llmContentBase = userParts.join('\n\n');
       const displayContent = text; // 前端展示只存原始输入,附件在元数据卡片展示
-      const attachmentsJson = pendingAttachments.length > 0 ? JSON.stringify(pendingAttachments) : null;
+      const attachmentsJson = atts.length > 0 ? JSON.stringify(atts) : null;
 
       // 联网搜索(开关存会话;失败时降级为普通对话并提示)
       let sources: ipc.SourceItem[] | null = null;
@@ -905,6 +934,8 @@ export default function ChatPage() {
       } else {
         setError(`发送失败: ${msg}`);
       }
+      // 首页草稿直发失败:回填输入框,内容不丢失
+      if (overrideText !== undefined) setComposerText(text);
     }
   };
 
@@ -1094,6 +1125,14 @@ export default function ChatPage() {
               {current && <span className="tag">{current.providerId}</span>}
               <IconChevronDown size={13} />
             </button>
+            <button
+              type="button"
+              className={`chat-panel-toggle${memPanel.collapsed ? '' : ' on'}`}
+              onClick={memPanel.toggleCollapse}
+              title={memPanel.collapsed ? '展开记忆面板' : '收起记忆面板'}
+            >
+              <IconBrain size={15} />
+            </button>
           </div>
           <div className="chat-scroll" ref={scrollRef}>
             <div className="chat-inner">
@@ -1220,47 +1259,19 @@ export default function ChatPage() {
               })()}
               <span className="agent-chip-text">{agent?.name ?? '智能体'}</span>
             </button>
-            {/* B3 / F1:指令面板 */}
-            <div className="cmd-chip-wrap">
-              <button
-                type="button"
-                className="tool-chip"
-                title="插入指令模板"
-                disabled={sending || searching}
-                onClick={() => {
-                  if (!textCmdsLoaded) void loadTextCmds();
-                  setCmdPanelOpen((v) => !v);
-                }}
-              >
-                <IconQuote size={13} />
-                <span>指令</span>
-              </button>
-              {cmdPanelOpen && (
-                <>
-                  <div className="cmd-backdrop" onClick={() => setCmdPanelOpen(false)} />
-                  <div className="cmd-popover">
-                    {chatCmds.length === 0 && (
-                      <div className="gs-item empty">暂无可用指令,去设置页添加</div>
-                    )}
-                    {chatCmds.map((c) => {
-                      const Icon = agentIconComponent(c.icon);
-                      return (
-                        <div key={c.id} className="gs-item" onClick={() => void applyTextCmd(c)}>
-                          <div className="gs-item-row">
-                            <Icon size={14} className="gs-item-icon" />
-                            <div className="gs-item-title">{c.name}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
           </Composer>
         </div>
-        <ResizeHandle panel={memPanel} />
-        <MemPanel sessionId={sessionId} width={memPanel.width} narrow={memPanel.narrow} />
+        {!memPanel.collapsed && (
+          <>
+            <ResizeHandle panel={memPanel} />
+            <MemPanel
+              sessionId={sessionId}
+              width={memPanel.width}
+              narrow={memPanel.narrow}
+              onCollapse={memPanel.toggleCollapse}
+            />
+          </>
+        )}
       </div>
 
       {modelSwitchOpen && (

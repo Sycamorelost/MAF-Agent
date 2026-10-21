@@ -1,8 +1,9 @@
 //! 搜索引擎抽象与配置持久化。
 //!
-//! 支持四种引擎(国内优先):
+//! 支持五种引擎(国内优先):
 //!   - 博查 Bocha(国内,API Key):`POST {base_url}/v1/web-search`
 //!   - 智谱 BigModel(国内,API Key):`POST {base_url}/api/paas/v4/tools`(web-search-pro)
+//!   - DeepSeek 搜索(官方,API Key):`POST {base_url}/v1/tools/search`(可复用 DeepSeek 对话 Key)
 //!   - SearXNG(自托管,免 Key):`GET {base_url}/search?format=json&q=...`
 //!   - Tavily(海外,API Key):`POST {base_url}/search`
 //!
@@ -24,14 +25,16 @@ fn key_id(engine: &str) -> String {
 const TAVILY_DEFAULT_BASE: &str = "https://api.tavily.com";
 const BOCHA_DEFAULT_BASE: &str = "https://api.bochaai.com";
 const ZHIPU_DEFAULT_BASE: &str = "https://open.bigmodel.cn";
+const DEEPSEEK_DEFAULT_BASE: &str = "https://api.deepseek.com";
 
 /// 引擎是否已有可用配置(供前端提示;searxng 看 base_url,其余看 key)。
-pub const ENGINES: &[&str] = &["bocha", "zhipu", "searxng", "tavily"];
+pub const ENGINES: &[&str] = &["bocha", "zhipu", "deepseek", "searxng", "tavily"];
 
 fn engine_display(engine: &str) -> &'static str {
     match engine {
         "bocha" => "博查 Bocha",
         "zhipu" => "智谱 BigModel",
+        "deepseek" => "DeepSeek 搜索",
         "searxng" => "SearXNG",
         "tavily" => "Tavily",
         _ => "未知引擎",
@@ -95,8 +98,15 @@ pub fn save_engine_key(engine: &str, api_key: &str) -> Result<(), String> {
 }
 
 /// 某引擎是否已存 API Key。
+/// deepseek 特殊:可复用 DeepSeek 对话 provider 的 Key(任一槽位)。
 pub fn has_engine_key(engine: &str) -> Result<bool, String> {
-    Ok(keychain::load(&key_id(engine))?.is_some())
+    if keychain::load(&key_id(engine))?.is_some() {
+        return Ok(true);
+    }
+    if engine == "deepseek" {
+        return Ok(!keychain::list_slots("deepseek")?.is_empty());
+    }
+    Ok(false)
 }
 
 /// 该引擎是否需要 API Key。
@@ -513,6 +523,94 @@ impl SearchEngine for Zhipu {
     }
 }
 
+/// DeepSeek 官方 Search API(2026-10-17 开放,自家搜索引擎)。
+/// 文档:`POST {base}/v1/tools/search`,Bearer 鉴权(与 DeepSeek 对话 API 同 Key)。
+/// 计费:仅成功且有结果的请求计费(¥5/千次);失败/空结果不计费。限流 5 QPS。
+pub struct DeepseekSearch {
+    base_url: String,
+    api_key: String,
+    client: reqwest::Client,
+}
+
+#[async_trait]
+impl SearchEngine for DeepseekSearch {
+    fn name(&self) -> &str {
+        "deepseek"
+    }
+
+    async fn search(&self, query: &str, max_results: u32) -> Result<Vec<RawSearchResult>, String> {
+        let url = format!("{}/v1/tools/search", self.base_url);
+        let resp = execute(
+            &self.client,
+            self.client
+                .post(&url)
+                .bearer_auth(&self.api_key)
+                .json(&serde_json::json!({
+                    "query": query,
+                    "count": max_results.clamp(1, 50),
+                    // 不拉全文:控制延迟与上下文体积,snippet/summary 已够注入与展示
+                    "need_content": false,
+                })),
+            "DeepSeek 搜索",
+        )
+        .await?;
+
+        let status = resp.status();
+        let body = read_body(resp, "DeepSeek 搜索").await?;
+        if !status.is_success() {
+            // OpenAI 兼容错误格式:{error:{message,...}}
+            let msg = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| {
+                    v.pointer("/error/message")
+                        .and_then(|m| m.as_str())
+                        .map(|s| s.to_string())
+                })
+                .unwrap_or_else(|| body.chars().take(200).collect());
+            let hint = match status.as_u16() {
+                401 => "(API Key 无效,请检查设置)",
+                402 => "(账户余额不足,请到 DeepSeek 开放平台充值)",
+                429 => "(超过 5 QPS 限流,请稍后重试)",
+                _ => "",
+            };
+            return Err(format!("DeepSeek 搜索 HTTP {}: {}{}", status.as_u16(), msg, hint));
+        }
+
+        let v: serde_json::Value =
+            serde_json::from_str(&body).map_err(|e| format!("DeepSeek 搜索响应解析失败: {e}"))?;
+        let mut out = Vec::new();
+        if let Some(arr) = v.get("results").and_then(|r| r.as_array()) {
+            for item in arr.iter().take(max_results as usize) {
+                let url = item.get("url").and_then(|u| u.as_str()).unwrap_or("").to_string();
+                if url.is_empty() {
+                    continue;
+                }
+                out.push(RawSearchResult {
+                    title: item
+                        .get("title")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("(无标题)")
+                        .to_string(),
+                    url,
+                    // snippet(100-200 字,官方定位为 UI 展示)优先;为空时退化 summary
+                    snippet: item
+                        .get("snippet")
+                        .and_then(|c| c.as_str())
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| item.get("summary").and_then(|c| c.as_str()))
+                        .unwrap_or("")
+                        .to_string(),
+                    published: item
+                        .get("date")
+                        .and_then(|d| d.as_str())
+                        .map(|s| s.to_string()),
+                });
+            }
+        }
+        Ok(out)
+    }
+}
+
 /// 读取某引擎的 API Key;base_url 为空时用默认地址。
 fn build_keyed_engine(
     cfg: &SearchConfig,
@@ -566,6 +664,31 @@ pub fn build_engine() -> Result<Box<dyn SearchEngine>, String> {
                 client: http_client(),
             }))
         }
+        "deepseek" => {
+            // Key 解析顺序:引擎独立 Key(deepseek-search) → 对话 provider Key(slot 0)
+            // → provider 任意槽位。让用户「配过 DeepSeek 聊天即开箱可用联网」。
+            let key = keychain::load(&key_id("deepseek"))?
+                .or(keychain::load("deepseek").ok().flatten())
+                .or_else(|| {
+                    keychain::list_slots("deepseek")
+                        .ok()?
+                        .into_iter()
+                        .find_map(|s| keychain::load_slot("deepseek", s).ok().flatten())
+                })
+                .ok_or_else(|| {
+                    "未配置 DeepSeek API Key(可在模型服务或此处配置,两处通用)".to_string()
+                })?;
+            let base = if cfg.base_url.is_empty() {
+                DEEPSEEK_DEFAULT_BASE.to_string()
+            } else {
+                cfg.base_url.clone()
+            };
+            Ok(Box::new(DeepseekSearch {
+                base_url: base,
+                api_key: key,
+                client: http_client(),
+            }))
+        }
         other => Err(format!("未知搜索引擎: {other}")),
     }
 }
@@ -601,7 +724,7 @@ mod tests {
     }
 
     #[test]
-    fn config_accepts_all_four_engines() {
+    fn config_accepts_all_engines() {
         let _g = TEST_LOCK.lock().unwrap();
         for e in ENGINES {
             let cfg = SearchConfig {
@@ -617,7 +740,9 @@ mod tests {
     fn key_id_is_engine_scoped() {
         assert_eq!(key_id("bocha"), "bocha-search");
         assert_eq!(key_id("zhipu"), "zhipu-search");
+        assert_eq!(key_id("deepseek"), "deepseek-search");
         assert!(engine_needs_key("bocha"));
+        assert!(engine_needs_key("deepseek"));
         assert!(!engine_needs_key("searxng"));
     }
 }
