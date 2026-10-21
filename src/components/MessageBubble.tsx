@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import React from 'react';
 // 代码块语法高亮:VS Code Dark+ 配色。必须用深色主题——代码面为深底(见 app.css),
 // 若导入浅色主题(github.css),其 `.hljs{color:#24292e}` 会把灰字压到深底上,可读性崩塌。
 import 'highlight.js/styles/vs2015.css';
-import * as ipc from '../lib/ipc';
-import type { AttachmentMeta, MessageRow, SourceItem } from '../lib/ipc';
-import { sanitizeHttpUrl } from '../lib/url';
+import type { MessageRow, SourceItem } from '../lib/ipc';
 import { MemoMarkdown, CodeBlock } from './MemoMarkdown';
 import ReasoningBlock, { estimateReasoningTokens } from './ReasoningBlock';
-import { IconBrain, IconCheck, IconCopy, IconDoc, IconEdit, IconPin, IconQuote, IconRefresh, IconSwap, IconTranslate, IconTrash } from './icons';
+import { AttachmentCards } from './bubble/AttachmentCards';
+import { SourceCards } from './bubble/SourceCards';
+import { IconCheck, IconCopy, IconEdit, IconPin, IconQuote, IconRefresh, IconSwap, IconTranslate, IconTrash } from './icons';
 
 /** 记忆 6 个标准节(与后端 KNOWN_SECTIONS 严格一致)。 */
 export const MEMORY_SECTIONS = [
@@ -54,145 +54,6 @@ interface Props {
 
 /** 代码块容器已从 MemoMarkdown.tsx 导出,此处仅做兼容 re-export。 */
 export { CodeBlock };
-
-/** 单张图片附件:按需读 data URL 渲染缩略图,点击放大。 */
-function ImageAttachment({ meta }: { meta: AttachmentMeta }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    ipc
-      .readAttachmentData(meta.path)
-      .then((u) => alive && setUrl(u))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [meta.path]);
-  if (!url) return <div className="attach-card">加载图片…</div>;
-  return (
-    <>
-      <img
-        className="attach-thumb"
-        src={url}
-        alt={meta.name}
-        title={meta.name}
-        onClick={() => setZoom(true)}
-      />
-      {zoom && (
-        <div className="draw-lightbox" onClick={() => setZoom(false)}>
-          <img src={url} alt={meta.name} />
-        </div>
-      )}
-    </>
-  );
-}
-
-/** 附件卡列表(渲染在气泡上方)。 */
-function AttachmentCards({ attachments }: { attachments: string | null }) {
-  if (!attachments) return null;
-  let metas: AttachmentMeta[] = [];
-  try {
-    metas = JSON.parse(attachments);
-  } catch {
-    return null;
-  }
-  if (metas.length === 0) return null;
-  return (
-    <div className="attach-cards">
-      {metas.map((m, i) =>
-        m.kind === 'image' ? (
-          <ImageAttachment key={`${m.path}-${i}`} meta={m} />
-        ) : (
-          <div key={`${m.path}-${i}`} className="attach-card" title={m.path}>
-            <IconDoc size={16} />
-            <div className="attach-card-info">
-              <div className="attach-card-name">{m.name}</div>
-              <div className="attach-card-kind">
-                {m.kind.toUpperCase()}
-                {m.extracted_text ? ' · 已解析文本' : ''}
-              </div>
-            </div>
-          </div>
-        ),
-      )}
-    </div>
-  );
-}
-
-/** 联网来源卡片列表(渲染在气泡下方)。 */
-function SourceCards({
-  raw,
-  onSaveSources,
-}: {
-  raw: string | null;
-  onSaveSources?: (sources: SourceItem[]) => void;
-}) {
-  const [saved, setSaved] = useState(false);
-  if (!raw) return null;
-  let sources: SourceItem[] = [];
-  try {
-    sources = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (sources.length === 0) return null;
-  const domain = (url: string) => {
-    try {
-      return new URL(url).hostname;
-    } catch {
-      return url;
-    }
-  };
-  return (
-    <div className="src-cards">
-      <div className="src-cards-head">
-        <span>来源 ({sources.length})</span>
-        {onSaveSources && (
-          <button
-            type="button"
-            className="src-save"
-            disabled={saved}
-            onClick={() => {
-              onSaveSources(sources);
-              setSaved(true);
-            }}
-            title="将来源摘要写入 memory.md 资料节"
-          >
-            <IconBrain size={12} />
-            <span>{saved ? '已存入' : '存入记忆'}</span>
-          </button>
-        )}
-      </div>
-      {sources.map((s) => {
-        const safeUrl = sanitizeHttpUrl(s.url);
-        if (!safeUrl) {
-          return (
-            <div key={s.id} className="src-card" title="链接不安全或格式非法,已屏蔽">
-              <span className="src-id">[{s.id}]</span>
-              <span className="src-title">{s.title || '无效链接'}</span>
-              <span className="src-domain">已屏蔽</span>
-            </div>
-          );
-        }
-        return (
-          <a
-            key={s.id}
-            className="src-card"
-            href={safeUrl}
-            target="_blank"
-            rel="noreferrer"
-            title={s.snippet}
-          >
-            <span className="src-id">[{s.id}]</span>
-            <span className="src-title">{s.title || s.url}</span>
-            <span className="src-domain">{domain(safeUrl)}</span>
-          </a>
-        );
-      })}
-    </div>
-  );
-}
 
 function MessageBubbleInner({
   msg,
@@ -246,11 +107,11 @@ function MessageBubbleInner({
               className="tok-split"
               title={
                 reasoning
-                  ? `思考 ${estimateReasoningTokens(reasoning)} tok(估算) / 回答 ${msg.tokens} tok`
+                  ? `其中思考 ${estimateReasoningTokens(reasoning)} tok(估算,已含在输出内) / 回答 ${msg.tokens} tok`
                   : `回答 ${msg.tokens} tok`
               }
             >
-              {reasoning ? `思考 ${estimateReasoningTokens(reasoning)} / 回答 ${msg.tokens} tok` : `${msg.tokens} tok`}
+              {reasoning ? `其中思考 ${estimateReasoningTokens(reasoning)} / 回答 ${msg.tokens} tok` : `${msg.tokens} tok`}
             </span>
           )}
           {hasActions && (

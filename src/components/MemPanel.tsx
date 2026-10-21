@@ -4,6 +4,7 @@ import { onMemoryChanged } from '../lib/ipc';
 import * as ipc from '../lib/ipc';
 import MemoryDiffDialog, { type DiffSide } from './MemoryDiffDialog';
 import { MemoMarkdown } from './MemoMarkdown';
+import { VersionHistory } from './mem/VersionHistory';
 
 interface Props {
   sessionId: string;
@@ -238,59 +239,13 @@ export default function MemPanel({ sessionId, width, narrow, onCollapse }: Props
       )}
 
       {showVersions && (
-        <div className="mem-versions">
-          {verList.length === 0 && <div style={{ color: 'var(--text-4)' }}>暂无历史版本</div>}
-          {verList.map((v) => {
-            const selected = diffSel.includes(v.id);
-            return (
-              <div key={v.id} className="mem-version-row">
-                <input
-                  type="checkbox"
-                  title="选中以对比"
-                  checked={selected}
-                  onChange={() => onToggleDiff(v.id)}
-                />
-                <span className="mem-version-meta" style={{ color: 'var(--text-3)' }}>
-                  v{v.id} · {v.note}
-                </span>
-                <div className="mem-version-actions">
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    onClick={() => openDiff({ label: `v${v.id}`, version: v.id }, { label: '当前', version: null })}
-                  >
-                    与当前对比
-                  </button>
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    onClick={() => {
-                      if (confirm(`回滚到 v${v.id}(${v.note})?`)) rollback(sessionId, v.id);
-                    }}
-                  >
-                    回滚
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-          {diffSel.length === 2 && (
-            <div className="mem-diff-bar">
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() =>
-                  openDiff(
-                    { label: `v${diffSel[0]}`, version: diffSel[0] },
-                    { label: `v${diffSel[1]}`, version: diffSel[1] },
-                  )
-                }
-              >
-                并排对比
-              </button>
-            </div>
-          )}
-        </div>
+        <VersionHistory
+          versions={verList}
+          selected={diffSel}
+          onToggle={onToggleDiff}
+          onOpenDiff={openDiff}
+          onRollback={(vid) => rollback(sessionId, vid)}
+        />
       )}
 
       {/* 内容区:直接编辑 memory.md(移除预览/源码/分屏三态切换) */}

@@ -1,5 +1,12 @@
 //! 科研增强(v1.9.0 工作块 II):内置研究方法论技能的加载与注入。
 //!
+//! 来源声明 / Attribution:
+//!   nature-skills — https://github.com/Yuan1z0825/nature-skills
+//!   Copyright (c) Yuan1z0825 and contributors
+//!   Licensed under the Apache License, Version 2.0 (see LICENSE / NOTICE).
+//!   The documents under `resources/skills/` are localized, restructured
+//!   derivative works (not verbatim copies); see NOTICE.
+//!
 //! 架构(improving.md §2.3):
 //! - 知识内置:25 份中文重构文档(源自 nature-skills 的本地化重构)随包只读内置
 //!   (`resources/skills/`),运行时不联网、不做用户编辑;

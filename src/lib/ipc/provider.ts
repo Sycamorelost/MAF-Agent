@@ -1,4 +1,4 @@
-﻿import { invoke, Channel } from '@tauri-apps/api/core';
+import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import type { MemoryStrategy, ProviderTemplate, StreamChunk } from './types';
@@ -63,8 +63,16 @@ export interface UsageTotals {
   failed: number;
   rate_limited: number;
   avg_first_token_ms: number | null;
-  /** 总成本(微元,1e-6 元) */
-  cost_micro: number;
+  /** 总成本(纳元,1e-9 元);未计价请求不计入 */
+  cost_nano: number;
+  /** 成功请求数(coverage 分母) */
+  successful_requests: number;
+  /** 成功且有定价的请求数 */
+  costed_requests: number;
+  /** 成功但未计价的请求数 */
+  uncosted_requests: number;
+  /** 计价覆盖率 0..1 */
+  cost_coverage: number;
 }
 
 export interface UsageGroup {
@@ -77,8 +85,10 @@ export interface UsageGroup {
   failed: number;
   rate_limited: number;
   avg_first_token_ms: number | null;
-  /** 该分组成本(微元,1e-6 元) */
-  cost_micro: number;
+  /** 该分组成本(纳元,1e-9 元) */
+  cost_nano: number;
+  /** 该分组成功但未计价的请求数 */
+  uncosted_requests: number;
 }
 
 export interface UsageSummary {
@@ -108,14 +118,19 @@ export interface UsageEntry {
   total_tokens: number | null;
   /** 思考 token(V14;思考开启的请求才有) */
   reasoning_tokens: number | null;
+  /** 缓存命中输入 token(V17;null = 厂商未返回,未知 ≠ 0) */
+  cached_tokens: number | null;
   first_token_ms: number | null;
   total_ms: number | null;
   created_at: number;
   /** 会话绑定的助手 id(未绑定为 null) */
   agent_id: string | null;
   agent_name: string | null;
-  /** 本次请求成本(微元,1e-6 元);null = 无定价信息 */
-  cost_micro: number | null;
+  /** 本次有效成本(纳元,1e-9 元,旧记录已折算);null = 未计价 */
+  cost_nano: number | null;
+  /** 落库当时的计价快照 JSON(单价 / 汇率 / 卡 id),供审计复算 */
+  pricing_snapshot: string | null;
+  /** model_card | custom | unpriced | none */
   cost_source: string | null;
 }
 
@@ -174,14 +189,43 @@ export const setProviderRotation = (
 export const usageSummary = (dimension: 'model' | 'provider' | 'key' | 'agent', days: number) =>
   invoke<UsageSummary>('usage_summary', { dimension, days });
 
-export const usageEntries = (limit: number) =>
-  invoke<UsageEntry[]>('usage_entries', { limit });
+export const usageEntries = (
+  limit: number,
+  days: number,
+  dimension?: 'model' | 'provider' | 'key' | 'agent',
+  key?: string,
+) => invoke<UsageEntry[]>('usage_entries', { limit, days, dimension, key });
 
 export const usageKeyHealth = (providerId: string, days: number) =>
   invoke<UsageGroup[]>('usage_key_health', { providerId, days });
 
 /** 热力图数据:近 days 天按「星期 × 小时」分桶。 */
 export const usageHourly = (days: number) => invoke<UsageHour[]>('usage_hourly', { days });
+
+/** 复算报告的一行(按 provider × model 聚合,只读对比)。 */
+export interface UsageRecalcRow {
+  provider_id: string;
+  model_id: string;
+  requests: number;
+  /** 当时落库的成本(纳元) */
+  stored_nano: number;
+  /** 按当前定价试算的成本(纳元);null = 当前无定价 */
+  current_nano: number | null;
+  /** 差异(试算 - 落库);null = 无法试算 */
+  delta_nano: number | null;
+  unpriced_requests: number;
+}
+
+export interface UsageRecalcReport {
+  days: number;
+  rows: UsageRecalcRow[];
+  stored_total_nano: number;
+  current_total_nano: number;
+}
+
+/** 按当前定价试算历史成本(干跑,不写库)。 */
+export const usageRecalc = (days: number) =>
+  invoke<UsageRecalcReport>('usage_recalc', { days });
 
 /** 从厂家拉取模型列表(GET /models),缓存并返回完整列表。 */
 export const fetchProviderModels = (providerId: string) =>

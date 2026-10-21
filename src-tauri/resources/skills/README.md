@@ -2,11 +2,15 @@
 
 本目录为 MAF Agent 研究功能「科研增强」能力的内置方法论知识库，随安装包只读分发。
 
-## 来源与改造
+## 来源与许可（Attribution & License）
 
-- 方法论源自开源项目 nature-skills（作者 Yuan1z0825）：
-  https://github.com/Yuan1z0825/nature-skills#55-%E5%85%B6%E4%BB%96-agent-%E5%9C%BA%E6%99%AF
-- 本目录文档为中文本地化重构版（非原仓库文件原样复制），著作权归原作者所有。
+- 方法论源自开源项目 **nature-skills**：
+  https://github.com/Yuan1z0825/nature-skills
+- 著作权：Copyright (c) Yuan1z0825 and contributors。
+- 许可：**Apache License 2.0**（上游仓库 LICENSE 文件；本应用整体亦以 Apache-2.0 发布，
+  许可证全文见仓库根目录 `LICENSE`，第三方声明见根目录 `NOTICE`）。
+- 本目录文档为中文本地化重构版（**非原仓库文件原样复制，属衍生作品**），著作权归原作者所有；
+  修改点见根目录 `NOTICE`（翻译、六节结构重排、剔除第三方服务端点）。
 - 已剔除原包中面向第三方服务的路由（OpenAlex/PubMed/CrossRef/arXiv/MCP 等端点与脚本引用）；
   实际检索一律使用用户在本应用内配置的搜索渠道，全程本地运行、零网络外联。
 

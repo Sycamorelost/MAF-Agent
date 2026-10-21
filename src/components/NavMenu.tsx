@@ -80,6 +80,8 @@ export function NavMenu() {
       <button
         className={`menu-btn${open ? ' on' : ''}`}
         title="导航菜单"
+        aria-label="导航菜单"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">

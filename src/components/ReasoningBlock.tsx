@@ -82,7 +82,7 @@ export default memo(function ReasoningBlock({
       <div className="reasoning-block collapsed count-only">
         <span className="reasoning-head">
           <IconBrain size={14} />
-          <span>{`思考消耗 ${tokens} tokens`}</span>
+          <span>{`其中思考 ${tokens} tokens(已含在输出内)`}</span>
         </span>
       </div>
     );

@@ -101,7 +101,7 @@ export default function Titlebar() {
       {/* 玻璃组件组:会话抽屉 / 全局搜索 / 新建对话(DeepSeek 式简洁模式) */}
       <div className="tb-pill">
         {sidebarAllowed(loc.pathname) && (
-          <button className="tb-pill-btn" title="会话历史" onClick={() => useUiStore.getState().setSidebarOpen(!useUiStore.getState().sidebarOpen)}>
+          <button className="tb-pill-btn" title="会话历史" aria-label="会话历史" onClick={() => useUiStore.getState().setSidebarOpen(!useUiStore.getState().sidebarOpen)}>
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
               <rect x="1.8" y="2.5" width="12.4" height="11" rx="2" />
               <path d="M6 2.5v11" />
@@ -112,6 +112,7 @@ export default function Titlebar() {
           <button
             className="tb-pill-btn"
             title="面板"
+            aria-label="面板"
             onClick={() => useUiStore.getState().setAsideOpen(!useUiStore.getState().asideOpen)}
           >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
@@ -120,10 +121,10 @@ export default function Titlebar() {
             </svg>
           </button>
         )}
-        <button className="tb-pill-btn" title="搜索 (Ctrl+K)" onClick={() => setSearchOpen((v) => !v)}>
+        <button className="tb-pill-btn" title="搜索 (Ctrl+K)" aria-label="搜索 (Ctrl+K)" onClick={() => setSearchOpen((v) => !v)}>
           <IconSearch size={15} />
         </button>
-        <button className="tb-pill-btn" title="新建对话" onClick={() => setPickerOpen(true)}>
+        <button className="tb-pill-btn" title="新建对话" aria-label="新建对话" onClick={() => setPickerOpen(true)}>
           <IconEdit size={15} />
         </button>
       </div>
@@ -133,23 +134,24 @@ export default function Titlebar() {
       <button
         className={`win-btn${pinned ? ' pinned' : ''}`}
         title={pinned ? '取消置顶' : '置顶'}
+        aria-label={pinned ? '取消置顶' : '置顶'}
         onClick={onTogglePin}
       >
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
           <path d="M7 1.5l3.5 3.5-2 .5L6 8l-.5 2.5L3 8 1.5 6.5 4 6l2.5-2.5.5-2z" />
         </svg>
       </button>
-      <button className="win-btn" title="最小化" onClick={onMinimize}>
+      <button className="win-btn" title="最小化" aria-label="最小化" onClick={onMinimize}>
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
           <path d="M2 6h8" />
         </svg>
       </button>
-      <button className="win-btn" title="最大化/还原" onClick={() => void win.toggleMaximize()}>
+      <button className="win-btn" title="最大化/还原" aria-label="最大化/还原" onClick={() => void win.toggleMaximize()}>
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
           <rect x="2.5" y="2.5" width="7" height="7" rx="1" />
         </svg>
       </button>
-      <button className="win-btn close" title="关闭" onClick={() => void win.close()}>
+      <button className="win-btn close" title="关闭" aria-label="关闭" onClick={() => void win.close()}>
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
           <path d="M3 3l6 6M9 3l-6 6" />
         </svg>
@@ -162,7 +164,7 @@ export default function Titlebar() {
           <div className="tb-search-pop">
             <div className="tb-search-head">
               <span>搜索</span>
-              <button className="panel-toggle" title="关闭" onClick={() => setSearchOpen(false)}>
+              <button className="panel-toggle" title="关闭" aria-label="关闭搜索" onClick={() => setSearchOpen(false)}>
                 <IconX size={13} />
               </button>
             </div>

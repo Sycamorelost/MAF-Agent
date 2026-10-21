@@ -1,0 +1,65 @@
+MAF Agent
+Copyright 2026 梧桐吾桐及其团队
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes material derived from the following third-party works,
+each licensed under the Apache License, Version 2.0.
+
+-------------------------------------------------------------------------------
+1. nature-skills
+   Copyright (c) Yuan1z0825 and contributors
+   https://github.com/Yuan1z0825/nature-skills
+   License: Apache License 2.0
+   (license text: https://github.com/Yuan1z0825/nature-skills/blob/main/LICENSE)
+
+   Used in:
+   - src-tauri/resources/skills/**            research methodology documents
+   - src-tauri/src/research/skills.rs         loading / progressive-injection adapter
+
+   Modifications: the upstream English skill documents were translated into
+   Chinese, restructured into a six-section document template, and adapted to
+   this application's research-report workflow. References to third-party
+   services and endpoints (OpenAlex / PubMed / CrossRef / arXiv / MCP, browser
+   automation, push channels) were removed; no verbatim copy of upstream files
+   is distributed. These are derivative works, not the original files.
+
+-------------------------------------------------------------------------------
+2. Deep-tutor
+   Copyright (c) hershate and contributors
+   https://github.com/hershate/Deep-tutor
+   License: Apache License 2.0
+   (license text: https://github.com/hershate/Deep-tutor/blob/main/LICENSE)
+
+   Used in:
+   - src-tauri/src/study/template.rs          prompt / JSON contracts
+   - src-tauri/src/study/mod.rs               plan-generation pipeline
+   - src-tauri/src/study/learn/               study units, quiz, mastery, review
+   - src/pages/study/                         interaction logic (no visual port)
+
+   Modifications: ported from FastAPI / React to Rust / React, re-implemented
+   with deterministic scheduling and Rust-side schema validation, and adapted
+   to this application's data model and UI component system. No upstream
+   visual assets or CSS were copied.
+
+-------------------------------------------------------------------------------
+3. Cherry Studio
+   Copyright (c) CherryHQ and contributors
+   https://github.com/CherryHQ/cherry-studio
+   License: GNU Affero General Public License v3.0 (AGPL-3.0)
+   (license text: https://github.com/CherryHQ/cherry-studio/blob/main/LICENSE)
+
+   Reference scope: architecture and interaction concepts only — e.g. the
+   provider / API-key management model, multi-provider abstraction, and the
+   desktop-assistant layout. No Cherry Studio source code, styles, or assets
+   are copied into this repository and no Cherry Studio dependency is bundled.
+   The reference is documented here for transparency and to credit the
+   original project. If any source code from Cherry Studio is ever
+   incorporated, the combined work must be distributed under AGPL-3.0.
+
+-------------------------------------------------------------------------------
+The two projects above (nature-skills, Deep-tutor) are distributed under the
+Apache License, Version 2.0. A copy of that license is provided in the LICENSE
+file at the root of this repository. Copyright notices and this NOTICE are
+retained in the source files that contain the respective derivative works.
+Cherry Studio is licensed separately under AGPL-3.0 and is referenced at the
+architecture level only, as described in section 3.

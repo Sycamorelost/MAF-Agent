@@ -1,6 +1,14 @@
 # NATURE SKILLS 运作模式总览（本地版）
 
-> 本文是对开源仓库 `nature-skills`（源路径：`d:\EdgeDownloads\nature-skills-main`）运作机制的深度重构文档。
+<!--
+  来源声明 / Attribution
+  nature-skills — https://github.com/Yuan1z0825/nature-skills
+  Copyright (c) Yuan1z0825 and contributors
+  Licensed under the Apache License, Version 2.0 (see LICENSE / NOTICE at the repository root).
+  本文为中文重构衍生作品，非上游文件原样复制；修改点见 NOTICE。
+-->
+
+> 本文是对开源仓库 `nature-skills`（https://github.com/Yuan1z0825/nature-skills）运作机制的深度重构文档。
 > 仓库包含 23 个面向 Nature 系科研工作流的 agent skill，本目录下的 `skills/` 收录了每个 skill 的独立重构文档。
 
 > **本地化口径（第二轮改造）**：本文描述的架构机制（路由、分层、加载协议）保持原样；但凡涉及外部软件/服务的运行时行为，`skills/` 下各文档已统一改造为**不外推、不连接第三方**：无飞书/Telegram/邮件推送、无浏览器 CDP/登录态、无第三方图像/OCR API 与密钥、无 Zotero/MCP 连接；只保留对公开免费来源的只读查询与宿主平台内置能力，所有制品写本地文件。

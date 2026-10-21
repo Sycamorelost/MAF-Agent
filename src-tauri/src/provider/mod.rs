@@ -109,6 +109,8 @@ pub enum StreamChunk {
         total_tokens: Option<u32>,
         /// 思考 token(usage.completion_tokens_details.reasoning_tokens;缺失为 None)
         reasoning_tokens: Option<u32>,
+        /// 缓存命中输入 token(prompt_tokens_details.cached_tokens 等;缺失为 None = 未知)
+        cached_tokens: Option<u32>,
     },
     /// 完成(可选 finish_reason / usage)
     Done {
@@ -117,6 +119,8 @@ pub enum StreamChunk {
         completion_tokens: Option<u32>,
         /// 思考 token(仅计数无明文思考的端点如 OpenAI 官方,靠它展示「思考消耗 N tokens」)
         reasoning_tokens: Option<u32>,
+        /// 缓存命中输入 token(缺失为 None = 厂商未返回)
+        cached_tokens: Option<u32>,
     },
     /// 错误
     Error { message: String },

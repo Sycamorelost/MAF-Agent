@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react';
-import { StagePipelineEditor } from '../../components/StagePipelineEditor';
+import { StagePipelineEditor } from '../../components/stage/StagePipelineEditor';
 import * as ipc from '../../lib/ipc';
 import { IconCheck, IconEdit } from '../../components/icons';
 

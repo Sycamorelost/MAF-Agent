@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useResearchStore } from '../stores/research';
-import { ConfigPanel } from './research/ConfigPanel';
+import { ConfigPanel } from './research/config/ConfigPanel';
 import { RunView } from './research/RunView';
 import { BlueprintLibrary } from './research/BlueprintLibrary';
 import { HistoryView } from './research/HistoryView';

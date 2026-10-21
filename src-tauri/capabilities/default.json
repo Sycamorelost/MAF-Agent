@@ -1,10 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
-  "windows": [
-    "main"
-  ],
+  "description": "MAF Agent 主窗口 capability:core 插件权限 + 对话框 + 托盘",
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-show",
@@ -24,6 +22,7 @@
     "core:window:allow-set-size",
     "core:window:allow-outer-position",
     "core:window:allow-scale-factor",
-    "core:webview:allow-get-all-webviews"
+    "core:webview:allow-get-all-webviews",
+    "dialog:default"
   ]
 }

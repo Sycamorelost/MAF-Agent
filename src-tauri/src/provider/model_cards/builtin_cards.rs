@@ -1,4 +1,4 @@
-﻿//! 内置模型卡硬编码数据(从 model_cards.rs 拆出)。
+//! 内置模型卡硬编码数据(从 model_cards.rs 拆出)。
 
 use super::*;
 
@@ -343,5 +343,53 @@ pub fn builtin_model_cards() -> Vec<ModelCard> {
             memory_injection: None,
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builtin_has_13_unique_cards() {
+        let cards = builtin_model_cards();
+        assert_eq!(cards.len(), 13);
+        let mut ids = cards.iter().map(|c| &c.id).collect::<Vec<_>>();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 13);
+    }
+
+    #[test]
+    fn cards_have_required_fields() {
+        for c in builtin_model_cards() {
+            assert!(!c.display_name.is_empty());
+            assert!(!c.official_model_id.is_empty());
+            assert!(!c.cost_tier.is_empty());
+            assert!(matches!(
+                c.cost_tier.as_str(),
+                "free" | "budget" | "standard" | "premium" | "ultra"
+            ));
+            // 推理类模型必须有上下文窗口;生图/DeepL 除外
+            if !c.tags.iter().any(|t| t == "image") && c.provider != "deepl" {
+                assert!(c.context_window.is_some(), "{} 缺 context_window", c.id);
+            }
+        }
+    }
+
+    #[test]
+    fn reasoning_cards_have_memory_injection() {
+        let cards = builtin_model_cards();
+        let reasoning = cards
+            .iter()
+            .filter(|c| {
+                !c.tags.iter().any(|t| t == "image" || t == "translation")
+            })
+            .count();
+        let with_injection = cards
+            .iter()
+            .filter(|c| c.memory_injection.is_some())
+            .count();
+        assert_eq!(reasoning, with_injection);
+    }
 }
 

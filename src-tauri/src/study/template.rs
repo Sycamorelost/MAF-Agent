@@ -1,5 +1,12 @@
 //! 学习规划提示词模板(移植 Deep-tutor 技能提示词包)。
 //!
+//! 来源声明 / Attribution:
+//!   Deep-tutor — https://github.com/hershate/Deep-tutor
+//!   Copyright (c) hershate and contributors
+//!   Licensed under the Apache License, Version 2.0 (see LICENSE / NOTICE).
+//!   This file is a derivative work: the prompt contracts were rewritten for
+//!   MAF Agent's Rust engine and adapted to its JSON schema; see NOTICE.
+//!
 //! - 内置模板即引擎常量,代码内保护不可删;
 //! - 用户自定义覆盖落盘 `data/study/templates.json`,同 key 覆盖式更新;
 //! - 生效优先级:templates.json 自定义 > 内置;
