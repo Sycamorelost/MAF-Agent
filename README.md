@@ -4,7 +4,7 @@
 
 MAF Agent(MetaAgent Float)是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust + React 19** 构建。与云端 AI 助手不同，MAF 不托管任何模型与数据：你自备 API Key，数据全部存储在本机(SQLite + 纯文本文件)，只与你的模型服务商直连。
 
-- **版本**:v1.9.3
+- **版本**:v1.10.3
 - **许可证**:Apache-2.0(附带 [NOTICE](NOTICE) 第三方衍生声明)
 - **平台**:Windows 10 / 11(64 位)
 

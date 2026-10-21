@@ -18,7 +18,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">MAF Agent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.9.3'} · 桌面端 · Windows
+            版本 {appVersion || '1.10.3'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
