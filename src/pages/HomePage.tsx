@@ -6,7 +6,6 @@
  */
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
-import logoUrl from '../assets/logo.png';
 import Composer from '../components/Composer';
 import AgentPickerDialog from '../components/AgentPickerDialog';
 import { agentIconComponent } from '../components/icons';
@@ -155,7 +154,6 @@ export default function HomePage() {
 
   return (
     <div className="stage home">
-      <img className="home-logo-img" src={logoUrl} alt="MAF Agent" />
       <h2 className="greeting">MAF Agent | 向更美好的生活出发！</h2>
 
       <Composer

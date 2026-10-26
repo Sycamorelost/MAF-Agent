@@ -53,12 +53,28 @@
   /* ---- 中性 ---- */
   --bg-frame:     #E9EAEE;
   --bg-main:      #FFFFFF;
+  --bg-main-rgb:  255,255,255;        /* 数字组,供 rgba(var(--bg-main-rgb), alpha) 拼接 */
+  --bg-surface:   #FFFFFF;            /* 卡片/composer/dialog/pill/tool-chip/md 等表面底 */
+  --bg-surface-rgb: 255,255,255;      /* 表面色数字组,供顶层弹窗拼 solid 背景(避免与壁纸透明变量叠加) */
   --bg-side:      #F7F7F9;
   --bg-hover:     #EFF1F5;
   --bg-active:    #E8EDF3;
 
   --border:       #E8E8EE;
   --border-strong:#C9CFD9;
+
+  /* ---- 玻璃面板透明度（sidebar/nav-pop/tb-pill，每主题可覆盖） ---- */
+  --bg-glass-alpha:   .86;
+  --bg-glass-alpha-2: .82;
+  --bg-glass-alpha-3: .65;
+
+  /* ---- 壁纸模式渐变遮罩（洗淡用户上传的壁纸，保证文字可读） ---- */
+  --bg-overlay-rgb: 255,255,255;
+  --bg-overlay-a: .82;
+  --bg-overlay-b: .92;
+
+  /* ---- 阴影环境色数字组（供 rgba(var(--shadow-ambient), alpha) 拼阴影） ---- */
+  --shadow-ambient: 40,50,80;
 
   /* ---- 文字 ---- */
   --text-1:       #0D0D12;
@@ -79,10 +95,10 @@
      ambient 色基于 --bg-frame：rgba(40,50,80,...) 灰蓝环境，非纯黑
      透明度 ~12-18%，blur 40-80px，偏移压低
   */
-  --shadow-frame:    0 28px 64px rgba(40,50,80,.12),   0 4px 14px rgba(40,50,80,.05);  /* 窗口外框 */
-  --shadow-card:     0 1px 3px   rgba(40,50,80,.04),   0 1px 2px rgba(40,50,80,.03);  /* 卡片静息 */
-  --shadow-card-h:   0 10px 30px rgba(40,50,80,.12),   0 2px 6px rgba(40,50,80,.05);  /* 卡片 hover/elevated */
-  --shadow-soft:     0 4px 14px  rgba(40,50,80,.08);                                        /* 弱悬浮 */
+  --shadow-frame:    0 28px 64px rgba(var(--shadow-ambient),.12),   0 4px 14px rgba(var(--shadow-ambient),.05);  /* 窗口外框 */
+  --shadow-card:     0 1px 3px   rgba(var(--shadow-ambient),.04),   0 1px 2px rgba(var(--shadow-ambient),.03);  /* 卡片静息 */
+  --shadow-card-h:   0 10px 30px rgba(var(--shadow-ambient),.12),   0 2px 6px rgba(var(--shadow-ambient),.05);  /* 卡片 hover/elevated */
+  --shadow-soft:     0 4px 14px  rgba(var(--shadow-ambient),.08);                                        /* 弱悬浮 */
   --shadow-inset:    inset 0 1px 0 rgba(255,255,255,.4);                                     /* 高光内嵌 */
 
   /* ---- 字体栈 ---- */
@@ -180,7 +196,7 @@ body{
 /* 胶囊（快捷入口） */
 .pill{
   display:inline-flex;align-items:center;gap:var(--space-2);
-  border:1px solid var(--border);background:#fff;
+  border:1px solid var(--border);background:var(--bg-surface);
   border-radius:22px;
   font-size:var(--font-caption);color:var(--text-2);
   padding:8px 15px;cursor:pointer;font-family:var(--font);
@@ -196,7 +212,7 @@ body{
 
 /* 弹窗通用 */
 .dialog{
-  background:#fff;
+  background:var(--bg-surface);
   border:1px solid var(--border-strong);
   border-radius:var(--radius-l);
   box-shadow:var(--shadow-frame);
@@ -216,6 +232,7 @@ body{
 /* 标题栏 */
 .titlebar{
   height:var(--titlebar-h);flex-shrink:0;
+  position:relative;z-index:100;
   display:flex;align-items:center;gap:var(--space-2);
   padding:0 var(--space-4);
   border-bottom:1px solid var(--border);
@@ -250,9 +267,9 @@ body{
   position:absolute;top:calc(100% + 6px);left:0;z-index:30;
   min-width:168px;padding:6px;
   display:flex;flex-direction:column;gap:2px;
-  background:rgba(255,255,255,.82);
-  backdrop-filter:blur(18px) saturate(1.5);
-  -webkit-backdrop-filter:blur(18px) saturate(1.5);
+  background:rgba(var(--bg-main-rgb),var(--bg-glass-alpha-2));
+  backdrop-filter:blur(50px) saturate(1.8);
+  -webkit-backdrop-filter:blur(50px) saturate(1.8);
   border:1px solid var(--border);
   border-radius:var(--radius-l);
   box-shadow:var(--shadow-card-h);
@@ -274,9 +291,9 @@ body{
   display:flex;align-items:center;gap:2px;
   /* 负外边距抵消标题栏 8px gap,紧靠左侧 ⋮ 菜单 */
   margin-left:-6px;padding:2px;
-  background:rgba(255,255,255,.65);
-  backdrop-filter:blur(14px) saturate(1.4);
-  -webkit-backdrop-filter:blur(14px) saturate(1.4);
+  background:rgba(var(--bg-main-rgb),var(--bg-glass-alpha-3));
+  backdrop-filter:blur(50px) saturate(1.8);
+  -webkit-backdrop-filter:blur(50px) saturate(1.8);
   border:1px solid var(--border);
   border-radius:var(--radius-m);
   box-shadow:var(--shadow-card);
@@ -293,9 +310,9 @@ body{
 .sidebar{
   position:fixed;top:var(--titlebar-h);left:0;bottom:0;z-index:9;
   width:var(--sidebar-w);flex-shrink:0;
-  background:rgba(255,255,255,.86);
-  backdrop-filter:blur(20px) saturate(1.5);
-  -webkit-backdrop-filter:blur(20px) saturate(1.5);
+  background:rgba(var(--bg-main-rgb),var(--bg-glass-alpha));
+  backdrop-filter:blur(50px) saturate(1.8);
+  -webkit-backdrop-filter:blur(50px) saturate(1.8);
   border-right:1px solid var(--border);
   box-shadow:var(--shadow-card-h);
   display:flex;flex-direction:column;
@@ -369,7 +386,7 @@ body{
   animation:float 4.5s ease-in-out infinite;
 }
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-.greeting{margin-top:var(--space-4);font-size:var(--font-hero);font-weight:650;letter-spacing:-.3px;color:var(--text-1)}
+.greeting{margin-top:var(--space-6);font-size:calc(var(--font-hero) * 1.2);font-weight:650;letter-spacing:-.3px;color:var(--text-1);text-align:center;animation:float 4.5s ease-in-out infinite}
 .sub{margin-top:var(--space-2);font-size:var(--font-body);color:var(--text-3)}
 
 /* 空状态卡片组 */
@@ -378,7 +395,7 @@ body{
   max-width:820px;width:100%;align-items:stretch;
 }
 .card{
-  border:1px solid var(--border);background:#fff;
+  border:1px solid var(--border);background:var(--bg-surface);
   border-radius:var(--radius-xl);
   padding:var(--space-4);cursor:pointer;
   box-shadow:var(--shadow-card);
@@ -391,7 +408,7 @@ body{
 /* 输入框（Composer） */
 .composer{width:100%;max-width:820px;margin-top:auto;padding-top:var(--space-6)}
 .composer-box{
-  border:1px solid var(--border);background:#fff;
+  border:1px solid var(--border);background:var(--bg-surface);
   border-radius:var(--radius-xl);
   box-shadow:var(--shadow-card);
   transition:border-color .15s,box-shadow .15s;
@@ -421,7 +438,7 @@ body{
 /* 工具胶囊小按钮 */
 .tool-chip{
   display:inline-flex;align-items:center;gap:var(--space-1);
-  border:1px solid var(--border);background:#fff;
+  border:1px solid var(--border);background:var(--bg-surface);
   border-radius:var(--radius-s);
   font-size:var(--font-micro);color:var(--text-2);
   padding:5px 10px;cursor:pointer;font-family:var(--font);
@@ -458,7 +475,7 @@ body{
 .tut-body .step{margin-top:var(--space-3)}
 .tut-body .st{font-size:var(--font-caption);color:var(--text-2);margin-bottom:var(--space-2)}
 .copyline{
-  display:flex;align-items:center;background:#fff;
+  display:flex;align-items:center;background:var(--bg-surface);
   border:1px solid var(--border);border-radius:var(--radius-s);
   font-family:var(--font-mono);font-size:var(--font-micro);color:var(--text-2);
   margin-top:var(--space-2);
@@ -477,7 +494,7 @@ body{
 .tutorial-list .tutorial{margin-top:0}
 .tut-head .arr svg{display:block}
 .tut-body .md{
-  background:#fff;border-radius:var(--radius-m);
+  background:var(--bg-surface);border-radius:var(--radius-m);
   margin-top:var(--space-2);padding:var(--space-3);
   font-size:var(--font-caption);color:var(--text-2);line-height:1.7;
   overflow-wrap:anywhere;
@@ -584,4 +601,342 @@ body{
   .pill{padding:10px 18px}
   .tool-chip{padding:6px 12px}
   .chat-head{height:52px}
+}
+
+/* ================================================================
+ *  预制主题（通过 <html data-theme="..."> 切换）
+ *  每套覆盖背景/文字/边框/品牌/遮罩/阴影环境色，保证 WCAG AA 对比度
+ *  default 即 :root 默认值，无需单独声明
+ * ================================================================ */
+
+/* 主题 2：雾霾蓝 haze —— 灰蓝冷色，降低纯白刺眼感 */
+:root[data-theme="haze"]{
+  --bg-frame:     #DCE3EC;
+  --bg-main:      #F4F6FA;
+  --bg-main-rgb:  244,246,250;
+  --bg-surface:   #FFFFFF;
+  --bg-surface-rgb: 255,255,255;
+  --bg-side:      #EEF1F6;
+  --bg-hover:     #E6EAF2;
+  --bg-active:    #DDE2EC;
+  --border:       #D4DAE4;
+  --border-strong:#B8C2D0;
+  --text-1:       #151A22;
+  --text-2:       #465062;
+  --text-3:       #81889A;
+  --text-4:       #A8AFC0;
+  --brand:        #2C6FA0;
+  --brand-deep:   #1F5278;
+  --brand-soft:   #E0EEF8;
+  --brand-line:   #B7D3E8;
+  --ink:          #141416;
+  --ink-hover:    #222226;
+  --bg-overlay-rgb: 244,246,250;
+  --bg-overlay-a: .82;
+  --bg-overlay-b: .92;
+  --shadow-ambient: 40,50,80;
+}
+
+/* 主题 3：深夜蓝 midnight —— 深蓝近黑，护眼暗主题 */
+:root[data-theme="midnight"]{
+  --bg-frame:     #141821;
+  --bg-main:      #1E222C;
+  --bg-main-rgb:  30,34,44;
+  --bg-surface:   #262B36;
+  --bg-surface-rgb: 38,43,54;
+  --bg-side:      #191D26;
+  --bg-hover:     #2E3440;
+  --bg-active:    #353C4A;
+  --border:       #2C3240;
+  --border-strong:#3D4456;
+  --text-1:       #E5E8EF;
+  --text-2:       #9BA3B4;
+  --text-3:       #6B7280;
+  --text-4:       #4B5261;
+  --brand:        #4A90D9;
+  --brand-deep:   #6BAEEA;
+  --brand-soft:   #1E3A52;
+  --brand-line:   #2E5376;
+  --ink:          #0D1117;
+  --ink-hover:    #161B24;
+  --bg-overlay-rgb: 20,24,33;
+  --bg-overlay-a: .86;
+  --bg-overlay-b: .93;
+  --shadow-ambient: 0,0,0;
+}
+
+/* 主题 4：松烟绿 pine —— 低饱和墨绿，自然沉稳 */
+:root[data-theme="pine"]{
+  --bg-frame:     #E0E6E1;
+  --bg-main:      #F1F4F1;
+  --bg-main-rgb:  241,244,241;
+  --bg-surface:   #FFFFFF;
+  --bg-surface-rgb: 255,255,255;
+  --bg-side:      #E6EBE6;
+  --bg-hover:     #DCE4DC;
+  --bg-active:    #D0D8D0;
+  --border:       #D4DDD5;
+  --border-strong:#B5C2B7;
+  --text-1:       #15221B;
+  --text-2:       #445448;
+  --text-3:       #758479;
+  --text-4:       #9FABA2;
+  --brand:        #2E7D5B;
+  --brand-deep:   #1F5C42;
+  --brand-soft:   #E4F0EA;
+  --brand-line:   #B8D4C2;
+  --ink:          #141416;
+  --ink-hover:    #222226;
+  --bg-overlay-rgb: 241,244,241;
+  --bg-overlay-a: .82;
+  --bg-overlay-b: .92;
+  --shadow-ambient: 30,50,40;
+}
+
+/* 主题 5：暖橙日落 sunset —— 暖米底 + 橙调，黄昏氛围 */
+:root[data-theme="sunset"]{
+  --bg-frame:     #EDE4D8;
+  --bg-main:      #FBF6EF;
+  --bg-main-rgb:  251,246,239;
+  --bg-surface:   #FFFFFF;
+  --bg-surface-rgb: 255,255,255;
+  --bg-side:      #F0E8DC;
+  --bg-hover:     #E8DEC8;
+  --bg-active:    #DDCEB6;
+  --border:       #E4D9C5;
+  --border-strong:#C9B99E;
+  --text-1:       #2A2318;
+  --text-2:       #5A4E3C;
+  --text-3:       #8C7E68;
+  --text-4:       #B0A48F;
+  --brand:        #D1693D;
+  --brand-deep:   #A84E28;
+  --brand-soft:   #FCE7DC;
+  --brand-line:   #F4C4A8;
+  --ink:          #141416;
+  --ink-hover:    #222226;
+  --bg-overlay-rgb: 251,246,239;
+  --bg-overlay-a: .82;
+  --bg-overlay-b: .92;
+  --shadow-ambient: 60,45,30;
+}
+
+/* 主题 6：樱花粉 sakura —— 柔粉浅紫，清新明亮 */
+:root[data-theme="sakura"]{
+  --bg-frame:     #EDE4EC;
+  --bg-main:      #FBF5F8;
+  --bg-main-rgb:  251,245,248;
+  --bg-surface:   #FFFFFF;
+  --bg-surface-rgb: 255,255,255;
+  --bg-side:      #F3E9EF;
+  --bg-hover:     #EBDDE4;
+  --bg-active:    #DECAD4;
+  --border:       #E4D5DD;
+  --border-strong:#C9B4C1;
+  --text-1:       #2D1F2A;
+  --text-2:       #5E4D58;
+  --text-3:       #8F7D87;
+  --text-4:       #B3A3AC;
+  --brand:        #C96B9A;
+  --brand-deep:   #A04E76;
+  --brand-soft:   #F9E4EE;
+  --brand-line:   #E8B6CE;
+  --ink:          #141416;
+  --ink-hover:    #222226;
+  --bg-overlay-rgb: 251,245,248;
+  --bg-overlay-a: .82;
+  --bg-overlay-b: .92;
+  --shadow-ambient: 60,40,55;
+}
+
+/* ===== 自定义壁纸层（Phase B） =====
+   仅替换 .window 的背景:用户图在最底层,主题色渐变叠加在上层保证文字可读。
+   不影响按钮/文字/间距/圆角等任何布局属性。窗口保持不透明(非桌面透明)。 */
+:root[data-has-wallpaper] .window {
+  background-image:
+    linear-gradient(135deg,
+      rgba(var(--bg-overlay-rgb), calc(var(--bg-overlay-a) * var(--wallpaper-cover, 1))),
+      rgba(var(--bg-overlay-rgb), calc(var(--bg-overlay-b) * var(--wallpaper-cover, 1)))),
+    var(--bg-user-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* ===== 壁纸模式:壁纸为主角,白色部分 50% 磨砂,背景 0% 遮罩 =====
+   架构:
+     .window  → 壁纸(0% 遮罩,完全可见,背景色透明)
+     .main    → transparent(空区域壁纸直接透出,无模糊层)
+     所有白色面板 → 表面色变量统一 50% 透明 + backdrop-filter 模糊
+   核心:通过覆盖 --bg-main/--bg-surface/--bg-side/--bg-frame 为 50% 透明,
+   让所有引用这些变量的元素(卡片/侧栏/顶栏/弹窗/输入框/按钮等)自动变为半透明,
+   再统一加 blur 实现磨砂玻璃。 */
+:root[data-has-wallpaper] {
+  /* ★ 表面色变量统一改为 50% 白色透明:所有引用这些变量的元素自动半透明 */
+  --bg-main:    rgba(var(--bg-main-rgb), .5);
+  --bg-surface: rgba(var(--bg-surface-rgb), .5);
+  --bg-side:    rgba(255,255,255,.5);
+  --bg-frame:   rgba(255,255,255,.5);
+  /* 玻璃面板透明度变量统一 50% */
+  --bg-glass-alpha:   .5;
+  --bg-glass-alpha-2: .5;
+  --bg-glass-alpha-3: .5;
+  /* 交互态:略微透明 */
+  --bg-hover:       color-mix(in srgb, var(--bg-hover) 70%, transparent);
+  --bg-active:      color-mix(in srgb, var(--bg-active) 78%, transparent);
+  --border:         color-mix(in srgb, var(--border) 60%, transparent);
+  --border-strong:  color-mix(in srgb, var(--border-strong) 70%, transparent);
+  /* 壁纸遮罩不透明度默认 0(壁纸完全可见,无白色渐变洗淡) */
+  --wallpaper-cover: 0;
+}
+
+/* .window 背景色透明(壁纸在 background-image 上,避免白底透出) */
+:root[data-has-wallpaper] .window {
+  background-color: transparent;
+}
+
+/* ===== 主内容区:透明,壁纸直接透出(空区域 0% 遮罩) ===== */
+:root[data-has-wallpaper] .main {
+  background: transparent;
+}
+/* 子内容容器保持透明 */
+:root[data-has-wallpaper] .set-content,
+:root[data-has-wallpaper] .notes-detail,
+:root[data-has-wallpaper] .att-page,
+:root[data-has-wallpaper] .research-page,
+:root[data-has-wallpaper] .memory-page,
+:root[data-has-wallpaper] .pg-main,
+:root[data-has-wallpaper] .stage,
+:root[data-has-wallpaper] .pg,
+:root[data-has-wallpaper] .rp-run,
+:root[data-has-wallpaper] .body {
+  background: transparent;
+}
+
+/* ===== 白色面板:50% 磨砂玻璃(表面色已 50% 透明 + 背景模糊) =====
+   统一给所有"内容面板"加 backdrop-filter,浮于壁纸之上形成磨砂效果。
+   .main 不加 blur(空区域壁纸完全可见)。
+   注意:仅给顶层面板加 blur,避免嵌套元素双重模糊导致发灰。 */
+:root[data-has-wallpaper] .titlebar,
+:root[data-has-wallpaper] .sidebar,
+:root[data-has-wallpaper] .tb-pill,
+:root[data-has-wallpaper] .tb-search-pop,
+:root[data-has-wallpaper] .nav-pop,
+:root[data-has-wallpaper] .at-dropdown,
+:root[data-has-wallpaper] .gs-dropdown,
+:root[data-has-wallpaper] .pin-menu,
+:root[data-has-wallpaper] .think-menu,
+:root[data-has-wallpaper] .branch-pop,
+:root[data-has-wallpaper] .dialog,
+:root[data-has-wallpaper] .tpl-dialog,
+:root[data-has-wallpaper] .att-modal,
+:root[data-has-wallpaper] .mempanel,
+:root[data-has-wallpaper] .tutorial,
+:root[data-has-wallpaper] .chat-head,
+:root[data-has-wallpaper] .research-form,
+:root[data-has-wallpaper] .research-item,
+:root[data-has-wallpaper] .research-run,
+:root[data-has-wallpaper] .trail-card,
+:root[data-has-wallpaper] .reasoning-block,
+:root[data-has-wallpaper] .mermaid-block,
+:root[data-has-wallpaper] .attach-card,
+:root[data-has-wallpaper] .attach-thumb,
+:root[data-has-wallpaper] .global-search,
+:root[data-has-wallpaper] .seg,
+:root[data-has-wallpaper] .source-row,
+:root[data-has-wallpaper] .mcp-time-card,
+:root[data-has-wallpaper] .mcp-policy-card,
+:root[data-has-wallpaper] .mcp-server-card,
+:root[data-has-wallpaper] .pg-aside.drawer,
+:root[data-has-wallpaper] .memory-list.drawer,
+:root[data-has-wallpaper] .notes-list.drawer,
+:root[data-has-wallpaper] .set-nav.drawer {
+  backdrop-filter: blur(50px) saturate(1.8);
+  -webkit-backdrop-filter: blur(50px) saturate(1.8);
+}
+
+/* 卡片/输入框/按钮/胶囊等小型内容面板 */
+:root[data-has-wallpaper] .pill,
+:root[data-has-wallpaper] .tool-chip,
+:root[data-has-wallpaper] .card,
+:root[data-has-wallpaper] .set-card,
+:root[data-has-wallpaper] .composer-box,
+:root[data-has-wallpaper] .btn-primary,
+:root[data-has-wallpaper] .btn-brand,
+:root[data-has-wallpaper] .btn-ghost,
+:root[data-has-wallpaper] .btn,
+:root[data-has-wallpaper] .icon-btn,
+:root[data-has-wallpaper] .model-switch,
+:root[data-has-wallpaper] .model-chip,
+:root[data-has-wallpaper] .provider-head,
+:root[data-has-wallpaper] .tut-body .md,
+:root[data-has-wallpaper] .bubble .md pre,
+:root[data-has-wallpaper] .bubble .md th,
+:root[data-has-wallpaper] .bubble .md blockquote,
+:root[data-has-wallpaper] .bubble .md code,
+:root[data-has-wallpaper] .attach-chip,
+:root[data-has-wallpaper] .gs-input,
+:root[data-has-wallpaper] .form-textarea,
+:root[data-has-wallpaper] .form-input,
+:root[data-has-wallpaper] .form-select,
+:root[data-has-wallpaper] .seg-item,
+:root[data-has-wallpaper] .key-input,
+:root[data-has-wallpaper] .custom-form-model,
+:root[data-has-wallpaper] .tpl-main textarea,
+:root[data-has-wallpaper] .branch-rename-row input,
+:root[data-has-wallpaper] .report-md,
+:root[data-has-wallpaper] .research-head,
+:root[data-has-wallpaper] .trail-head,
+:root[data-has-wallpaper] .reasoning-head {
+  backdrop-filter: blur(50px) saturate(1.8);
+  -webkit-backdrop-filter: blur(50px) saturate(1.8);
+}
+
+:root[data-has-wallpaper] .tb-pill-btn {
+  color: var(--text-2);
+}
+
+/* ===== 会话顶栏:遮罩不透明度降为 0,仅保留模糊(降低与壁纸的对比度) =====
+   chat-head 已在 backdrop-filter 列表中保留 blur,此处将白色遮罩底色置为透明,
+   顶栏仅模糊壁纸、不加白色叠层,视觉更融入背景。仅限会话页。 */
+:root[data-has-wallpaper] .chat-head {
+  background: transparent;
+}
+
+/* ===== 窗口顶栏:遮罩不透明度 0 + 模糊度 0(完全透明,壁纸直接透出) =====
+   标题栏不再叠加白色遮罩,也不施加背景模糊,让壁纸在顶栏区域完全清晰可见。 */
+:root[data-has-wallpaper] .titlebar {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ===== 三点导航菜单(nav-pop):提高模糊度,磨砂感更强 ===== */
+:root[data-has-wallpaper] .nav-pop {
+  backdrop-filter: blur(80px) saturate(1.8);
+  -webkit-backdrop-filter: blur(80px) saturate(1.8);
+}
+
+/* ===== 会话消息气泡:50% 白色磨砂面板 + 左右渐变融入背景 =====
+   基础样式中 bubble 为 transparent,壁纸模式下改为 50% 白色底 + blur,
+   与其他卡片视觉一致;空白区域(.main)保持透明,壁纸直接透出。
+   左右边距外扩(--space-5),左右边界用 mask-image 渐变淡出,融入壁纸背景。
+   磨砂层放在 ::before 伪元素上,mask 只影响底色/模糊,不影响文字可读性。 */
+:root[data-has-wallpaper] .msg .bubble {
+  position: relative;
+  isolation: isolate;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-m);
+}
+:root[data-has-wallpaper] .msg .bubble::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius-m);
+  background: rgba(var(--bg-main-rgb), .5);
+  backdrop-filter: blur(50px) saturate(1.8);
+  -webkit-backdrop-filter: blur(50px) saturate(1.8);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 10%, #000 90%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 10%, #000 90%, transparent 100%);
 }

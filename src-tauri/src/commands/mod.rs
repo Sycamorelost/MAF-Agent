@@ -67,6 +67,9 @@ macro_rules! all_commands {
             crate::commands::memory::diff::memory_budget_status,
             crate::commands::settings::get_settings,
             crate::commands::settings::save_settings,
+            crate::commands::settings::pick_wallpaper_file,
+            crate::commands::settings::save_theme_wallpaper,
+            crate::commands::settings::read_wallpaper,
             // 数据目录(可自定义)
             crate::commands::datadir::get_data_dir,
             crate::commands::datadir::pick_data_dir,

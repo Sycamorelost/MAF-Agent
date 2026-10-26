@@ -18,7 +18,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">MAF Agent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.15.1'} · 桌面端 · Windows
+            版本 {appVersion || '1.16.0'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
@@ -27,29 +27,27 @@ export function AboutView({ appVersion }: AboutViewProps) {
         </div>
       </div>
 
-      {/* 版本更新摘要:只列用户可感知的改动,与 val.md §11 的实施记录对应 */}
+      {/* 版本更新摘要:只列用户可感知的改动,与 val.md(背景主题专项计划)的实施范围对应 */}
       <div className="set-card">
-        <div className="set-card-h">本次更新 · v1.15.1</div>
+        <div className="set-card-h">本次更新 · v1.16.0</div>
         <div className="set-card-b">
           <p>
-            修复:MCP server 每次对话被 kill+重启——已改为进程幂等复用,
-            启动探活成功则跳过;子进程控制台弹窗已抑制。
+            新增:主题配色——预制 6 套主题(默认纯白 / 雾霾蓝 / 深夜蓝 / 松烟绿 /
+            暖橙日落 / 樱花粉),一键切换界面配色;只改变背景与文字颜色,
+            不影响按钮与排版。
           </p>
           <p>
-            安全:审计日志新增密钥脱敏与按大小轮转(8 MB × 3 份),避免明文 token
-            落盘与长期运行占满磁盘。
+            新增:自定义壁纸——上传 JPG / PNG / WebP 图片(单张不超过 8 MB)作为界面背景,
+            图片之上叠加半透明渐变保证文字可读;支持遮罩不透明度调节;
+            壁纸与主题互斥,更换即时生效。
           </p>
           <p>
-            安全:SQLite 启用 WAL 与 busy_timeout,降低并发写入的锁等待与「database is
-            locked」。
+            新增:界面字号缩放——85%–130% 预设档位加自定义滑块,设置实时生效并记住,
+            下次启动自动恢复。
           </p>
           <p>
-            修复:翻译历史无法删除、空/空白 API Key 可保存、笔记读写尾随换行、
-            快照版本号与回滚入参不一致。
-          </p>
-          <p>
-            性能:页面按路由懒加载,首屏入口包显著缩小;启动迁移增加快路径;
-            图像历史缩略图落盘缓存,重复进入绘图页不再重复解码。
+            优化:全部背景与文字颜色改为 CSS 变量驱动;消息编辑框改为圆角边框;
+            壁纸缩略图与背景共用同一份图像资源,降低内存占用。
           </p>
         </div>
       </div>

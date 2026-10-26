@@ -10,6 +10,9 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     host: 'localhost',
+    // WebView2 对 backdrop-filter 等合成层属性的 CSS HMR 不重建合成层,
+    // 导致模糊/透明等改动不刷新;关闭 HMR、改用整页重载保证所有样式改动可靠生效。
+    hmr: false,
     // 排除 Rust 编译产物目录,避免 Vite watcher 扫描 target 下被锁的 DLL/EXE 导致 EBUSY
     watch: {
       ignored: ['**/src-tauri/target/**', '**/target/**', '**/dist/**'],

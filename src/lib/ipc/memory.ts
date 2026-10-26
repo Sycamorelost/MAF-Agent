@@ -77,6 +77,10 @@ export interface AppSettings {
   minimize_to_tray: boolean;
   /** 导航菜单中隐藏的功能项(对话/设置始终显示) */
   hidden_nav_items: string[];
+  /** 自定义壁纸绝对路径(null = 未设置) */
+  wallpaper_path: string | null;
+  /** 壁纸遮罩不透明度 0-100(0=壁纸完全可见,100=主题默认遮罩) */
+  wallpaper_cover: number;
 }
 
 export const getSettings = () => invoke<AppSettings>('get_settings');
@@ -86,6 +90,16 @@ export const saveSettings = async (settings: AppSettings) => {
   await invoke<void>('save_settings', { settings });
   await emit('settings_changed', settings);
 };
+
+/** 保存自定义壁纸:校验并拷贝到数据目录,返回可挂载的绝对路径。 */
+export const saveThemeWallpaper = (sourcePath: string) =>
+  invoke<string>('save_theme_wallpaper', { sourcePath });
+
+/** 弹出原生图片选择器选择壁纸;用户取消返回 null。 */
+export const pickWallpaperFile = () => invoke<string | null>('pick_wallpaper_file');
+
+/** 读取已存储的壁纸文件,返回 base64 data URL(WebView2 无法加载 file://,故走 data URL)。 */
+export const readWallpaper = (path: string) => invoke<string>('read_wallpaper', { path });
 
 // ============ 数据目录(可自定义)============
 

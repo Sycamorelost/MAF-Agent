@@ -32,7 +32,7 @@ export const NAV: NavGroup[] = [
   {
     grp: '界面',
     items: [
-      { id: 'appearance', label: '字体大小', icon: IconFileText },
+      { id: 'appearance', label: '主题与字体大小', icon: IconFileText },
       { id: 'navmenu', label: '导航菜单', icon: IconChat },
     ],
   },
