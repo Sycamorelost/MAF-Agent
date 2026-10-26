@@ -45,3 +45,11 @@ desktop.ini
 .env.local
 .env.*.local
 !.env.example
+
+# ===== 内部文档（审计报告 / 计划文档，不随仓库分发） =====
+# val.md：安全/功能/性能评估报告（含内部实测数据与运行环境细节）
+val.md
+plan/
+plans/
+*.audit.md
+*.plan.md
