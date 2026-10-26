@@ -37,17 +37,16 @@ pub struct BudgetStatus {
 }
 
 pub use crud::{
-    append_message, clear_messages, create_session, delete_branch, delete_message,
-    delete_messages_from, delete_session, delete_session_if_empty, fork_branch, get_session,
-    list_branches, list_messages, list_sessions, prune_empty_sessions, rename_branch,
+    AppendMessageInput, SessionInfo, append_message, clear_messages, create_session, delete_branch,
+    delete_message, delete_messages_from, delete_session, delete_session_if_empty, fork_branch,
+    get_session, list_branches, list_messages, list_sessions, prune_empty_sessions, rename_branch,
     rename_session, set_active_branch, set_session_memory_strategy, set_session_model,
-    set_session_web_search, update_message, update_session_settings, AppendMessageInput,
-    SessionInfo,
+    set_session_web_search, update_message, update_session_settings,
 };
 pub use diff::{
-    append_memory, list_memory_versions, memory_budget_status, needs_summarize, read_memory,
-    read_memory_version, rollback_memory, snapshot_memory, summarize_memory, unwatch_memory,
-    watch_memory, write_memory, SummarizeMemoryInput,
+    SummarizeMemoryInput, append_memory, list_memory_versions, memory_budget_status,
+    needs_summarize, read_memory, read_memory_version, rollback_memory, snapshot_memory,
+    summarize_memory, unwatch_memory, watch_memory, write_memory,
 };
 
 #[cfg(test)]
@@ -95,7 +94,10 @@ mod tests {
     fn append_to_section_at_end_when_no_following_heading() {
         let body = "# 摘要\n\ns\n\n# 资料\n\n- 旧";
         let out = append_to_section(body, "资料", "- 新");
-        assert!(out.contains("# 资料\n\n\n- 新") || out.contains("# 资料\n\n- 新"), "插入到资料节");
+        assert!(
+            out.contains("# 资料\n\n\n- 新") || out.contains("# 资料\n\n- 新"),
+            "插入到资料节"
+        );
         assert!(out.contains("- 旧"), "旧内容保留");
     }
 }

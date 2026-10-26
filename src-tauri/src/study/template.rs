@@ -126,7 +126,9 @@ pub fn builtin_content(key: &str) -> Option<&'static str> {
 }
 
 fn path() -> PathBuf {
-    crate::paths::data_dir().join("study").join("templates.json")
+    crate::paths::data_dir()
+        .join("study")
+        .join("templates.json")
 }
 
 /// 读取全部自定义覆盖(文件缺失/损坏返回空表)。
@@ -144,10 +146,10 @@ pub fn find_override(key: &str) -> Option<TemplateOverride> {
 
 /// 生效模板:自定义覆盖 > 内置。
 pub fn effective(key: &str) -> String {
-    if let Some(o) = find_override(key) {
-        if !o.content.trim().is_empty() {
-            return o.content;
-        }
+    if let Some(o) = find_override(key)
+        && !o.content.trim().is_empty()
+    {
+        return o.content;
     }
     builtin_content(key).unwrap_or_default().to_string()
 }

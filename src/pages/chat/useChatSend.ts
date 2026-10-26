@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BubbleMessage } from '../../components/MessageBubble';
@@ -9,7 +9,9 @@ import { useThinkingStore, DEFAULT_THINKING_LEVEL } from '../../stores/thinking'
 import type { AttachmentMeta, AgentTemplate, MessageRow, MemoryStrategy, SessionRow } from '../../lib/ipc';
 import * as ipc from '../../lib/ipc';
 import { studyMemoryDigest } from '../../lib/ipc/study';
+import { mcpCollectTools } from '../../lib/ipc/mcp';
 import { maybeAutoSummarize, composeSystemPrompt, compressMemoryIfOverBudget } from './memoryContext';
+import { DEFAULT_SYSTEM_PROMPT, withProtocol } from '../../lib/systemPrompt';
 import { useEditResend, buildUserContent, buildSendHistory, rebuildSendHistory } from './attachments';
 export interface ChatSendParams {
   sessionId: string | undefined;
@@ -85,11 +87,12 @@ export function useChatSend({
    *  后端已把渲染变量的 prompt 写入);agent 模板原文仅在旧数据(绑定但会话 prompt 为空)时兜底。 */
   const buildSystemWith = useCallback(
     (memBody: string, strategy: MemoryStrategy): string => {
-      const base =
+      const core =
         session?.system_prompt?.trim() ||
         agent?.system_prompt ||
-        '你是 MAF Agent,一款专为学习、调研而创造的智能体框架软件。';
-      return composeSystemPrompt(base, memBody, strategy, studyDigest);
+        DEFAULT_SYSTEM_PROMPT;
+      // 所有会话统一追加能力协议(工具 / 记忆分工 / 诚实性 / 失败话术)
+      return composeSystemPrompt(withProtocol(core), memBody, strategy, studyDigest);
     },
     [session?.system_prompt, agent, studyDigest],
   );
@@ -122,17 +125,36 @@ export function useChatSend({
           : thinkingSel && !thinkingSel.on
             ? 'off'
             : (thinkingSel?.level ?? DEFAULT_THINKING_LEVEL);
+        // Phase 5e:收集已启用 MCP server 的工具定义;空则不启用工具调用(行为不变)
+        let tools: ipc.ToolDef[] | undefined;
+        try {
+          const collected = await mcpCollectTools();
+          if (collected.length > 0) tools = collected;
+        } catch {
+          /* MCP 未配置/未启动 —— 静默降级 */
+        }
         const { done, cancel } = ipc.chatStream(
           {
             provider_id: eff.providerId, model: eff.model, messages: history,
             temperature: null, max_tokens: null, top_p: null,
             custom_base_url: null, custom_display_name: null,
             session_id: sessionId, reasoning_effort: reasoningEffort,
+            tools,
           },
           (chunk) => {
             if (chunk.type === 'delta') pushStreamDelta(sessionId, chunk.content);
             // 思考流分流:独立缓冲去抖,折叠块展示,不进正文
             else if (chunk.type === 'reasoning') pushStreamReasoning(sessionId, chunk.content);
+            // Phase 5e:工具执行结果 —— 以 maf-tool 围栏块并入正文(小字一行 + 折叠详情)
+            else if (chunk.type === 'tool_call_result') {
+              const body = chunk.content.length > 4000
+                ? `${chunk.content.slice(0, 4000)}\n…(已截断)`
+                : chunk.content;
+              const payload = JSON.stringify({
+                s: chunk.server_name, t: chunk.tool_name, ok: chunk.ok, c: body,
+              });
+              pushStreamDelta(sessionId, `\n\n\`\`\`maf-tool\n${payload}\n\`\`\`\n\n`);
+            }
             else if (chunk.type === 'done') {
               tokens = (chunk.prompt_tokens ?? 0) + (chunk.completion_tokens ?? 0);
               if (chunk.reasoning_tokens != null) {

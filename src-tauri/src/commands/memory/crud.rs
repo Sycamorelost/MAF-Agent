@@ -25,8 +25,7 @@ pub fn create_session(
     // 先校验模板存在,避免会话建了一半才失败
     let strategy = match &agent_id {
         Some(aid) => {
-            let tpl =
-                crate::agents::find(aid).ok_or_else(|| format!("Agent 模板不存在:{aid}"))?;
+            let tpl = crate::agents::find(aid).ok_or_else(|| format!("Agent 模板不存在:{aid}"))?;
             Some(tpl.memory_strategy)
         }
         None => None,
@@ -56,6 +55,15 @@ pub fn get_session(id: String) -> Result<Option<sessions::SessionRow>, String> {
     sessions::get(&id)
 }
 
+/// 读取会话任务清单(harness todo 面板初始拉取;后续变更由 `session-todos-{id}` 事件推送)。
+#[tauri::command]
+pub fn session_get_todos(session_id: String) -> Result<Vec<crate::db::todos::TodoItem>, String> {
+    let conn = crate::db::conn()
+        .lock()
+        .map_err(|e| format!("db lock 失败: {e}"))?;
+    crate::db::todos::list(&conn, &session_id)
+}
+
 /// 改会话标题(同时同步 memory.md frontmatter 的 conversation)。
 #[tauri::command]
 pub fn rename_session(id: String, title: String) -> Result<(), String> {
@@ -79,7 +87,8 @@ pub fn delete_session(id: String, state: State<'_, WatcherState>) -> Result<(), 
     sessions::delete(&id)?;
     let dir = memory::session_dir(&id);
     if dir.exists() {
-        std::fs::remove_dir_all(&dir).map_err(|e| format!("remove {} failed: {e}", dir.display()))?;
+        std::fs::remove_dir_all(&dir)
+            .map_err(|e| format!("remove {} failed: {e}", dir.display()))?;
     }
     Ok(())
 }
@@ -109,7 +118,9 @@ pub fn prune_empty_sessions(
     let ids = sessions::prune_empty(grace_secs.unwrap_or(300))?;
     // prune 内部 WHERE updated < cutoff 只查库,返回的 id 由数据库保证合法,
     // 但清空磁盘目录前统一校验,防御纵深
-    for id in &ids { memory::validate_id(id)?; }
+    for id in &ids {
+        memory::validate_id(id)?;
+    }
     for id in &ids {
         let _ = state.registry.unwatch(id);
         let dir = memory::session_dir(id);
@@ -125,7 +136,7 @@ pub fn prune_empty_sessions(
 #[derive(Debug, Deserialize)]
 pub struct AppendMessageInput {
     pub session_id: String,
-    pub role: String,               // user / assistant / system
+    pub role: String, // user / assistant / system
     pub content: String,
     pub model_id: Option<String>,
     #[serde(default)]
@@ -167,6 +178,32 @@ pub fn list_messages(
         _ => sessions::active_branch(&session_id)?,
     };
     messages::list(&session_id, &branch)
+}
+
+/// 分页消息(默认每页 100 条;`before_id` 用于「加载更早」)。
+#[derive(serde::Serialize)]
+pub struct MessagePage {
+    pub messages: Vec<messages::MessageRow>,
+    pub has_more: bool,
+}
+
+#[tauri::command]
+pub fn list_messages_page(
+    session_id: String,
+    branch_id: Option<String>,
+    before_id: Option<i64>,
+    limit: Option<usize>,
+) -> Result<MessagePage, String> {
+    let branch = match branch_id {
+        Some(b) if !b.trim().is_empty() => b,
+        _ => sessions::active_branch(&session_id)?,
+    };
+    let (msgs, has_more) =
+        messages::list_page(&session_id, &branch, before_id, limit.unwrap_or(100))?;
+    Ok(MessagePage {
+        messages: msgs,
+        has_more,
+    })
 }
 
 /// 清空当前激活分支的自有消息(其他分支不受影响)。

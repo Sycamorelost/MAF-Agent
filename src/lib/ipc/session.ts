@@ -15,6 +15,28 @@ export const listSessions = () => invoke<SessionRow[]>('list_sessions');
 
 export const getSession = (id: string) => invoke<SessionRow | null>('get_session', { id });
 
+// ============ harness 任务清单 ============
+
+/** 任务清单条目(与后端 db::todos::TodoItem 对齐)。 */
+export interface TodoItem {
+  id: string;
+  content: string;
+  /** pending | in_progress | completed | cancelled */
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | string;
+  /** high | medium | low */
+  priority: 'high' | 'medium' | 'low' | string;
+}
+
+/** 初始拉取会话任务清单;后续变更由 `session-todos-{id}` 事件推送。 */
+export const sessionGetTodos = (sessionId: string) =>
+  invoke<TodoItem[]>('session_get_todos', { sessionId });
+
+/** todo 变更事件名(后端 dispatcher 在 todo_write 成功后推送)。 */
+export const todosEvent = (sessionId: string) => `session-todos-${sessionId}`;
+
+/** 会话通知事件名(如上下文自动压缩提示)。 */
+export const chatNoticeEvent = (sessionId: string) => `chat-notice-${sessionId}`;
+
 export const renameSession = (id: string, title: string) =>
   invoke<void>('rename_session', { id, title });
 

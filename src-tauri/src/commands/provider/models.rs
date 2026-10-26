@@ -2,13 +2,12 @@
 
 use crate::provider::model_cards::{load_model_cache, save_model_cache};
 use crate::provider::{
-    model_cards,
+    ProviderError, model_cards,
     model_config::{self, ProviderModelConfig},
     openai::OpenAiCompat,
     reasoning,
     rotation::{self, RotationState},
     templates,
-    ProviderError,
 };
 
 use super::assembly::validate_base_url_scheme;
@@ -122,7 +121,10 @@ pub async fn fetch_provider_models(
 /// 查询某模型的思考能力(手动修正 > 内置规则表推断 > 不支持)。
 /// 前端据此决定是否渲染思考控件、是否允许关闭/选择档位。
 #[tauri::command]
-pub fn get_reasoning_capability(provider_id: String, model: String) -> reasoning::ReasoningCapability {
+pub fn get_reasoning_capability(
+    provider_id: String,
+    model: String,
+) -> reasoning::ReasoningCapability {
     reasoning::resolve(&provider_id, &model)
 }
 
@@ -136,7 +138,7 @@ pub fn get_reasoning_override(
     model_cards::load_model_cache()
         .get(&provider_id)
         .and_then(|list| list.iter().find(|m| m.id == model))
-        .and_then(|m| m.reasoning.clone())
+        .and_then(|m| m.reasoning)
 }
 
 /// 手动修正模型思考能力(写 provider_models.json 缓存条目的 reasoning 字段)。
@@ -158,16 +160,19 @@ pub fn save_reasoning_override(
         (Some(m), None) => m.reasoning = None,
         // 模型不在缓存中(如自定义模板未拉取过列表):补一个最小条目
         (None, Some(c)) => {
-            cache.entry(provider_id).or_default().push(model_cards::FetchedModel {
-                id: model,
-                name: None,
-                context_window: None,
-                max_output: None,
-                input_modalities: Vec::new(),
-                output_modalities: Vec::new(),
-                pricing: None,
-                reasoning: Some(c),
-            });
+            cache
+                .entry(provider_id)
+                .or_default()
+                .push(model_cards::FetchedModel {
+                    id: model,
+                    name: None,
+                    context_window: None,
+                    max_output: None,
+                    input_modalities: Vec::new(),
+                    output_modalities: Vec::new(),
+                    pricing: None,
+                    reasoning: Some(c),
+                });
         }
         (None, None) => {}
     }

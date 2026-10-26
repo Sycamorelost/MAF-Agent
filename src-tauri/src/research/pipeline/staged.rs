@@ -1,16 +1,16 @@
 //! 单个检索阶段的 ReAct 内层循环。
 
+use super::super::EngineParams;
 use super::super::events::{EventSink, ResearchEvent, SourceItem};
 use super::super::llm::est_tok;
-use super::super::prompts::{sources_digest, DecideCtx};
+use super::super::prompts::{DecideCtx, sources_digest};
 use super::super::skills;
 use super::super::stage;
 use super::super::store;
-use super::super::validate::{verify_angles, Decision};
-use super::super::EngineParams;
+use super::super::validate::{Decision, verify_angles};
 use super::decide::decide;
 use super::synthesis::run_stage_summary;
-use super::{assemble_summaries, check_cancel, wait_gate, Pool, RunError};
+use super::{Pool, RunError, assemble_summaries, check_cancel, wait_gate};
 
 /// 单个检索阶段:ReAct 内层循环 + 阶段内约束护栏 + min_sources 补轮 + 角度校验 + 阶段摘要。
 /// 返回 (阶段摘要, 执行轮次, partial);partial=true 表示因失败策略提前中止(M2)。
@@ -154,18 +154,29 @@ pub(crate) async fn run_research_stage(
         // 本轮待执行查询:先按全局/阶段检索上限与全局资料上限过滤
         let mut todo: Vec<&String> = Vec::new();
         for q in &queries {
-            if p.params.max_searches > 0 && pool.searches_done + todo.len() as u32 >= p.params.max_searches {
-                obs_lines.push(format!("已达全局最大检索次数 {} 次,停止检索", p.params.max_searches));
+            if p.params.max_searches > 0
+                && pool.searches_done + todo.len() as u32 >= p.params.max_searches
+            {
+                obs_lines.push(format!(
+                    "已达全局最大检索次数 {} 次,停止检索",
+                    p.params.max_searches
+                ));
                 break;
             }
             if eff.max_searches > 0
                 && pool.searches_done + todo.len() as u32 - searches0 >= eff.max_searches
             {
-                obs_lines.push(format!("已达本阶段检索次数上限 {} 次,停止检索", eff.max_searches));
+                obs_lines.push(format!(
+                    "已达本阶段检索次数上限 {} 次,停止检索",
+                    eff.max_searches
+                ));
                 break;
             }
             if p.params.max_sources > 0 && pool.sources.len() >= p.params.max_sources as usize {
-                obs_lines.push(format!("已达全局资料上限 {} 条,停止检索", p.params.max_sources));
+                obs_lines.push(format!(
+                    "已达全局资料上限 {} 条,停止检索",
+                    p.params.max_sources
+                ));
                 break;
             }
             todo.push(q);
@@ -295,7 +306,10 @@ pub(crate) async fn run_research_stage(
         if eff.token_budget > 0 && pool.est_tokens - tok0 > eff.token_budget as u64 {
             sink.emit(ResearchEvent::Observation {
                 round,
-                content: format!("已达本阶段 Token 预算上限(约 {} tok),阶段收尾", eff.token_budget),
+                content: format!(
+                    "已达本阶段 Token 预算上限(约 {} tok),阶段收尾",
+                    eff.token_budget
+                ),
                 stage: no,
             });
             break;
@@ -304,7 +318,10 @@ pub(crate) async fn run_research_stage(
         if p.params.token_budget > 0 && pool.est_tokens > p.params.token_budget as u64 {
             sink.emit(ResearchEvent::Observation {
                 round,
-                content: format!("已达全局 Token 预算上限(约 {} tok),阶段收尾", p.params.token_budget),
+                content: format!(
+                    "已达全局 Token 预算上限(约 {} tok),阶段收尾",
+                    p.params.token_budget
+                ),
                 stage: no,
             });
             break;
@@ -313,7 +330,11 @@ pub(crate) async fn run_research_stage(
 
     let rounds_done = round;
     // 必覆盖角度校验(提醒不阻断):角度词在本阶段资料与观察中均未出现 → 缺失
-    let missing = verify_angles(&eff.must_cover_angles, &pool.sources[stage_start..], &observations);
+    let missing = verify_angles(
+        &eff.must_cover_angles,
+        &pool.sources[stage_start..],
+        &observations,
+    );
     if !missing.is_empty() {
         sink.emit(ResearchEvent::AngleGap {
             stage: no,

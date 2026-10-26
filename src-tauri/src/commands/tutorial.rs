@@ -54,8 +54,8 @@ fn parse_tutorial(file_name: &str, raw: &str) -> Result<TutorialDoc, String> {
     let end = rest
         .find("\n---")
         .ok_or_else(|| format!("{file_name}: front-matter 未闭合"))?;
-    let fm: FrontMatter =
-        serde_yaml::from_str(&rest[..end]).map_err(|e| format!("{file_name}: YAML 解析失败: {e}"))?;
+    let fm: FrontMatter = serde_yaml::from_str(&rest[..end])
+        .map_err(|e| format!("{file_name}: YAML 解析失败: {e}"))?;
     let content = rest[end + 4..].trim_start_matches(['\r', '\n']).to_string();
     Ok(TutorialDoc {
         id: fm.id,
@@ -121,7 +121,10 @@ mod tests {
     fn load_repo_tutorials_sorted_and_filtered() {
         // 仓库自带 tutorials/,至少含 research 页教程
         let docs = load_tutorials_from(&tutorials_dir(), "research");
-        assert!(!docs.is_empty(), "repo tutorials/ should contain research docs");
+        assert!(
+            !docs.is_empty(),
+            "repo tutorials/ should contain research docs"
+        );
         assert!(docs.iter().all(|d| d.page == "research"));
         let orders: Vec<i64> = docs.iter().map(|d| d.order).collect();
         let mut sorted = orders.clone();

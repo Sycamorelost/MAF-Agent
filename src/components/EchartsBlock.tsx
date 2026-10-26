@@ -1,13 +1,12 @@
 /**
  * ECharts 图表渲染器(DOM-first,与 MermaidBlock 同一套约定):
  *   1. 动态 import echarts/core(按需注册 bar/line/pie/scatter + SVG 渲染器)
- *   2. 以容器实测宽度初始化,setOption 后取出最终 SVG
+ *   2. SSR 模式同步 setOption + renderToSVGString() 取出完整 SVG
  *   3. dispose 实例,移除 SVG 固定 width/height 保留 viewBox,交给 CSS 原生缩放
  * 宽度适配零重绘(不挂 ResizeObserver,避免清空重绘闪烁),导出 DOM 序列化即所见即所得。
  * 解析/渲染失败降级为普通代码块展示,不阻塞报告阅读。
  */
 import { useEffect, useRef, useState } from 'react';
-import type { ECharts } from 'echarts/core';
 
 /** echarts 按需注册模块(与报告图件契约支持的类型一致) */
 let echartsPromise: Promise<{
@@ -73,7 +72,6 @@ export default function EchartsBlock({ code }: { code: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    let chart: ECharts | null = null;
     setErr(null);
     setDone(false);
 
@@ -90,35 +88,26 @@ export default function EchartsBlock({ code }: { code: string }) {
         if (cancelled || !hostRef.current) return;
 
         hostRef.current.innerHTML = '';
-        // 以容器实测宽度初始化,高度固定 360,渲染完成即 dispose
-        const stage = document.createElement('div');
-        stage.style.width = `${Math.max(hostRef.current.clientWidth, 240)}px`;
-        stage.style.height = '360px';
-        hostRef.current.appendChild(stage);
-
-        chart = mod.init(stage, undefined, { renderer: 'svg', ssr: false });
-        chart.setOption(option);
-        const svg = stage.querySelector('svg');
-        if (!svg) {
+        // SSR 模式同步产出完整 SVG 字符串:普通模式下 SVG 由动画帧异步绘制,
+        // 同步取 DOM 只能拿到空 <svg>,dispose 还会把它清空 —— 图必然空白。
+        const width = Math.max(hostRef.current.clientWidth, 240);
+        const height = 360;
+        const inst = (mod.init as any)(null, null, { renderer: 'svg', ssr: true, width, height });
+        inst.setOption({ ...option, animation: false });
+        const svgStr: string = inst.renderToSVGString();
+        mod.dispose(inst);
+        if (!svgStr) {
           setErr('ECharts 未生成 SVG');
-          mod.dispose(chart);
-          chart = null;
           return;
         }
-        const w = svg.getAttribute('width');
-        const h = svg.getAttribute('height');
-        if (w && h && !svg.getAttribute('viewBox')) {
-          svg.setAttribute('viewBox', `0 0 ${parseFloat(w)} ${parseFloat(h)}`);
+        hostRef.current.innerHTML = svgStr;
+        // 交给 CSS 原生缩放(与 mermaid 同策略),避免固定像素宽度压破容器
+        const svg = hostRef.current.querySelector('svg');
+        if (svg) {
+          svg.removeAttribute('width');
+          svg.removeAttribute('height');
+          svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         }
-        // 移除固定尺寸交给 CSS 缩放(与 mermaid 同策略)
-        svg.removeAttribute('width');
-        svg.removeAttribute('height');
-        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-        // SVG 就位后整体搬出 stage,丢弃实例
-        hostRef.current.appendChild(svg);
-        mod.dispose(chart);
-        chart = null;
-        stage.remove();
         setDone(true);
       } catch (e: unknown) {
         if (cancelled) return;
@@ -129,14 +118,6 @@ export default function EchartsBlock({ code }: { code: string }) {
 
     return () => {
       cancelled = true;
-      if (chart) {
-        // 卸载时兜底释放实例,避免测试/快速切换场景泄漏
-        try {
-          chart.dispose();
-        } catch {
-          /* 忽略释放异常 */
-        }
-      }
     };
   }, [code]);
 

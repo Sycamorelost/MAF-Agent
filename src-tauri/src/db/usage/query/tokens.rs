@@ -1,11 +1,11 @@
 //! 复算用 token 构成聚合。
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 use crate::db;
 
-use super::{since_secs, COST};
+use super::{COST, since_secs};
 
 /// 复算用的 token 构成聚合(按 provider × model,仅成功请求)。
 #[derive(Debug, Clone, Serialize, Deserialize)]

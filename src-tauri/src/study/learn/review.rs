@@ -3,8 +3,8 @@
 use chrono::{Local, NaiveDate};
 use serde::Serialize;
 
-use crate::study::store;
 use crate::study::PlanPayload;
+use crate::study::store;
 
 use super::conn;
 use super::mastery::nodes_state_conn;
@@ -161,7 +161,14 @@ pub(crate) fn review_done_conn(
             |r| r.get(0),
         )
         .unwrap_or_else(|_| "(已删除知识点)".into());
-    Ok(review_item_from((id, node_id, name, due, next, correct as i64)))
+    Ok(review_item_from((
+        id,
+        node_id,
+        name,
+        due,
+        next,
+        correct as i64,
+    )))
 }
 
 // ---------------- 今日待办 ----------------
@@ -210,13 +217,24 @@ pub(crate) fn today_conn(
 ) -> Result<TodayPlan, String> {
     let reviews = review_queue_conn(conn, plan_id)?;
     let Some(pl) = payload else {
-        return Ok(TodayPlan { week: 0, total_weeks: 0, stage_names: Vec::new(), nodes: Vec::new(), reviews });
+        return Ok(TodayPlan {
+            week: 0,
+            total_weeks: 0,
+            stage_names: Vec::new(),
+            nodes: Vec::new(),
+            reviews,
+        });
     };
     let created: String = conn
-        .query_row("SELECT created FROM plans WHERE id=?1", [plan_id], |r| r.get(0))
+        .query_row("SELECT created FROM plans WHERE id=?1", [plan_id], |r| {
+            r.get(0)
+        })
         .unwrap_or_default();
-    let created_date =
-        NaiveDate::parse_from_str(created.get(..created.len().min(10)).unwrap_or(""), "%Y-%m-%d").ok();
+    let created_date = NaiveDate::parse_from_str(
+        created.get(..created.len().min(10)).unwrap_or(""),
+        "%Y-%m-%d",
+    )
+    .ok();
     let total_weeks = pl.schedule.len();
     let week = created_date
         .map(|c| current_week(c, Local::now().date_naive(), total_weeks))
@@ -247,16 +265,22 @@ pub(crate) fn today_conn(
             mastery: n.mastery,
         })
         .collect();
-    Ok(TodayPlan { week, total_weeks, stage_names, nodes, reviews })
+    Ok(TodayPlan {
+        week,
+        total_weeks,
+        stage_names,
+        nodes,
+        reviews,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Duration;
     use crate::study::learn::mastery::set_mastery_conn;
     use crate::study::learn::test_util::{seed_node, seed_plan};
     use crate::study::{PlanPayload, ScheduleWeek, StageSpec};
+    use chrono::Duration;
 
     #[test]
     fn next_interval_promotes_and_resets() {
@@ -326,11 +350,19 @@ mod tests {
         // 自评 0.5,无测验 → mastery 0.5;评 1.0 置 done
         let m = set_mastery_conn(&conn, "p0000003", 1, 0.5).unwrap();
         assert!((m - 0.5).abs() < 1e-9);
-        let done: Option<String> = conn.query_row("SELECT done_at FROM knowledge_nodes WHERE id=1", [], |x| x.get(0)).unwrap();
+        let done: Option<String> = conn
+            .query_row("SELECT done_at FROM knowledge_nodes WHERE id=1", [], |x| {
+                x.get(0)
+            })
+            .unwrap();
         assert!(done.is_none());
         let m2 = set_mastery_conn(&conn, "p0000003", 1, 1.0).unwrap();
         assert!((m2 - 1.0).abs() < 1e-9);
-        let done2: Option<String> = conn.query_row("SELECT done_at FROM knowledge_nodes WHERE id=1", [], |x| x.get(0)).unwrap();
+        let done2: Option<String> = conn
+            .query_row("SELECT done_at FROM knowledge_nodes WHERE id=1", [], |x| {
+                x.get(0)
+            })
+            .unwrap();
         assert!(done2.is_some(), "评掌握自动置 done_at");
 
         // today:无 payload → 空周但复习仍在
@@ -350,15 +382,28 @@ mod tests {
                 milestone: "m".into(),
             }],
             schedule: vec![
-                ScheduleWeek { week: 1, stage: 0, focus: "基础".into(), minutes_per_day: 30 },
-                ScheduleWeek { week: 2, stage: 0, focus: "基础".into(), minutes_per_day: 30 },
+                ScheduleWeek {
+                    week: 1,
+                    stage: 0,
+                    focus: "基础".into(),
+                    minutes_per_day: 30,
+                },
+                ScheduleWeek {
+                    week: 2,
+                    stage: 0,
+                    focus: "基础".into(),
+                    minutes_per_day: 30,
+                },
             ],
             ..Default::default()
         };
         let tp2 = today_conn(&conn, "p0000003", Some(&payload)).unwrap();
         assert!(tp2.week >= 1);
         assert_eq!(tp2.stage_names, vec!["基础".to_string()]);
-        assert!(tp2.nodes.iter().all(|n| n.node_name != "A"), "done 节点不进今日待办");
+        assert!(
+            tp2.nodes.iter().all(|n| n.node_name != "A"),
+            "done 节点不进今日待办"
+        );
         assert!(tp2.nodes.iter().any(|n| n.node_name == "B"));
     }
 }

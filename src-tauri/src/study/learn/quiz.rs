@@ -9,7 +9,7 @@ use super::conn;
 use super::mastery::{grade, weighted_mastery};
 use super::now_str;
 use super::plus_days;
-use super::review::{next_interval, upsert_review_conn, INTERVALS};
+use super::review::{INTERVALS, next_interval, upsert_review_conn};
 
 /// 测验题目。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,7 +97,11 @@ pub fn parse_quiz(text: &str) -> Option<Vec<QuizQuestion>> {
         let options = item
             .get("options")
             .and_then(|x| x.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
         let explanation = item
             .get("explanation")
@@ -117,11 +121,7 @@ pub fn parse_quiz(text: &str) -> Option<Vec<QuizQuestion>> {
             break;
         }
     }
-    if out.len() >= 3 {
-        Some(out)
-    } else {
-        None
-    }
+    if out.len() >= 3 { Some(out) } else { None }
 }
 
 fn quiz_row_conn(
@@ -142,7 +142,11 @@ fn quiz_row_conn(
 }
 
 /// 提交测验:客观题确定性判分,简答题自评;落作答历史、更新测验分与掌握度、排复习。
-pub fn quiz_submit(plan_id: &str, quiz_id: i64, answers: &[QuizAnswerIn]) -> Result<QuizResult, String> {
+pub fn quiz_submit(
+    plan_id: &str,
+    quiz_id: i64,
+    answers: &[QuizAnswerIn],
+) -> Result<QuizResult, String> {
     let c = conn()?;
     quiz_submit_conn(&c, plan_id, quiz_id, answers)
 }
@@ -213,13 +217,24 @@ pub(crate) fn quiz_submit_conn(
             Some(c) => next_interval(c, true),
             None => INTERVALS[1],
         };
-        upsert_review_conn(conn, &plan_id, node_id, &plus_days(next), next, 1)?;
+        upsert_review_conn(conn, plan_id, node_id, &plus_days(next), next, 1)?;
     } else {
-        upsert_review_conn(conn, &plan_id, node_id, &plus_days(INTERVALS[0]), INTERVALS[0], 0)?;
+        upsert_review_conn(
+            conn,
+            plan_id,
+            node_id,
+            &plus_days(INTERVALS[0]),
+            INTERVALS[0],
+            0,
+        )?;
     }
 
-    store::add_log(conn, &plan_id, Some(node_id), "quiz", 0)?;
-    Ok(QuizResult { score, mastery, results })
+    store::add_log(conn, plan_id, Some(node_id), "quiz", 0)?;
+    Ok(QuizResult {
+        score,
+        mastery,
+        results,
+    })
 }
 
 #[cfg(test)]
@@ -247,7 +262,11 @@ mod tests {
         assert_eq!(qs[2].qtype, "short");
         assert_eq!(qs[4].stem, "Q5");
         assert!(parse_quiz("no json").is_none());
-        assert!(parse_quiz(r#"{"questions":[{"idx":0,"type":"short","stem":"Q","answer":"a"}]}"#).is_none(), "不足 3 题判失败");
+        assert!(
+            parse_quiz(r#"{"questions":[{"idx":0,"type":"short","stem":"Q","answer":"a"}]}"#)
+                .is_none(),
+            "不足 3 题判失败"
+        );
     }
 
     #[test]
@@ -260,32 +279,88 @@ mod tests {
 
         // 全对:0.8 阈值之上 → 晋级到 3 天
         let answers = vec![
-            QuizAnswerIn { question_idx: 0, user_answer: "A".into(), self_correct: None },
-            QuizAnswerIn { question_idx: 1, user_answer: "对".into(), self_correct: None },
-            QuizAnswerIn { question_idx: 2, user_answer: "答了".into(), self_correct: Some(true) },
+            QuizAnswerIn {
+                question_idx: 0,
+                user_answer: "A".into(),
+                self_correct: None,
+            },
+            QuizAnswerIn {
+                question_idx: 1,
+                user_answer: "对".into(),
+                self_correct: None,
+            },
+            QuizAnswerIn {
+                question_idx: 2,
+                user_answer: "答了".into(),
+                self_correct: Some(true),
+            },
         ];
         let r = quiz_submit_conn(&conn, "p0000001", 9, &answers).unwrap();
         assert!((r.score - 1.0).abs() < 1e-9);
-        assert!((r.mastery - 1.0).abs() < 1e-9, "测验分 1.0 且无自评 → mastery = 1.0");
-        let iv: i64 = conn.query_row("SELECT interval_days FROM reviews WHERE plan_id='p0000001' AND node_id=1", [], |x| x.get(0)).unwrap();
+        assert!(
+            (r.mastery - 1.0).abs() < 1e-9,
+            "测验分 1.0 且无自评 → mastery = 1.0"
+        );
+        let iv: i64 = conn
+            .query_row(
+                "SELECT interval_days FROM reviews WHERE plan_id='p0000001' AND node_id=1",
+                [],
+                |x| x.get(0),
+            )
+            .unwrap();
         assert_eq!(iv, 3);
-        let n: i64 = conn.query_row("SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id=9", [], |x| x.get(0)).unwrap();
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id=9",
+                [],
+                |x| x.get(0),
+            )
+            .unwrap();
         assert_eq!(n, 3);
-        let qsc: f64 = conn.query_row("SELECT quiz_score FROM knowledge_nodes WHERE id=1", [], |x| x.get(0)).unwrap();
+        let qsc: f64 = conn
+            .query_row(
+                "SELECT quiz_score FROM knowledge_nodes WHERE id=1",
+                [],
+                |x| x.get(0),
+            )
+            .unwrap();
         assert!((qsc - 1.0).abs() < 1e-9);
 
         // 低分:回退到 1 天,加权 mastery = 0.5*0.4 + 0.4*0.6
         let answers = vec![
-            QuizAnswerIn { question_idx: 0, user_answer: "B".into(), self_correct: None },
-            QuizAnswerIn { question_idx: 1, user_answer: "对".into(), self_correct: None },
-            QuizAnswerIn { question_idx: 2, user_answer: "答了".into(), self_correct: Some(false) },
+            QuizAnswerIn {
+                question_idx: 0,
+                user_answer: "B".into(),
+                self_correct: None,
+            },
+            QuizAnswerIn {
+                question_idx: 1,
+                user_answer: "对".into(),
+                self_correct: None,
+            },
+            QuizAnswerIn {
+                question_idx: 2,
+                user_answer: "答了".into(),
+                self_correct: Some(false),
+            },
         ];
-        conn.execute("UPDATE knowledge_nodes SET self_rating=0.5 WHERE id=1", []).unwrap();
+        conn.execute("UPDATE knowledge_nodes SET self_rating=0.5 WHERE id=1", [])
+            .unwrap();
         let r2 = quiz_submit_conn(&conn, "p0000001", 9, &answers).unwrap();
         assert!((r2.score - (1.0 / 3.0)).abs() < 1e-9);
-        let iv2: i64 = conn.query_row("SELECT interval_days FROM reviews WHERE plan_id='p0000001' AND node_id=1", [], |x| x.get(0)).unwrap();
+        let iv2: i64 = conn
+            .query_row(
+                "SELECT interval_days FROM reviews WHERE plan_id='p0000001' AND node_id=1",
+                [],
+                |x| x.get(0),
+            )
+            .unwrap();
         assert_eq!(iv2, 1);
-        let m: f64 = conn.query_row("SELECT mastery FROM knowledge_nodes WHERE id=1", [], |x| x.get(0)).unwrap();
+        let m: f64 = conn
+            .query_row("SELECT mastery FROM knowledge_nodes WHERE id=1", [], |x| {
+                x.get(0)
+            })
+            .unwrap();
         assert!((m - (0.5 * 0.4 + (1.0 / 3.0) * 0.6)).abs() < 1e-9);
     }
 }

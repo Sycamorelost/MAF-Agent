@@ -38,6 +38,14 @@ export default function AgentPickerDialog({ currentAgentId, onSelect, onClose, s
   useEffect(() => {
     if (!loaded) load();
   }, [loaded, load]);
+  /** Esc 关闭(与全局搜索一致,避免只能点遮罩) */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   /** B4 / F2:仅把渲染后的 prompt 写入会话设置,不改变 Agent 绑定。 */
   const applyPromptOnly = async (agentId: string) => {
     if (!sessionId) return;

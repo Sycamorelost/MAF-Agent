@@ -6,6 +6,7 @@
 
 pub(crate) mod assembly;
 pub(crate) mod chat;
+pub(crate) mod compress;
 pub(crate) mod failover;
 pub(crate) mod image;
 pub(crate) mod keys;
@@ -18,30 +19,30 @@ pub(crate) mod usage;
 
 // ---------- 命令与对外类型(保持 crate::commands::provider::xxx 原路径可用)----------
 
-pub use chat::{chat_stream, ChatStreamInput};
+pub use chat::{ChatStreamInput, chat_stream};
 pub use image::{
-    generate_image, image_to_session, list_images, read_image, GenerateImageInput, ImageListItem,
-    ImageMeta, ImageResultItem,
+    GenerateImageInput, ImageListItem, ImageMeta, ImageResultItem, generate_image,
+    image_to_session, list_images, read_image,
 };
 pub use keys::{
-    delete_api_key, delete_provider_key, get_rotation_configs, has_api_key, list_provider_keys,
-    list_stored_provider_ids, save_api_key, save_provider_key, set_provider_rotation,
-    update_key_slot, KeySlotView,
+    KeySlotView, delete_api_key, delete_provider_key, get_rotation_configs, has_api_key,
+    list_provider_keys, list_stored_provider_ids, save_api_key, save_provider_key,
+    set_provider_rotation, update_key_slot,
 };
 pub use models::{
     fetch_provider_models, get_provider_model_config, get_reasoning_capability,
     get_reasoning_override, list_model_cards, save_model_card, save_provider_model_config,
     save_reasoning_override,
 };
-pub use stream::{cancel_stream, StreamCancelState};
+pub use stream::{StreamCancelState, cancel_stream};
 pub use templates::{
     delete_provider_template, list_provider_templates, restore_builtin_templates,
     save_provider_template,
 };
-pub use translate::{translate_stream, TranslateStreamInput};
+pub use translate::{TranslateStreamInput, translate_stream};
 pub use usage::{
-    usage_entries, usage_hourly, usage_key_health, usage_recalc, usage_summary, UsageRecalcReport,
-    UsageRecalcRow,
+    UsageRecalcReport, UsageRecalcRow, usage_entries, usage_hourly, usage_key_health, usage_recalc,
+    usage_summary,
 };
 
 pub(crate) use assembly::{

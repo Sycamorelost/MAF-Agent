@@ -14,7 +14,9 @@ pub const EXPORT_TARGET_EXISTS: &str = "TARGET_EXISTS";
 /// 导出路径令牌表(N-6):token → 用户经原生「另存为」对话框选定的路径。
 /// 导出命令只认令牌,渲染层不能凭空指定任意路径/任意覆盖——彻底收敛 H-2 残余。
 #[derive(Default)]
-pub struct ExportPathTokens(std::sync::Mutex<std::collections::HashMap<String, std::path::PathBuf>>);
+pub struct ExportPathTokens(
+    std::sync::Mutex<std::collections::HashMap<String, std::path::PathBuf>>,
+);
 
 impl ExportPathTokens {
     /// 登记对话框选定路径,返回一次性语义的令牌(表有界,满 64 清空重建)。
@@ -152,19 +154,19 @@ fn export_markdown_inner(
     // 图示资产:同目录 figures/ 复制(报告内相对引用 figures/xxx 直接可预览)。
     // 父目录已由 ensure_export_path 确认存在,仅在其下建资产夹,不触碰其他路径。
     let src_figs = store::research_dir(&id).join("figures");
-    if src_figs.is_dir() {
-        if let Some(parent) = target.parent() {
-            let dst = parent.join("figures");
-            if std::fs::create_dir_all(&dst).is_ok() {
-                if let Ok(entries) = std::fs::read_dir(&src_figs) {
-                    for e in entries.flatten() {
-                        let p = e.path();
-                        if p.is_file() {
-                            if let Some(name) = p.file_name() {
-                                let _ = std::fs::copy(&p, dst.join(name));
-                            }
-                        }
-                    }
+    if src_figs.is_dir()
+        && let Some(parent) = target.parent()
+    {
+        let dst = parent.join("figures");
+        if std::fs::create_dir_all(&dst).is_ok()
+            && let Ok(entries) = std::fs::read_dir(&src_figs)
+        {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_file()
+                    && let Some(name) = p.file_name()
+                {
+                    let _ = std::fs::copy(&p, dst.join(name));
                 }
             }
         }
@@ -209,7 +211,9 @@ mod tests {
     fn export_commands_reject_traversal_id() {
         let tokens = ExportPathTokens::default();
         assert!(export_markdown_inner("../x".into(), "t".into(), false, &tokens).is_err());
-        assert!(export_html_inner("../x".into(), "<html/>".into(), "t".into(), false, &tokens).is_err());
+        assert!(
+            export_html_inner("../x".into(), "<html/>".into(), "t".into(), false, &tokens).is_err()
+        );
         assert!(super::super::figure::research_figure_data("../x".into(), "a.png".into()).is_err());
     }
 

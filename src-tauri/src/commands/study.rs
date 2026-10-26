@@ -8,16 +8,16 @@
 
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::ipc::Channel;
 use tauri::State;
+use tauri::ipc::Channel;
 
 use crate::memory;
-use crate::study::{self, learn, store, Intent, PlanPayload, StudyEvent};
+use crate::study::{self, Intent, PlanPayload, StudyEvent, learn, store};
 
 /// 一次运行中规划的控制标记(Arc 共享给引擎任务)。
 #[derive(Clone, Default)]
@@ -109,7 +109,11 @@ pub async fn study_start(
     if topic.is_empty() {
         return Err("学习主题不能为空".into());
     }
-    let lang = if input.lang == "en" { "en".to_string() } else { "zh".to_string() };
+    let lang = if input.lang == "en" {
+        "en".to_string()
+    } else {
+        "zh".to_string()
+    };
     let daily_minutes = input.daily_minutes.unwrap_or(30).clamp(5, 600);
 
     // 早失败:Provider 先构造
@@ -140,7 +144,10 @@ pub async fn study_start(
     })?;
 
     let ctl = Arc::new(StudyCtl::default());
-    let entry = Arc::new(StudyEntry { ctl: ctl.clone(), handle: Mutex::new(None) });
+    let entry = Arc::new(StudyEntry {
+        ctl: ctl.clone(),
+        handle: Mutex::new(None),
+    });
     registry
         .0
         .lock()
@@ -234,7 +241,11 @@ pub fn study_get(id: String) -> Result<StudyDetail, String> {
     let plan = store::get_plan(&id)?.ok_or("学习计划不存在")?;
     let trail = store::read_trail(&id)?;
     let payload = store::read_payload(&id);
-    Ok(StudyDetail { plan, payload, trail })
+    Ok(StudyDetail {
+        plan,
+        payload,
+        trail,
+    })
 }
 
 /// 删除学习计划:运行中先终止,等引擎自行退出(≤5s)后删行删目录。
@@ -242,15 +253,13 @@ pub fn study_get(id: String) -> Result<StudyDetail, String> {
 pub fn study_delete(id: String, registry: State<'_, StudyRegistry>) -> Result<(), String> {
     memory::validate_id(&id)?;
     // 引擎退出时会把自己从注册表移除;以此判断是否仍在运行
-    let running = |reg: &StudyRegistry| {
-        reg.0.lock().map(|m| m.contains_key(&id)).unwrap_or(false)
-    };
+    let running = |reg: &StudyRegistry| reg.0.lock().map(|m| m.contains_key(&id)).unwrap_or(false);
     if running(&registry) {
-        if let Ok(m) = registry.0.lock() {
-            if let Some(entry) = m.get(&id) {
-                entry.ctl.cancel.store(true, Ordering::Relaxed);
-                entry.ctl.paused.store(false, Ordering::Relaxed);
-            }
+        if let Ok(m) = registry.0.lock()
+            && let Some(entry) = m.get(&id)
+        {
+            entry.ctl.cancel.store(true, Ordering::Relaxed);
+            entry.ctl.paused.store(false, Ordering::Relaxed);
         }
         // 等任务真正退出,避免删后引擎又写盘「删而又生」
         for _ in 0..50 {
@@ -299,7 +308,12 @@ pub fn study_export_markdown(
 ) -> Result<String, String> {
     memory::validate_id(&id)?;
     let target = tokens.resolve(&token)?;
-    if target.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) != Some("md".into()) {
+    if target
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        != Some("md".into())
+    {
         return Err("导出文件扩展名必须为 .md".into());
     }
     let payload = store::read_payload(&id).ok_or("学习计划尚未生成,无法导出")?;
@@ -406,7 +420,11 @@ pub fn study_review_queue(id: String) -> Result<Vec<learn::ReviewItem>, String> 
 
 /// 复习打卡:答对晋级一档,答错回退 1 天。返回更新后的条目。
 #[tauri::command]
-pub fn study_review_done(id: String, node_id: i64, correct: bool) -> Result<learn::ReviewItem, String> {
+pub fn study_review_done(
+    id: String,
+    node_id: i64,
+    correct: bool,
+) -> Result<learn::ReviewItem, String> {
     memory::validate_id(&id)?;
     learn::review_done(&id, node_id, correct)
 }

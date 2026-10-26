@@ -3,8 +3,8 @@
 //! LLM 调用/事件流/暂停终止复用研究引擎同款设施(Provider + Channel + AtomicBool)。
 
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 use tauri::ipc::Channel;
@@ -19,7 +19,9 @@ use super::validate::{
     extract_json, fallback_repaired, fix_stages, parse_nodes, parse_resources, parse_stages,
     uncovered_nodes, validate_stages,
 };
-use super::{store, Intent, IntentHints, NodeSpec, PlanPayload, StageResource, StageSpec, StudyEvent};
+use super::{
+    Intent, IntentHints, NodeSpec, PlanPayload, StageResource, StageSpec, StudyEvent, store,
+};
 
 mod util;
 
@@ -105,14 +107,21 @@ pub async fn preflight(
     let user = format!("用户输入:{topic}");
     let text = llm_plain(provider.as_ref(), model, vec![sys_msg(sys), user_msg(user)]).await?;
     // 严格解析失败(模型输出截断/畸形 JSON)时打捞已知字段兜底,不再整体报错
-    let intent: Intent = match extract_json(&text)
-        .and_then(|j| serde_json::from_str::<Intent>(&j).ok())
-    {
-        Some(i) => i,
-        None => salvage_intent(&text),
+    let intent: Intent =
+        match extract_json(&text).and_then(|j| serde_json::from_str::<Intent>(&j).ok()) {
+            Some(i) => i,
+            None => salvage_intent(&text),
+        };
+    let mut intent = fix_intent(
+        intent,
+        hints.daily_minutes.unwrap_or(30),
+        hints.deadline.clone(),
+    );
+    intent.topic = if intent.topic.is_empty() {
+        topic.to_string()
+    } else {
+        intent.topic
     };
-    let mut intent = fix_intent(intent, hints.daily_minutes.unwrap_or(30), hints.deadline.clone());
-    intent.topic = if intent.topic.is_empty() { topic.to_string() } else { intent.topic };
     intent.lang = lang.to_string();
     // 面板已确认的字段直接采纳,不让模型再追问
     if let Some(l) = hints.level.as_deref().filter(|s| !s.trim().is_empty()) {
@@ -157,12 +166,17 @@ fn resolve_intent(p: &StudyParams) -> Result<Intent, RunError> {
 
 /// 运行一次规划流水线(后台任务)。负责终态落库与事件收尾。
 pub async fn run(p: StudyParams) {
-    let sink = Sink { id: p.id.clone(), channel: p.channel.clone() };
+    let sink = Sink {
+        id: p.id.clone(),
+        channel: p.channel.clone(),
+    };
     match run_inner(&p, &sink).await {
         Ok(payload) => {
             let _ = store::save_payload(&p.id, &payload);
             let _ = store::finish_plan(&p.id, &payload);
-            sink.emit(StudyEvent::Done { plan: Some(payload) });
+            sink.emit(StudyEvent::Done {
+                plan: Some(payload),
+            });
         }
         Err(RunError::Cancelled) => {
             let _ = store::update_status(&p.id, "cancelled", None);
@@ -179,7 +193,10 @@ async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError
     let lang_label = if p.lang == "en" { "English" } else { "中文" };
 
     // ① intent
-    sink.emit(StudyEvent::StepStart { step: "intent".into(), label: "对齐学习意图".into() });
+    sink.emit(StudyEvent::StepStart {
+        step: "intent".into(),
+        label: "对齐学习意图".into(),
+    });
     gate(p, sink).await?;
     let intent = resolve_intent(p)?;
     sink.emit(StudyEvent::StepNote {
@@ -187,25 +204,45 @@ async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError
         content: format!(
             "主题:{} · 水平:{} · 每天 {} 分钟{}",
             intent.topic,
-            if intent.level.is_empty() { "未指定" } else { &intent.level },
+            if intent.level.is_empty() {
+                "未指定"
+            } else {
+                &intent.level
+            },
             intent.daily_minutes,
-            intent.deadline.as_ref().map(|d| format!(" · 截止 {d}")).unwrap_or_default(),
+            intent
+                .deadline
+                .as_ref()
+                .map(|d| format!(" · 截止 {d}"))
+                .unwrap_or_default(),
         ),
     });
 
     // ② map
-    sink.emit(StudyEvent::StepStart { step: "map".into(), label: "生成知识地图".into() });
+    sink.emit(StudyEvent::StepStart {
+        step: "map".into(),
+        label: "生成知识地图".into(),
+    });
     gate(p, sink).await?;
     let nodes = run_map(p, sink, &intent, lang_label).await?;
 
     // ③ stages(校验重试 ≤3 + 降级)
-    sink.emit(StudyEvent::StepStart { step: "stages".into(), label: "设计学习阶段".into() });
+    sink.emit(StudyEvent::StepStart {
+        step: "stages".into(),
+        label: "设计学习阶段".into(),
+    });
     gate(p, sink).await?;
     let (mut stages, repaired) = run_stages(p, sink, &intent, &nodes, lang_label).await?;
 
     // ④ resources ∥ schedule
-    sink.emit(StudyEvent::StepStart { step: "resources".into(), label: "推荐学习资料".into() });
-    sink.emit(StudyEvent::StepStart { step: "schedule".into(), label: "计算周排期".into() });
+    sink.emit(StudyEvent::StepStart {
+        step: "resources".into(),
+        label: "推荐学习资料".into(),
+    });
+    sink.emit(StudyEvent::StepStart {
+        step: "schedule".into(),
+        label: "计算周排期".into(),
+    });
     gate(p, sink).await?;
     let resources_fut = run_resources(p, &stages, lang_label);
     let schedule_fut = {
@@ -215,7 +252,11 @@ async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError
     let (resources, schedule) = futures::join!(resources_fut, schedule_fut);
     sink.emit(StudyEvent::StepNote {
         step: "schedule".into(),
-        content: format!("共 {} 周,每天约 {} 分钟", schedule.len(), intent.daily_minutes),
+        content: format!(
+            "共 {} 周,每天约 {} 分钟",
+            schedule.len(),
+            intent.daily_minutes
+        ),
     });
     if resources.is_empty() {
         sink.emit(StudyEvent::StepNote {
@@ -230,13 +271,16 @@ async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError
     }
 
     // ⑤ validate(结构校验已在 run_stages 内完成,此处做终检与标记)
-    sink.emit(StudyEvent::StepStart { step: "validate".into(), label: "校验计划结构".into() });
+    sink.emit(StudyEvent::StepStart {
+        step: "validate".into(),
+        label: "校验计划结构".into(),
+    });
     gate(p, sink).await?;
     // 兜底:万一分组仍有遗漏(理论上 run_stages 已保证),把未覆盖节点追加到末阶段
-    if let Some(extra) = uncovered_nodes(&nodes, &stages) {
-        if let Some(last) = stages.last_mut() {
-            last.topics.extend(extra.iter().cloned());
-        }
+    if let Some(extra) = uncovered_nodes(&nodes, &stages)
+        && let Some(last) = stages.last_mut()
+    {
+        last.topics.extend(extra.iter().cloned());
     }
     let final_issues = validate_stages(&stages, &nodes);
     if !final_issues.is_empty() && !repaired {
@@ -259,7 +303,10 @@ async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError
     }
 
     // ⑥ export
-    sink.emit(StudyEvent::StepStart { step: "export".into(), label: "保存学习计划".into() });
+    sink.emit(StudyEvent::StepStart {
+        step: "export".into(),
+        label: "保存学习计划".into(),
+    });
     gate(p, sink).await?;
     let payload = PlanPayload {
         topic: intent.topic.clone(),
@@ -296,11 +343,7 @@ async fn run_map(
     let mut last_err = String::new();
     for attempt in 1..=3u32 {
         gate(p, sink).await?;
-        let text = llm_collect(
-            p,
-            vec![sys_msg(sys.clone()), user_msg(user.clone())],
-        )
-        .await?;
+        let text = llm_collect(p, vec![sys_msg(sys.clone()), user_msg(user.clone())]).await?;
         if let Some(json) = extract_json(&text) {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
                 let nodes = parse_nodes(&v);
@@ -319,7 +362,11 @@ async fn run_map(
             last_err = "输出中未找到 JSON".into();
         }
         if attempt < 3 {
-            sink.emit(StudyEvent::Retry { step: "map".into(), attempt, reason: last_err.clone() });
+            sink.emit(StudyEvent::Retry {
+                step: "map".into(),
+                attempt,
+                reason: last_err.clone(),
+            });
         }
     }
     Err(RunError::Fatal(format!("知识地图生成失败:{last_err}")))
@@ -337,12 +384,14 @@ async fn run_stages(
     let nodes_digest = serde_json::to_string(
         &nodes
             .iter()
-            .map(|n| serde_json::json!({
-                "name": n.name,
-                "difficulty": n.difficulty,
-                "must_learn": n.must_learn,
-                "prereqs": n.prereqs,
-            }))
+            .map(|n| {
+                serde_json::json!({
+                    "name": n.name,
+                    "difficulty": n.difficulty,
+                    "must_learn": n.must_learn,
+                    "prereqs": n.prereqs,
+                })
+            })
             .collect::<Vec<_>>(),
     )
     .map_err(|e| RunError::Fatal(e.to_string()))?;
@@ -360,37 +409,41 @@ async fn run_stages(
             format!("{base_user}\n\n上一轮输出存在以下问题,必须修正:\n{feedback}")
         };
         let text = llm_collect(p, vec![sys_msg(sys.clone()), user_msg(user)]).await?;
-        if let Some(json) = extract_json(&text) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
-                let mut stages = parse_stages(&v);
-                fix_stages(&mut stages, nodes);
-                let issues = validate_stages(&stages, nodes);
-                if issues.is_empty() {
-                    sink.emit(StudyEvent::StepNote {
-                        step: "stages".into(),
-                        content: format!("{} 个阶段,难度递增无跳级", stages.len()),
-                    });
-                    return Ok((stages, false));
-                }
-                feedback = issues
-                    .iter()
-                    .take(6)
-                    .map(|s| format!("- {s}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if attempt < 3 {
-                    sink.emit(StudyEvent::Retry {
-                        step: "stages".into(),
-                        attempt,
-                        reason: feedback.clone(),
-                    });
-                }
-                continue;
+        if let Some(json) = extract_json(&text)
+            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&json)
+        {
+            let mut stages = parse_stages(&v);
+            fix_stages(&mut stages, nodes);
+            let issues = validate_stages(&stages, nodes);
+            if issues.is_empty() {
+                sink.emit(StudyEvent::StepNote {
+                    step: "stages".into(),
+                    content: format!("{} 个阶段,难度递增无跳级", stages.len()),
+                });
+                return Ok((stages, false));
             }
+            feedback = issues
+                .iter()
+                .take(6)
+                .map(|s| format!("- {s}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            if attempt < 3 {
+                sink.emit(StudyEvent::Retry {
+                    step: "stages".into(),
+                    attempt,
+                    reason: feedback.clone(),
+                });
+            }
+            continue;
         }
         feedback = "- 输出不是合法的 {\"stages\":[...]} JSON,必须只输出该结构".into();
         if attempt < 3 {
-            sink.emit(StudyEvent::Retry { step: "stages".into(), attempt, reason: feedback.clone() });
+            sink.emit(StudyEvent::Retry {
+                step: "stages".into(),
+                attempt,
+                reason: feedback.clone(),
+            });
         }
     }
     // 降级:默认三阶段,repaired 标记
@@ -451,6 +504,7 @@ pub(crate) async fn llm_plain(
         top_p: None,
         reasoning: None,
         stream: true,
+        ..Default::default()
     };
     let mut stream = provider.chat_stream(req).await.map_err(|e| e.to_string())?;
     let mut out = String::new();
@@ -461,6 +515,7 @@ pub(crate) async fn llm_plain(
             StreamChunk::Error { message } => return Err(message),
             StreamChunk::Usage { .. } => {}
             StreamChunk::Done { .. } => break,
+            _ => {}
         }
     }
     Ok(out)

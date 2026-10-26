@@ -153,7 +153,12 @@ impl SearchEngine for DeepseekSearch {
                 429 => "(超过 5 QPS 限流,请稍后重试)",
                 _ => "",
             };
-            return Err(format!("DeepSeek 搜索 HTTP {}: {}{}", status.as_u16(), msg, hint));
+            return Err(format!(
+                "DeepSeek 搜索 HTTP {}: {}{}",
+                status.as_u16(),
+                msg,
+                hint
+            ));
         }
 
         let v: serde_json::Value =
@@ -161,7 +166,11 @@ impl SearchEngine for DeepseekSearch {
         let mut out = Vec::new();
         if let Some(arr) = v.get("results").and_then(|r| r.as_array()) {
             for item in arr.iter().take(max_results as usize) {
-                let url = item.get("url").and_then(|u| u.as_str()).unwrap_or("").to_string();
+                let url = item
+                    .get("url")
+                    .and_then(|u| u.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if url.is_empty() {
                     continue;
                 }

@@ -1,10 +1,10 @@
 [package]
 name = "app"
-version = "1.10.3"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+version = "1.15.0"
+description = "MAF Agent —— 本地优先的桌面智能体框架"
+authors = ["梧桐吾桐 (Sycamorelost)"]
+license = "Apache-2.0"
+repository = "https://github.com/Sycamorelost/MAF-Agent"
 edition = "2024"
 rust-version = "1.90"
 
@@ -29,20 +29,53 @@ notify = "6"
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 serde_yaml = "0.9"
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+# 0.13:rustls-tls 更名 rustls;query/form 变为需显式开启的 feature(搜索/翻译用到 query)
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls", "query"] }
 futures = "0.3"
-# 研究暂停闸门异步睡眠 / 删除研究等待任务退出超时(M-4/M-5);与 tauri 内置 tokio 同版本复用
-tokio = { version = "1", features = ["time", "net"] }
+# 研究暂停闸门异步睡眠 / 删除研究等待任务退出超时(M-4/M-5);内置 shell 超时与进程回收需 process
+tokio = { version = "1", features = ["time", "net", "process"] }
 async-trait = "0.1"
 base64 = "0.22"
 aes-gcm = "0.10"
 sha2 = "0.10"
+# 命令输出编码兜底:先严格 UTF-8,失败再按 GBK(中文 Windows 控制台 CP936)解码
+encoding_rs = "0.8"
 thiserror = "1"
 docx-rs = "0.4"
 calamine = "0.37"
 pdf-extract = "0.12"
+# 工作区表格导出(docx 写入用 docx-rs;xlsx 写入用 rust_xlsxwriter)
+# SEC-1:0.101 起依赖 zip 9.0,消除 zip 2.x 的已知漏洞告警。
+rust_xlsxwriter = "0.101"
+# 工作区全格式解析:pptx / epub / zip 列表与安全解包
+# SEC-1:zip 8.x 存在路径穿越 CVE;升级到 9.x。本项目 zip_extract_in 已用
+# enclosed_name + 跳符号链接 + 体积上限做防御,升级主要消除已知漏洞告警。
+zip = "9"
 # 绘画历史缩略图(D5):仅 png 解码 + jpeg 缩略图编码
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# MCP 客户端:rmcp 官方 SDK;stdio 传输 + child-process spawn,与项目已有 tokio 1.x 兼容
+# streamable-http:远端 MCP server(Streamable HTTP 传输),reqwest 0.13 已就位
+rmcp = { version = "3", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest", "reqwest"] }
+# streamable-http 传输的自定义请求头类型(HeaderName / HeaderValue),与 reqwest 共用同一 http 1.x
+http = "1"
+# HITL 审批 id:每次工具调用生成唯一 approval_id,防止重放
+uuid = { version = "1", features = ["v4"] }
+# 审计日志脱敏:匹配 sk-/ghp_/Bearer 等密钥形态(SEC-7)
+regex = "1"
+# G5 系统状态只读快照:CPU/内存/进程/磁盘/网络
+sysinfo = "0.37"
+
+# GUI 自动化(P2):UI Automation / SendInput / 窗口枚举。仅 Windows 目标编译
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Threading",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
-rust_xlsxwriter = "0.80"
+# 集成级 E2E 测试需要独立 tokio runtime 驱动真实 stdio MCP server(runtime.rs 内 tests)
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net"] }

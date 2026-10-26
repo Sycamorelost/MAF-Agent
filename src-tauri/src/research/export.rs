@@ -2,13 +2,13 @@
 
 use crate::provider::{ChatMessage, ChatRequest, StreamChunk};
 
+use super::EngineParams;
 use super::events::{EventSink, ResearchEvent, SourceItem};
 use super::llm::{chat_stream_compat, llm_collect};
 use super::params::with_references;
-use super::pipeline::{check_cancel, RunError};
+use super::pipeline::{RunError, check_cancel};
 use super::prompts::sources_digest;
 use super::skills;
-use super::EngineParams;
 
 pub(crate) async fn run_report(
     p: &EngineParams,
@@ -35,7 +35,11 @@ pub(crate) async fn run_report(
     }
     // 用户导入的参考资料:终稿撰写的事实依据
     let system = with_references(system, p);
-    let max_total = if p.params.read_length == "full" { 24000 } else { 16000 };
+    let max_total = if p.params.read_length == "full" {
+        24000
+    } else {
+        16000
+    };
     let mut user = format!("研究主题: {}\n\n", p.topic);
     if !stages_digest.is_empty() {
         user.push_str("【阶段摘要】\n");
@@ -54,11 +58,13 @@ pub(crate) async fn run_report(
                 role: "system".into(),
                 content: system,
                 images: vec![],
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".into(),
                 content: user,
                 images: vec![],
+                ..Default::default()
             },
         ],
         temperature: Some(0.3),
@@ -66,6 +72,7 @@ pub(crate) async fn run_report(
         top_p: None,
         reasoning: None, // 研究链路档位透传为 Phase 2,暂不启用
         stream: true,
+        ..Default::default()
     };
 
     let mut stream = chat_stream_compat(p, req).await?;
@@ -82,6 +89,7 @@ pub(crate) async fn run_report(
             StreamChunk::Error { message } => return Err(RunError::Fatal(message)),
             StreamChunk::Usage { .. } => {}
             StreamChunk::Done { .. } => break,
+            _ => {}
         }
     }
 
@@ -124,11 +132,13 @@ pub(crate) async fn run_audit(
                 role: "system".into(),
                 content: audit_system,
                 images: vec![],
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".into(),
                 content: user,
                 images: vec![],
+                ..Default::default()
             },
         ],
     )
@@ -176,7 +186,8 @@ mod tests {
 
     #[test]
     fn finalize_report_replaces_sources_section() {
-        let raw = "# 《x》研究报告\n\n## TL;DR\n\n结论 [1]\n\n## 资料来源\n\n1. [假](http://fake)\n";
+        let raw =
+            "# 《x》研究报告\n\n## TL;DR\n\n结论 [1]\n\n## 资料来源\n\n1. [假](http://fake)\n";
         let sources = vec![SourceItem {
             id: 1,
             title: "真标题".into(),
@@ -213,7 +224,9 @@ mod tests {
         let raw = "# 报告\n\n## 正文\n\n结论 [1]\n\n{references}\n";
         let out = finalize_report(raw, &sources, true);
         assert!(!out.contains("{references}"));
-        assert!(out.contains("## 正文\n\n结论 [1]\n\n## 资料来源\n\n1. [来源甲](https://a.example)"));
+        assert!(
+            out.contains("## 正文\n\n结论 [1]\n\n## 资料来源\n\n1. [来源甲](https://a.example)")
+        );
         // 模板无锚点 → 维持追加到文末
         let out2 = finalize_report(raw, &sources, false);
         assert!(out2.contains("{references}\n\n## 资料来源"));

@@ -1,6 +1,6 @@
 //! 热力图(星期 × 小时)聚合。
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 use crate::db;

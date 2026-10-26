@@ -387,6 +387,18 @@ export interface ChatStreamInput {
   session_id?: string | null;
   /** 前端生成的取消句柄;cancel() 时凭它通知后端中止 HTTP 请求(M-2) */
   cancel_id?: string;
+  /** Phase 5e:MCP 工具定义(OpenAI function-calling);空/缺省 = 不启用工具调用 */
+  tools?: ToolDef[];
+}
+
+/** OpenAI function-calling 工具定义。 */
+export interface ToolDef {
+  type: 'function';
+  function: {
+    name: string;
+    description?: string | null;
+    parameters?: Record<string, unknown> | null;
+  };
 }
 
 /** 通知后端中止指定的流式请求(chat / translate)。 */
@@ -423,11 +435,13 @@ export function chatStream(
   };
 
   const cancelId = input.cancel_id ?? crypto.randomUUID();
-  void invoke<void>('chat_stream', { input: { ...input, cancel_id: cancelId }, channel }).catch(
-    (e) => {
+  void invoke<void>('chat_stream', { input: { ...input, cancel_id: cancelId }, channel })
+    // 注意:chat_stream 在 spawn 后台流任务后**立即返回**,invoke 完成 ≠ 流结束。
+    // 只能等后端显式下发的 done chunk(每条结束路径都会发),否则会在第一个
+    // chunk 到达前就收流,表现为「光标一直闪 + 回复不落库」。
+    .catch((e) => {
       if (!cancelled) rejectDone(e);
-    },
-  );
+    });
 
   return {
     done,

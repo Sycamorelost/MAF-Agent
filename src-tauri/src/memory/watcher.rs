@@ -9,8 +9,8 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{
-        mpsc::{self, RecvTimeoutError, SyncSender, TrySendError},
         Mutex,
+        mpsc::{self, RecvTimeoutError, SyncSender, TrySendError},
     },
     time::Duration,
 };
@@ -46,10 +46,13 @@ fn sync_title_from_memory(session_id: &str, app: &AppHandle) {
         return;
     }
     if crate::db::sessions::update_title(session_id, &new_title).is_ok() {
-        let _ = app.emit("session_renamed", serde_json::json!({
-            "session_id": session_id,
-            "title": new_title,
-        }));
+        let _ = app.emit(
+            "session_renamed",
+            serde_json::json!({
+                "session_id": session_id,
+                "title": new_title,
+            }),
+        );
     }
 }
 
@@ -159,14 +162,7 @@ impl WatcherRegistry {
 }
 
 /// 给 tauri State 用的包装,便于 Builder.manage()。
+#[derive(Default)]
 pub struct WatcherState {
     pub registry: WatcherRegistry,
-}
-
-impl Default for WatcherState {
-    fn default() -> Self {
-        Self {
-            registry: WatcherRegistry::default(),
-        }
-    }
 }

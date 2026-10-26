@@ -12,7 +12,7 @@ use serde::Serialize;
 
 use crate::db;
 
-use super::{store_payload_nodes, PlanPayload, StudyEvent};
+use super::{PlanPayload, StudyEvent, store_payload_nodes};
 
 /// plans 表行。
 #[derive(Debug, Clone, Serialize)]
@@ -34,8 +34,7 @@ pub struct PlanRow {
     pub updated: String,
 }
 
-const COLS: &str =
-    "id, topic, status, level, goal, daily_minutes, deadline, lang, model_id, error, repaired, created, updated";
+const COLS: &str = "id, topic, status, level, goal, daily_minutes, deadline, lang, model_id, error, repaired, created, updated";
 
 fn row_from(r: &rusqlite::Row) -> rusqlite::Result<PlanRow> {
     Ok(PlanRow {
@@ -271,11 +270,15 @@ mod tests {
         let n = mark_interrupted(&conn).unwrap();
         assert_eq!(n, 1, "仅 generating 一行受影响");
         let st: String = conn
-            .query_row("SELECT status FROM plans WHERE id='bbbb0001'", [], |r| r.get(0))
+            .query_row("SELECT status FROM plans WHERE id='bbbb0001'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(st, "error");
         let st2: String = conn
-            .query_row("SELECT status FROM plans WHERE id='bbbb0002'", [], |r| r.get(0))
+            .query_row("SELECT status FROM plans WHERE id='bbbb0002'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(st2, "active");
         assert_eq!(mark_interrupted(&conn).unwrap(), 0);

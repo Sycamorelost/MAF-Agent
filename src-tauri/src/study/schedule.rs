@@ -15,8 +15,7 @@ pub fn store_payload_nodes(
             let Some(n) = payload.nodes.iter().find(|n| &n.name == t) else {
                 continue;
             };
-            let prereqs =
-                serde_json::to_string(&n.prereqs).map_err(|e| e.to_string())?;
+            let prereqs = serde_json::to_string(&n.prereqs).map_err(|e| e.to_string())?;
             conn.execute(
                 "INSERT INTO knowledge_nodes(plan_id, stage_index, name, difficulty, why, must_learn, prereq_json)
                  VALUES(?1,?2,?3,?4,?5,?6,?7)",
@@ -64,11 +63,11 @@ pub fn export_markdown(payload: &PlanPayload) -> String {
     let mut md = String::new();
     md.push_str(&format!("# 学习计划:{}\n\n", payload.topic));
     md.push_str(&format!("- **学习目标**:{}\n", payload.goal));
+    md.push_str(&format!("- **当前水平**:{}\n", level_label(&payload.level)));
     md.push_str(&format!(
-        "- **当前水平**:{}\n",
-        level_label(&payload.level)
+        "- **每日投入**:约 {} 分钟\n",
+        payload.daily_minutes
     ));
-    md.push_str(&format!("- **每日投入**:约 {} 分钟\n", payload.daily_minutes));
     if let Some(d) = &payload.deadline {
         md.push_str(&format!("- **目标完成**:{d}\n"));
     }
@@ -148,10 +147,10 @@ pub(crate) fn fix_intent(mut i: Intent, fb_minutes: u32, fb_deadline: Option<Str
     if i.goal.trim().is_empty() {
         i.goal = i.topic.clone();
     }
-    if let Some(d) = &i.deadline {
-        if d.trim().is_empty() || d == "null" {
-            i.deadline = None;
-        }
+    if let Some(d) = &i.deadline
+        && (d.trim().is_empty() || d == "null")
+    {
+        i.deadline = None;
     }
     if i.deadline.is_none() {
         i.deadline = fb_deadline.filter(|d| !d.trim().is_empty());
@@ -209,10 +208,12 @@ fn salvage_str(text: &str, key: &str) -> String {
 
 /// 严格解析失败时的意图打捞:缺的字段走默认值 → missing 重算 → 面板追问,永不报错。
 pub(crate) fn salvage_intent(text: &str) -> Intent {
-    let mut i = Intent::default();
-    i.topic = salvage_str(text, "topic");
-    i.level = salvage_str(text, "level");
-    i.goal = salvage_str(text, "goal");
+    let mut i = Intent {
+        topic: salvage_str(text, "topic"),
+        level: salvage_str(text, "level"),
+        goal: salvage_str(text, "goal"),
+        ..Default::default()
+    };
     if let Some(m) = salvage_field(text, "daily_minutes") {
         i.daily_minutes = m.trim_matches('"').parse::<u32>().unwrap_or(0);
     }
@@ -292,7 +293,10 @@ mod tests {
     fn salvage_intent_from_truncated_output() {
         // 复现「expected `,` or `]`」:questions 数组断裂 + 输出截断,严格解析失败
         let raw = r#"{"topic":"Java 前端设计","level":"zero","goal":"入门","daily_minutes":30,"deadline":"2026-12-09","lang":"zh","missing":["questions":["你每天"#;
-        assert!(serde_json::from_str::<Intent>(raw).is_err(), "前置:严格解析必须失败");
+        assert!(
+            serde_json::from_str::<Intent>(raw).is_err(),
+            "前置:严格解析必须失败"
+        );
         let i = salvage_intent(raw);
         assert_eq!(i.topic, "Java 前端设计");
         assert_eq!(i.level, "zero");
@@ -304,8 +308,12 @@ mod tests {
     #[test]
     fn salvage_handles_broken_and_truncated_output() {
         // 复现「expected , or ]」:值内含逗号紧接下一键,严格解析失败但值本身闭合完整
-        let raw = r#"{"topic":"我想入门学习 java 的前端设计,"level":"beginner","daily_minutes":45}"#;
-        assert!(serde_json::from_str::<Intent>(raw).is_err(), "前置:严格解析必须失败");
+        let raw =
+            r#"{"topic":"我想入门学习 java 的前端设计,"level":"beginner","daily_minutes":45}"#;
+        assert!(
+            serde_json::from_str::<Intent>(raw).is_err(),
+            "前置:严格解析必须失败"
+        );
         let i = salvage_intent(raw);
         assert_eq!(i.topic, "我想入门学习 java 的前端设计,");
         assert_eq!(i.level, "beginner");
@@ -319,10 +327,7 @@ mod tests {
 
     #[test]
     fn schedule_expands_weeks_with_cap() {
-        let mut stages = vec![
-            stage(0, "a", 1, &["A"]),
-            stage(1, "b", 2, &["B"]),
-        ];
+        let mut stages = vec![stage(0, "a", 1, &["A"]), stage(1, "b", 2, &["B"])];
         stages[0].estimated_weeks = 2;
         stages[1].estimated_weeks = 3;
         let sch = calc_schedule(&stages, 30);
@@ -347,7 +352,10 @@ mod tests {
             stages: vec![stage(0, "基础", 1, &["所有权"])],
             nodes: vec![node("所有权", 2, true)],
             schedule: calc_schedule(&[stage(0, "基础", 1, &["所有权"])], 30),
-            resources: vec![StageResource { stage: 0, items: vec!["The Book".into()] }],
+            resources: vec![StageResource {
+                stage: 0,
+                items: vec!["The Book".into()],
+            }],
             repaired: true,
             ..Default::default()
         };

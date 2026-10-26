@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # 前端单元测试(vitest,≥30 条准入线,当前 104 条)+ 类型检查与构建
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: 启用 pnpm(corepack 读取 packageManager 字段)
+        run: corepack enable
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+      - name: 依赖漏洞审计(SEC-9)
+        # 上报高危及以上;首次接入先只报告不阻断,确认基线后改为阻断
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+      - name: 单元测试
+        run: pnpm test
+      - name: 类型检查 + 构建
+        run: pnpm run build
+
+  # Rust 测试(主开发平台)
+  rust-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust 缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test --lib
+      - name: 安装 cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: 依赖漏洞审计(SEC-1)
+        # 读取 src-tauri/.cargo/audit.toml 中的已评估忽略项
+        working-directory: src-tauri
+        run: cargo audit
+
+  # 跨平台 cfg 回归:非 Windows 目标必须可编译(GUI / 划词为占位实现)
+  rust-linux-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tauri Linux 系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Rust 缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: cargo check(仅编译检查)
+        working-directory: src-tauri
+        run: cargo check --lib

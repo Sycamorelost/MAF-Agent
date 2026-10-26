@@ -10,5 +10,6 @@ export * from './memory';
 export * from './provider';
 export * from './research';
 export * from './notes';
+export * from './fs';
 export * from './media';
 export * from './tutorial';

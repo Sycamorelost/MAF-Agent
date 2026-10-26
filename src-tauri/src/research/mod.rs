@@ -27,16 +27,13 @@ pub use events::{ResearchEvent, SourceItem};
 pub use params::ResearchParams;
 #[allow(unused_imports)]
 pub use references::{
-    references_cache_dir, references_dir, REF_FILE_BUDGET_CHARS, REF_TOTAL_BUDGET_CHARS,
+    REF_FILE_BUDGET_CHARS, REF_TOTAL_BUDGET_CHARS, references_cache_dir, references_dir,
 };
 
 // 内置提示词常量供子模块(template.rs)经 `super::` 访问。
 pub(crate) use prompts::{REACT_SYSTEM, REPORT_SYSTEM, REPORT_SYSTEM_EN};
 
-use std::sync::{
-    atomic::AtomicBool,
-    Arc,
-};
+use std::sync::{Arc, atomic::AtomicBool};
 
 use tauri::ipc::Channel;
 
@@ -45,7 +42,7 @@ use search::SearchEngine;
 
 use events::EventSink;
 use figures::attach_image_draft;
-use pipeline::{run_concise, run_legacy, run_staged, RunError};
+use pipeline::{RunError, run_concise, run_legacy, run_staged};
 
 // ---------------- 引擎运行参数 ----------------
 

@@ -1,4 +1,4 @@
-﻿// ============ 类型 ============
+// ============ 类型 ============
 
 export interface SessionRow {
   id: string;
@@ -129,6 +129,14 @@ export interface ProviderTemplate {
 export type StreamChunk =
   | { type: 'delta'; content: string }
   | { type: 'reasoning'; content: string }
+  | {
+      type: 'tool_call_result';
+      tool_call_id: string;
+      tool_name: string;
+      server_name: string;
+      content: string;
+      ok: boolean;
+    }
   | {
       type: 'done';
       finish_reason: string | null;

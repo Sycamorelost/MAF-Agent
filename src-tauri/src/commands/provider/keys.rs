@@ -2,11 +2,10 @@
 
 use crate::db::usage;
 use crate::provider::{
-    keychain,
+    Provider, keychain,
     openai::OpenAiCompat,
     rotation::{self, KeyCandidate, KeySlotMeta, RotationConfig, RotationState},
     templates,
-    Provider,
 };
 
 use super::assembly::validate_base_url_scheme;
@@ -19,7 +18,12 @@ pub fn save_api_key(
     provider_id: String,
     api_key: String,
 ) -> Result<(), String> {
-    keychain::store(&provider_id, &api_key)?;
+    // 与 save_provider_key 口径一致:trim 后拒绝空值,避免「已配置但必失败」的误导状态(FUNC-2 修复)
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Err("API Key 不能为空".into());
+    }
+    keychain::store(&provider_id, key)?;
     notify_providers_changed(&app);
     Ok(())
 }
@@ -275,7 +279,11 @@ pub(crate) fn resolve_spec(
 }
 
 /// 用给定 Key 组装 OpenAI 兼容 Provider。
-pub(crate) fn build_openai(spec: &ChatSpec, api_key: &str, stream_options: bool) -> Box<dyn Provider> {
+pub(crate) fn build_openai(
+    spec: &ChatSpec,
+    api_key: &str,
+    stream_options: bool,
+) -> Box<dyn Provider> {
     Box::new(
         OpenAiCompat::new(
             spec.provider_id.clone(),
@@ -287,9 +295,24 @@ pub(crate) fn build_openai(spec: &ChatSpec, api_key: &str, stream_options: bool)
     )
 }
 
+/// 构造 harness 子调用通道(上下文压缩 / 子智能体委派):取最小槽位的 Key。
+/// 无 Key 返回 None —— 子功能降级,主对话流程不受影响(稳定性约束)。
+pub(crate) fn build_sub_llm(spec: &ChatSpec) -> Option<crate::provider::SubLlm> {
+    let slot = keychain::list_slots(&spec.provider_id)
+        .ok()?
+        .into_iter()
+        .min()?;
+    let key = keychain::load_slot(&spec.provider_id, slot).ok()??;
+    Some(crate::provider::SubLlm {
+        provider: build_openai(spec, &key, false),
+        model: spec.model.clone(),
+    })
+}
+
 /// 计算本次请求可用的槽位顺序(纯函数,便于单测):
 ///   - 未启用轮换:仅用最小槽位(slot 0),行为与升级前一致;
 ///   - 启用轮换:按用户配置顺序 + 生效开关过滤,未登记的槽位默认启用并追加。
+///
 /// 全部被停用时降级为最小槽位,避免彻底不可用。
 pub(crate) fn order_slots(existing: &[u32], cfg: &RotationConfig) -> Vec<u32> {
     if existing.is_empty() {
@@ -366,7 +389,12 @@ pub(crate) fn own_candidates(provider_id: &str, cfg: &RotationConfig) -> Vec<Key
 /// 的 Key 一并并入候选池(跨 Provider 共享轮换):
 ///   - 对端自身也启用了轮换(双方 opt-in,避免静默借用他人 Key);
 ///   - 对端模型列表包含本次请求的模型(模型一致性约束,防止跨窗口模型串用)。
-pub(crate) fn key_candidates(provider_id: &str, base_url: &str, model: &str, cfg: &RotationConfig) -> Vec<KeyCandidate> {
+pub(crate) fn key_candidates(
+    provider_id: &str,
+    base_url: &str,
+    model: &str,
+    cfg: &RotationConfig,
+) -> Vec<KeyCandidate> {
     let mut out = own_candidates(provider_id, cfg);
     if !cfg.enabled {
         return out;
@@ -464,7 +492,10 @@ mod tests {
             rotation_group("a", " https://Api.Example.com/v1/ "),
             "https://api.example.com/v1"
         );
-        assert_eq!(rotation_group("a", "https://x.com/"), rotation_group("b", "https://X.com"));
+        assert_eq!(
+            rotation_group("a", "https://x.com/"),
+            rotation_group("b", "https://X.com")
+        );
         assert_eq!(rotation_group("a", ""), "a");
     }
 }

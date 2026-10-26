@@ -1,6 +1,6 @@
 import { type ComponentType } from 'react';
 import * as ipc from '../../lib/ipc';
-import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconTranslate, IconQuote, IconChart } from '../../components/icons';
+import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconTranslate, IconQuote, IconChart, IconPlus, IconFileText } from '../../components/icons';
 
 export const ENGINES = [
   { id: 'bocha', name: '博查 Bocha' },
@@ -31,7 +31,14 @@ export const NAV: NavGroup[] = [
   },
   {
     grp: '界面',
-    items: [{ id: 'navmenu', label: '导航菜单', icon: IconChat }],
+    items: [
+      { id: 'appearance', label: '字体大小', icon: IconFileText },
+      { id: 'navmenu', label: '导航菜单', icon: IconChat },
+    ],
+  },
+  {
+    grp: '扩展',
+    items: [{ id: 'mcp', label: 'MCP 工具', icon: IconPlus }],
   },
   {
     grp: '数据',
@@ -135,10 +142,10 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
         text: '3.1 本软件是一款专为学习、调研而创造的智能体框架软件,提供本地会话、文件即记忆、专项研究、知识库、翻译、绘画、划词提问等框架功能。本软件自身不生产、不持有大模型内容,模型能力由用户自行配置的模型服务商提供。',
       },
       {
-        text: '3.2 在您遵守本条款的前提下,开发者授予您一项有限的、可撤销的、非独占的、不可转让的许可,仅供您个人为学习与调研目的安装和使用本软件。(免费与无广告承诺见第十五条。)',
+        text: '3.2 本软件以 Apache License 2.0 开源发布，源码见 https://github.com/Sycamorelost/MAF-Agent 。您对本软件的安装、运行、修改、分发以及商业使用，均以仓库根目录 LICENSE 授予的权利为准；本条款仅作补充说明，与 LICENSE 冲突时以 LICENSE 为准。(免费与无广告承诺见第十五条。)',
       },
       {
-        text: '3.3 未经开发者事先书面许可,您不得将本软件或其任何部分用于商业用途,包括但不限于商业转售、出租、有偿托管、捆绑销售,或将其部署于商业产品与商业服务中。本条款未明确授予您的所有权利,均由开发者保留。',
+        text: '3.3 依据开源许可证，您可将本软件用于商业用途(含商业转售、有偿托管、捆绑销售等)，但须遵守 LICENSE 与 NOTICE 中关于署名、许可与免责声明的要求，不得以开发者名义对修改后的版本作出担保或背书。许可证未授予的商标等权利仍由开发者保留。',
       },
     ],
   },
@@ -216,7 +223,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
           '(2) 侵害他人名誉权、隐私权、知识产权或其他合法权益;',
           '(3) 对模型服务商或任何第三方系统实施未授权访问、干扰、攻击,或试图绕过其访问控制与计费规则;',
           '(4) 对本软件实施反向工程后用于侵权分发,或移除、篡改软件中的署名与权利声明;',
-          '(5) 超出第三条授权范围的商业使用。',
+          '(5) 违反本软件开源许可证(Apache License 2.0)的使用行为，例如移除、篡改 LICENSE/NOTICE 中的署名与权利声明后分发。',
         ],
       },
       {
@@ -229,10 +236,10 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
     name: '知识产权与源码获取',
     items: [
       {
-        text: '8.1 本软件的著作权及其他知识产权归开发者所有。本软件源码不随安装包公开提供;如需获取源码用于学习或改造升级,适用第十五条 15.3 的约定。',
+        text: '8.1 本软件以 Apache License 2.0 开源发布，源码自行获取：https://github.com/Sycamorelost/MAF-Agent 。著作权及其他知识产权归开发者所有，授权范围与义务以仓库根目录 LICENSE 为准。',
       },
       {
-        text: '8.2 获取源码不等于获得商业使用授权。您转载、分发本软件或其源码时,应保留本条款中的署名与权利声明,不得隐去或篡改软件来源。',
+        text: '8.2 您转载、分发本软件或其源码(含修改版本)时，应保留 LICENSE、NOTICE 中的版权与许可声明，标明修改内容，不得隐去或篡改软件来源，不得暗示修改版本由开发者背书。',
       },
       {
         text: '8.3 本软件界面使用的图标、文案等素材的权利归开发者所有;第三方开源组件的权利归属适用第四条。',
@@ -264,6 +271,9 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
       },
       {
         text: '10.3 因您自行更改数据目录、删除数据文件、使用非开发者提供的版本,或未按软件说明操作而导致的数据丢失或软件异常,开发者不承担责任。',
+      },
+      {
+        text: '10.4 「完全信任」授权模式(含其解锁的临时授权与 GUI 自动化)为您在设置页明示选择开启的高权限模式。开启后,模型输出可直接触发本机命令执行、文件写入与鼠标键盘操作,不再逐次询问;您应仅在同时信任所用模型与全部工具输出内容时开启。因开启该模式而产生的任何操作后果,由您自行承担。',
       },
     ],
   },
@@ -325,7 +335,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
         text: '15.2 本软件现在不会、将来也不会参与任何商业化内容或商业化运作,将持续坚持开源免费的发展方向。',
       },
       {
-        text: '15.3 本软件源码不随安装包公开提供。如需获取源码用于学习或改造升级,请联系开发者本人(QQ 1425408561)并说明用途;开发者将评估申请者是否具备软件改造升级能力以及是否存在滥用软件的倾向,经确认后方可提供。未经开发者同意,源码获取者不得公开、转发源码,不得将其用于商业用途。',
+        text: '15.3 本软件源码公开于 https://github.com/Sycamorelost/MAF-Agent ，无需申请即可自行获取；获取、修改与分发须遵循仓库根目录的 LICENSE 与 NOTICE。',
       },
     ],
   },

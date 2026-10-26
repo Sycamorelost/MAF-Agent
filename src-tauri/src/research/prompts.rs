@@ -4,7 +4,7 @@ use crate::provider::ChatMessage;
 
 use super::events::SourceItem;
 use super::params::with_references;
-use super::{skills, template, EngineParams};
+use super::{EngineParams, skills, template};
 
 /// 决策步上下文:legacy 与 staged 共用一套 ReAct 决策逻辑,差异全部由本结构注入。
 pub(crate) struct DecideCtx<'a> {
@@ -133,7 +133,10 @@ pub(crate) fn build_step_messages(
         ));
     }
     if ctx.query_language != "auto" {
-        user.push_str(&format!("查询语言倾向:{}\n", lang_label(ctx.query_language)));
+        user.push_str(&format!(
+            "查询语言倾向:{}\n",
+            lang_label(ctx.query_language)
+        ));
     }
     if !ctx.prev_summaries.is_empty() {
         user.push_str("\n【前阶段摘要】\n");
@@ -146,7 +149,11 @@ pub(crate) fn build_step_messages(
     }
     if !sources.is_empty() {
         user.push_str("\n【已收集资料】\n");
-        let max_total = if ctx.read_length == "full" { 16000 } else { 6000 };
+        let max_total = if ctx.read_length == "full" {
+            16000
+        } else {
+            6000
+        };
         user.push_str(&sources_digest(sources, ctx.snippet_chars, max_total));
     }
     if !observations.is_empty() {
@@ -164,11 +171,13 @@ pub(crate) fn build_step_messages(
             role: "system".into(),
             content: system,
             images: vec![],
+            ..Default::default()
         },
         ChatMessage {
             role: "user".into(),
             content: user,
             images: vec![],
+            ..Default::default()
         },
     ]
 }
@@ -213,11 +222,13 @@ pub(crate) fn build_plan_all_messages(p: &EngineParams, total: u32) -> Vec<ChatM
             role: "system".into(),
             content: system,
             images: vec![],
+            ..Default::default()
         },
         ChatMessage {
             role: "user".into(),
             content: user,
             images: vec![],
+            ..Default::default()
         },
     ]
 }

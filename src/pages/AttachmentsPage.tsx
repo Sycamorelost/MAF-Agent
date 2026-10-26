@@ -97,6 +97,17 @@ export default function AttachmentsPage() {
   const [status, setStatus] = useState('');
   const requestedRef = useRef<Set<string>>(new Set());
 
+  /** Esc 关闭图片/文本预览(与全局搜索一致,避免只能点遮罩) */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setLightbox(null);
+      setTextPreview(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const flash = (text: string) => {
     setStatus(text);
     window.setTimeout(() => setStatus((s) => (s === text ? '' : s)), 2000);

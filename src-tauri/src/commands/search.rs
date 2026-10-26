@@ -222,29 +222,7 @@ pub fn search_all(query: String) -> Result<SearchResults, String> {
                  JOIN notes n ON n.rid = notes_fts.rowid
                  WHERE notes_fts MATCH ?1
                  ORDER BY n.updated DESC LIMIT 10",
-            ) {
-                if let Ok(rows) = stmt.query_map([&phrase], |r| {
-                    Ok(NoteHit {
-                        id: r.get(0)?,
-                        title: r.get(1)?,
-                        snippet: r.get::<_, String>(2)?.replace('\n', " "),
-                        updated: r.get(3)?,
-                    })
-                }) {
-                    for r in rows.flatten() {
-                        out.notes.push(r);
-                    }
-                }
-            }
-        } else if let Ok(mut stmt) = conn.prepare(
-            "SELECT id, title,
-                    substr(body, MAX(1, instr(lower(body), ?1) - 30), 80) AS snip,
-                    updated
-             FROM notes
-             WHERE instr(lower(title), ?1) > 0 OR instr(lower(body), ?1) > 0
-             ORDER BY updated DESC LIMIT 10",
-        ) {
-            if let Ok(rows) = stmt.query_map([&q.to_lowercase()], |r| {
+            ) && let Ok(rows) = stmt.query_map([&phrase], |r| {
                 Ok(NoteHit {
                     id: r.get(0)?,
                     title: r.get(1)?,
@@ -255,6 +233,24 @@ pub fn search_all(query: String) -> Result<SearchResults, String> {
                 for r in rows.flatten() {
                     out.notes.push(r);
                 }
+            }
+        } else if let Ok(mut stmt) = conn.prepare(
+            "SELECT id, title,
+                    substr(body, MAX(1, instr(lower(body), ?1) - 30), 80) AS snip,
+                    updated
+             FROM notes
+             WHERE instr(lower(title), ?1) > 0 OR instr(lower(body), ?1) > 0
+             ORDER BY updated DESC LIMIT 10",
+        ) && let Ok(rows) = stmt.query_map([&q.to_lowercase()], |r| {
+            Ok(NoteHit {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                snippet: r.get::<_, String>(2)?.replace('\n', " "),
+                updated: r.get(3)?,
+            })
+        }) {
+            for r in rows.flatten() {
+                out.notes.push(r);
             }
         }
     }

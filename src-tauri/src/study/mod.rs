@@ -24,7 +24,7 @@ pub mod validate;
 
 use serde::{Deserialize, Serialize};
 
-pub use pipeline::{preflight, run, StudyParams};
+pub use pipeline::{StudyParams, preflight, run};
 #[allow(unused_imports)]
 pub use schedule::{calc_schedule, export_markdown, store_payload_nodes};
 #[allow(unused_imports)]
@@ -170,16 +170,30 @@ impl Default for PlanPayload {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StudyEvent {
     /// 流水线步骤开始(step: intent/map/stages/resources/schedule/validate/export)
-    StepStart { step: String, label: String },
+    StepStart {
+        step: String,
+        label: String,
+    },
     /// 步骤结果摘要行
-    StepNote { step: String, content: String },
+    StepNote {
+        step: String,
+        content: String,
+    },
     /// 校验失败带反馈重试
-    Retry { step: String, attempt: u32, reason: String },
+    Retry {
+        step: String,
+        attempt: u32,
+        reason: String,
+    },
     Paused,
     Resumed,
-    Done { plan: Option<PlanPayload> },
+    Done {
+        plan: Option<PlanPayload>,
+    },
     Cancelled,
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 /// 面板已确认的意图字段(preflight 前用户已手工填写,不再追问)。

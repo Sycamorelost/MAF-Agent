@@ -6,7 +6,25 @@ fn migrate_creates_all_tables() {
     let conn = Connection::open_in_memory().unwrap();
     migrate(&conn).unwrap();
 
-    for t in ["sessions", "messages", "memory_versions", "research_sessions", "messages_fts", "notes", "notes_fts", "branches", "usage_record", "plans", "knowledge_nodes", "study_logs", "study_units", "quizzes", "quiz_attempts", "reviews"] {
+    for t in [
+        "sessions",
+        "messages",
+        "memory_versions",
+        "research_sessions",
+        "messages_fts",
+        "notes",
+        "notes_fts",
+        "branches",
+        "usage_record",
+        "plans",
+        "knowledge_nodes",
+        "study_logs",
+        "study_units",
+        "quizzes",
+        "quiz_attempts",
+        "reviews",
+        "todos",
+    ] {
         let n: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
@@ -24,6 +42,61 @@ fn migrate_creates_all_tables() {
 
     // 幂等:二次执行不报错
     migrate(&conn).unwrap();
+}
+
+/// PERF-2:版本已最新但核心表被删时,快路径必须回落全量迁移并自愈。
+#[test]
+fn fast_path_self_heals_missing_table() {
+    let conn = Connection::open_in_memory().unwrap();
+    migrate(&conn).unwrap();
+
+    conn.execute_batch("DROP TABLE todos;").unwrap();
+    // 此时 user_version 仍是最新,但表缺失 → is_schema_ready 应判 false
+    assert!(!is_schema_ready(&conn).unwrap());
+
+    migrate(&conn).unwrap();
+    let n: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='todos'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(n, 1, "缺失的 core 表应被自愈重建");
+}
+
+/// PERF-2:版本落后时不得走快路径,必须完整迁移并推进版本号。
+#[test]
+fn fast_path_rejects_stale_version() {
+    let conn = Connection::open_in_memory().unwrap();
+    migrate(&conn).unwrap();
+
+    conn.pragma_update(None, "user_version", 0).unwrap();
+    assert!(!is_schema_ready(&conn).unwrap());
+
+    migrate(&conn).unwrap();
+    let v: i32 = conn
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(v, SCHEMA_VERSION);
+}
+
+/// PERF-3:会话列表 / 附件列表的支撑索引应随迁移创建。
+#[test]
+fn migrate_creates_perf_indexes() {
+    let conn = Connection::open_in_memory().unwrap();
+    migrate(&conn).unwrap();
+
+    for idx in ["idx_sessions_updated", "idx_messages_attachments"] {
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
+                [idx],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1, "index {idx} should exist");
+    }
 }
 
 #[test]
@@ -84,10 +157,8 @@ fn fts5_matches_chinese_content() {
 fn fts5_rebuilds_old_tokenizer() {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch(MIGRATION_V1).unwrap();
-    conn.execute_batch(
-        "CREATE VIRTUAL TABLE messages_fts USING fts5(content);",
-    )
-    .unwrap();
+    conn.execute_batch("CREATE VIRTUAL TABLE messages_fts USING fts5(content);")
+        .unwrap();
 
     migrate(&conn).unwrap();
 
@@ -98,7 +169,10 @@ fn fts5_rebuilds_old_tokenizer() {
             |r| r.get(0),
         )
         .unwrap();
-    assert!(sql.contains("trigram"), "old fts table should be rebuilt with trigram: {sql}");
+    assert!(
+        sql.contains("trigram"),
+        "old fts table should be rebuilt with trigram: {sql}"
+    );
 }
 
 /// V4:旧库(仅 V1 结构)迁移后自动补齐 system_prompt / max_context_messages / attachments 三列。
@@ -110,7 +184,9 @@ fn migrate_v4_adds_columns_to_old_db() {
     migrate(&conn).unwrap();
 
     let has_col = |table: &str, col: &str| {
-        let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})")).unwrap();
+        let mut stmt = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .unwrap();
         let cols: Vec<String> = stmt
             .query_map([], |r| r.get::<_, String>(1))
             .unwrap()
@@ -147,9 +223,11 @@ fn migrate_v4_adds_columns_to_old_db() {
     )
     .unwrap();
     let (sp, mc): (Option<String>, i64) = conn
-        .query_row("SELECT system_prompt, max_context_messages FROM sessions WHERE id='s1'", [], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })
+        .query_row(
+            "SELECT system_prompt, max_context_messages FROM sessions WHERE id='s1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
         .unwrap();
     assert_eq!(sp.as_deref(), Some("你是助手"));
     assert_eq!(mc, 20);
@@ -177,11 +255,19 @@ fn migrate_v9_backfills_linear_chain_in_main() {
 
     // 全部在 main 分支,sessions.active_branch 默认 main
     let branch: String = conn
-        .query_row("SELECT active_branch FROM sessions WHERE id='s1'", [], |r| r.get(0))
+        .query_row(
+            "SELECT active_branch FROM sessions WHERE id='s1'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(branch, "main");
     let n_main: i64 = conn
-        .query_row("SELECT COUNT(*) FROM messages WHERE session_id='s1' AND branch_id='main'", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE session_id='s1' AND branch_id='main'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(n_main, 3);
 

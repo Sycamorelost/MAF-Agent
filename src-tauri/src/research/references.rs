@@ -7,14 +7,11 @@ pub const REF_TOTAL_BUDGET_CHARS: usize = 30_000;
 /// 单份参考资料注入上限(字符)。
 pub const REF_FILE_BUDGET_CHARS: usize = 12_000;
 
-const REF_BLOCK_HEADER: &str =
-    "【用户导入的参考资料】以下内容是用户提供的本地文件正文,视为可信事实依据,可直接引用;不得虚构参考资料之外的事实。";
+const REF_BLOCK_HEADER: &str = "【用户导入的参考资料】以下内容是用户提供的本地文件正文,视为可信事实依据,可直接引用;不得虚构参考资料之外的事实。";
 
 /// 用户导入参考资料目录:`<data_dir>/research/references`。
 pub fn references_dir() -> std::path::PathBuf {
-    crate::paths::data_dir()
-        .join("research")
-        .join("references")
+    crate::paths::data_dir().join("research").join("references")
 }
 
 /// 导入时缓存的提取文本目录:`<data_dir>/research/references/extracted`。

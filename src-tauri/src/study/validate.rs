@@ -5,7 +5,10 @@ use super::{Intent, NodeSpec, StageResource, StageSpec};
 /// 从模型输出中提取 JSON 对象(容忍代码围栏与前后闲话)。
 pub fn extract_json(text: &str) -> Option<String> {
     let s = text.trim();
-    let s = s.strip_prefix("```json").or_else(|| s.strip_prefix("```")).unwrap_or(s);
+    let s = s
+        .strip_prefix("```json")
+        .or_else(|| s.strip_prefix("```"))
+        .unwrap_or(s);
     let s = s.strip_suffix("```").unwrap_or(s).trim();
     let start = s.find('{')?;
     let end = s.rfind('}')?;
@@ -40,7 +43,12 @@ pub fn validate_stages(stages: &[StageSpec], nodes: &[NodeSpec]) -> Vec<String> 
         }
         for t in &s.topics {
             if !known.contains(t.as_str()) {
-                issues.push(format!("阶段 {}「{}」引用了地图外知识点「{}」", si + 1, s.name, t));
+                issues.push(format!(
+                    "阶段 {}「{}」引用了地图外知识点「{}」",
+                    si + 1,
+                    s.name,
+                    t
+                ));
             }
             if !seen.insert(t.as_str()) {
                 issues.push(format!("知识点「{t}」被多个阶段重复安排"));
@@ -86,7 +94,7 @@ pub fn fallback_repaired(nodes: &[NodeSpec], intent: &Intent) -> Vec<StageSpec> 
             .then(b.must_learn.cmp(&a.must_learn))
     });
     let n = sorted.len().max(1);
-    let per = (n + 2) / 3;
+    let per = n.div_ceil(3);
     let names = ["基础入门", "进阶强化", "综合应用"];
     let mut out = Vec::new();
     for (i, name) in names.iter().enumerate() {
@@ -168,7 +176,10 @@ pub(crate) fn parse_nodes(v: &serde_json::Value) -> Vec<NodeSpec> {
             .unwrap_or("")
             .trim()
             .to_string();
-        let must_learn = item.get("must_learn").and_then(|x| x.as_bool()).unwrap_or(false);
+        let must_learn = item
+            .get("must_learn")
+            .and_then(|x| x.as_bool())
+            .unwrap_or(false);
         let prereqs = item
             .get("prereqs")
             .and_then(|x| x.as_array())
@@ -181,7 +192,13 @@ pub(crate) fn parse_nodes(v: &serde_json::Value) -> Vec<NodeSpec> {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        out.push(NodeSpec { name, difficulty, why, must_learn, prereqs });
+        out.push(NodeSpec {
+            name,
+            difficulty,
+            why,
+            must_learn,
+            prereqs,
+        });
     }
     // 悬空前置引用修剪
     let known: std::collections::HashSet<String> = out.iter().map(|n| n.name.clone()).collect();
@@ -262,12 +279,10 @@ pub(crate) fn fix_stages(stages: &mut [StageSpec], nodes: &[NodeSpec]) {
             s.estimated_weeks = 2;
         }
         s.topics.retain(|t| {
-            known.contains(t.as_str())
-                && !seen.contains(t)
-                && {
-                    seen.insert(t.clone());
-                    true
-                }
+            known.contains(t.as_str()) && !seen.contains(t) && {
+                seen.insert(t.clone());
+                true
+            }
         });
     }
 }
@@ -300,7 +315,10 @@ pub(crate) fn parse_resources(v: &serde_json::Value, stage_count: usize) -> Vec<
             continue;
         }
         items.dedup();
-        if let Some(existing) = out.iter_mut().find(|r: &&mut StageResource| r.stage == stage) {
+        if let Some(existing) = out
+            .iter_mut()
+            .find(|r: &&mut StageResource| r.stage == stage)
+        {
             existing.items.extend(items);
         } else {
             out.push(StageResource { stage, items });
@@ -348,17 +366,30 @@ mod tests {
 
     #[test]
     fn validate_rejects_bad_structures() {
-        let nodes = vec![node("A", 1, true), node("B", 2, false), node("C", 3, true), node("D", 4, false)];
+        let nodes = vec![
+            node("A", 1, true),
+            node("B", 2, false),
+            node("C", 3, true),
+            node("D", 4, false),
+        ];
         // 阶段过少
         let st = vec![stage(0, "s", 1, &["A"])];
-        assert!(validate_stages(&st, &nodes).iter().any(|i| i.contains("阶段数")));
+        assert!(
+            validate_stages(&st, &nodes)
+                .iter()
+                .any(|i| i.contains("阶段数"))
+        );
         // 难度跳级(相邻差 >2)
         let st = vec![
             stage(0, "s1", 1, &["A"]),
             stage(1, "s2", 2, &["B"]),
             stage(2, "s3", 5, &["C", "D"]),
         ];
-        assert!(validate_stages(&st, &nodes).iter().any(|i| i.contains("跳级")));
+        assert!(
+            validate_stages(&st, &nodes)
+                .iter()
+                .any(|i| i.contains("跳级"))
+        );
         // 地图外知识点 + 必学缺失
         let st = vec![
             stage(0, "s1", 1, &["B", "X"]),
@@ -374,7 +405,11 @@ mod tests {
             stage(1, "s2", 2, &["B", "C"]),
             stage(2, "s3", 3, &["D"]),
         ];
-        assert!(validate_stages(&st, &nodes).iter().any(|i| i.contains("重复")));
+        assert!(
+            validate_stages(&st, &nodes)
+                .iter()
+                .any(|i| i.contains("重复"))
+        );
     }
 
     #[test]
@@ -395,7 +430,10 @@ mod tests {
 
     #[test]
     fn fallback_covers_all_nodes_and_flags_repaired() {
-        let intent = Intent { topic: "Rust".into(), ..Default::default() };
+        let intent = Intent {
+            topic: "Rust".into(),
+            ..Default::default()
+        };
         let nodes: Vec<NodeSpec> = (0..9)
             .map(|i| node(&format!("N{i}"), (i % 5 + 1) as u8, i % 2 == 0))
             .collect();
@@ -403,7 +441,11 @@ mod tests {
         assert_eq!(stages.len(), 3);
         let total: usize = stages.iter().map(|s| s.topics.len()).sum();
         assert_eq!(total, 9, "降级方案必须覆盖全部知识点");
-        assert!(!validate_stages(&stages, &nodes).iter().any(|i| i.contains("必学")));
+        assert!(
+            !validate_stages(&stages, &nodes)
+                .iter()
+                .any(|i| i.contains("必学"))
+        );
     }
 
     #[test]
@@ -435,6 +477,9 @@ mod tests {
         let r = parse_resources(&v, 2);
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].stage, 0);
-        assert_eq!(r[0].items, vec!["The Book".to_string(), "Rustlings".to_string()]);
+        assert_eq!(
+            r[0].items,
+            vec!["The Book".to_string(), "Rustlings".to_string()]
+        );
     }
 }

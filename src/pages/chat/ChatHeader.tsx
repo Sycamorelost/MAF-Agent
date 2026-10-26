@@ -31,7 +31,9 @@ interface ChatHeaderProps {
   branchRefresh: number;
   current: { providerId: string; model: string } | null;
   memCollapsed: boolean;
+  outlineOpen: boolean;
   onToggleMemPanel: () => void;
+  onToggleOutline: () => void;
   onOpenModelSwitch: () => void;
   onError: (msg: string) => void;
 }
@@ -44,7 +46,9 @@ export function ChatHeader({
   branchRefresh,
   current,
   memCollapsed,
+  outlineOpen,
   onToggleMemPanel,
+  onToggleOutline,
   onOpenModelSwitch,
   onError,
 }: ChatHeaderProps) {
@@ -214,6 +218,14 @@ export function ChatHeader({
         {current ? current.model : '未配置模型'}
         {current && <span className="tag">{current.providerId}</span>}
         <IconChevronDown size={13} />
+      </button>
+      <button
+        type="button"
+        className={`chat-panel-toggle${outlineOpen ? ' on' : ''}`}
+        onClick={onToggleOutline}
+        title={outlineOpen ? '收起纲要面板' : '展开纲要面板'}
+      >
+        <span style={{ fontSize: 13, fontWeight: 700 }}>#</span>
       </button>
       <button
         type="button"

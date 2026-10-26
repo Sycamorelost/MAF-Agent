@@ -1,8 +1,8 @@
 //! 总览聚合(UsageTotals)。
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
-use super::{UsageTotals, COST};
+use super::{COST, UsageTotals};
 
 pub(super) fn totals_on(conn: &Connection, since: i64) -> rusqlite::Result<UsageTotals> {
     let sql = format!(

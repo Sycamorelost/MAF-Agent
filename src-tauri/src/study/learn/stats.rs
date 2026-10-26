@@ -53,7 +53,11 @@ pub(crate) fn stats_conn(conn: &rusqlite::Connection, plan_id: &str) -> Result<S
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([plan_id], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+            ))
         })
         .map_err(|e| e.to_string())?;
     // date -> (minutes, activity);BTreeMap 保证日期有序
@@ -69,9 +73,15 @@ pub(crate) fn stats_conn(conn: &rusqlite::Connection, plan_id: &str) -> Result<S
     // 最近 35 天升序网格(最旧 → 今天)
     let mut days = Vec::with_capacity(35);
     for i in 0..=34i64 {
-        let d = (today - Duration::days(34 - i)).format("%Y-%m-%d").to_string();
+        let d = (today - Duration::days(34 - i))
+            .format("%Y-%m-%d")
+            .to_string();
         let (m, n) = by_day.get(&d).copied().unwrap_or((0, 0));
-        days.push(DayStat { date: d, minutes: m, activity: n });
+        days.push(DayStat {
+            date: d,
+            minutes: m,
+            activity: n,
+        });
     }
     let total_days = by_day.len() as i64;
     let total_minutes: i64 = by_day.values().map(|e| e.0).sum();
@@ -115,9 +125,7 @@ pub fn memory_digest() -> Result<Option<String>, String> {
     memory_digest_conn(&c)
 }
 
-pub(crate) fn memory_digest_conn(
-    conn: &rusqlite::Connection,
-) -> Result<Option<String>, String> {
+pub(crate) fn memory_digest_conn(conn: &rusqlite::Connection) -> Result<Option<String>, String> {
     let c = conn;
     let mut stmt = c
         .prepare(
@@ -152,7 +160,11 @@ pub(crate) fn memory_digest_conn(
                 |r| r.get(0),
             )
             .ok();
-        let state = if status == "done" { "已完成计划" } else { "正在学习" };
+        let state = if status == "done" {
+            "已完成计划"
+        } else {
+            "正在学习"
+        };
         let mut line = format!(
             "- {state}「{topic}」:完成 {done}/{total} 个知识点,平均掌握 {:.0}%",
             avg * 100.0
@@ -176,7 +188,11 @@ mod tests {
         crate::db::schema::migrate(&conn).unwrap();
         seed_plan(&conn, "p0000005", "2026-01-01T00:00:00Z");
         seed_node(&conn, "p0000005", 1, "A", 0);
-        conn.execute("UPDATE knowledge_nodes SET done_at='2026-01-02', mastery=0.7 WHERE id=1", []).unwrap();
+        conn.execute(
+            "UPDATE knowledge_nodes SET done_at='2026-01-02', mastery=0.7 WHERE id=1",
+            [],
+        )
+        .unwrap();
         seed_node(&conn, "p0000005", 2, "B", 0);
 
         let today = Local::now().date_naive();
@@ -200,7 +216,10 @@ mod tests {
         assert_eq!(st.streak_days, 2, "今天没打卡但从昨天连续");
         assert_eq!(st.done_nodes, 1);
         assert_eq!(st.total_nodes, 2);
-        assert!((st.mastery_avg - 0.35).abs() < 1e-9, "未学节点 mastery=0 计入均值");
+        assert!(
+            (st.mastery_avg - 0.35).abs() < 1e-9,
+            "未学节点 mastery=0 计入均值"
+        );
         assert_eq!(st.days.len(), 35);
         assert_eq!(st.days[34].date, today.format("%Y-%m-%d").to_string());
         assert_eq!(st.days[33].activity, 2);
@@ -212,11 +231,22 @@ mod tests {
     fn memory_digest_summarizes_active_plans() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         crate::db::schema::migrate(&conn).unwrap();
-        assert!(memory_digest_conn(&conn).unwrap().is_none(), "无计划 → None");
+        assert!(
+            memory_digest_conn(&conn).unwrap().is_none(),
+            "无计划 → None"
+        );
         seed_plan(&conn, "p0000006", "2026-01-01T00:00:00Z");
-        conn.execute("UPDATE plans SET topic='Rust 入门', status='active' WHERE id='p0000006'", []).unwrap();
+        conn.execute(
+            "UPDATE plans SET topic='Rust 入门', status='active' WHERE id='p0000006'",
+            [],
+        )
+        .unwrap();
         seed_node(&conn, "p0000006", 1, "A", 0);
-        conn.execute("UPDATE knowledge_nodes SET done_at='2026-01-02', mastery=1.0 WHERE id=1", []).unwrap();
+        conn.execute(
+            "UPDATE knowledge_nodes SET done_at='2026-01-02', mastery=1.0 WHERE id=1",
+            [],
+        )
+        .unwrap();
         seed_node(&conn, "p0000006", 2, "B", 0);
         conn.execute(
             "INSERT INTO study_units(plan_id, node_id, node_name, title, est_minutes, content_md, created)

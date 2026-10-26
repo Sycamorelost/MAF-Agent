@@ -31,7 +31,9 @@ pub fn set_session_agent(id: String, agent_id: Option<String>) -> Result<(), Str
         Some(aid) => {
             let tpl = agents::find(aid).ok_or_else(|| format!("Agent 模板不存在:{aid}"))?;
             // 渲染 {date}/{model}/{language} 后落盘;{model} 取会话当前模型
-            let model = sessions::get(&id)?.and_then(|s| s.model_id).unwrap_or_default();
+            let model = sessions::get(&id)?
+                .and_then(|s| s.model_id)
+                .unwrap_or_default();
             let rendered = agents::render_prompt(&tpl.system_prompt, &model);
             sessions::set_system_prompt(&id, Some(&rendered))?;
             Some(tpl.memory_strategy)
@@ -51,7 +53,9 @@ pub fn set_session_agent(id: String, agent_id: Option<String>) -> Result<(), Str
 #[tauri::command]
 pub fn apply_agent_prompt(id: String, agent_id: String) -> Result<(), String> {
     let tpl = agents::find(&agent_id).ok_or_else(|| format!("Agent 模板不存在:{agent_id}"))?;
-    let model = sessions::get(&id)?.and_then(|s| s.model_id).unwrap_or_default();
+    let model = sessions::get(&id)?
+        .and_then(|s| s.model_id)
+        .unwrap_or_default();
     let rendered = agents::render_prompt(&tpl.system_prompt, &model);
     sessions::set_system_prompt(&id, Some(&rendered))
 }

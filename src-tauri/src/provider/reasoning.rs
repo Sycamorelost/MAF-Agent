@@ -36,7 +36,8 @@ pub fn resolve(provider_id: &str, model: &str) -> ReasoningCapability {
     // 1. 手动修正:provider_models.json 缓存条目的 reasoning 字段
     for f in model_cards::load_model_cache()
         .get(provider_id)
-        .into_iter().flatten()
+        .into_iter()
+        .flatten()
     {
         if f.id == model {
             if let Some(cap) = f.reasoning {

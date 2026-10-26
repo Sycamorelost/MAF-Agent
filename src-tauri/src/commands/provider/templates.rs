@@ -2,8 +2,7 @@
 
 use crate::provider::model_cards::{load_model_cache, save_model_cache};
 use crate::provider::{
-    keychain,
-    model_config,
+    keychain, model_config,
     rotation::{self, RotationState},
     templates::{self, ProviderTemplate},
 };

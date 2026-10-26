@@ -102,10 +102,10 @@ pub fn find_override(key: &str) -> Option<TemplateOverride> {
 
 /// 生效模板:自定义覆盖 > 内置。
 pub fn effective(key: &str, lang: &str) -> String {
-    if let Some(o) = find_override(key) {
-        if !o.content.trim().is_empty() {
-            return o.content;
-        }
+    if let Some(o) = find_override(key)
+        && !o.content.trim().is_empty()
+    {
+        return o.content;
     }
     builtin_content(key, lang).unwrap_or_default().to_string()
 }
@@ -132,7 +132,10 @@ pub fn list() -> Vec<TemplateDto> {
 /// 保存自定义覆盖,返回最新列表。
 pub fn save(key: &str, content: &str) -> Result<Vec<TemplateDto>, String> {
     if !TEMPLATE_KEYS.contains(&key) {
-        return Err(format!("非法模板 key:{key}(可选:{})", TEMPLATE_KEYS.join("/")));
+        return Err(format!(
+            "非法模板 key:{key}(可选:{})",
+            TEMPLATE_KEYS.join("/")
+        ));
     }
     if content.trim().is_empty() {
         return Err("模板内容不能为空;如需回到内置请使用「恢复默认」".into());
@@ -188,8 +191,14 @@ mod tests {
             assert!(!builtin_content(k, "zh").unwrap_or_default().is_empty());
             assert!(!builtin_content(k, "en").unwrap_or_default().is_empty());
         }
-        assert_ne!(builtin_content("report", "zh"), builtin_content("report", "en"));
-        assert_eq!(builtin_content("decide", "zh"), builtin_content("decide", "en"));
+        assert_ne!(
+            builtin_content("report", "zh"),
+            builtin_content("report", "en")
+        );
+        assert_eq!(
+            builtin_content("decide", "zh"),
+            builtin_content("decide", "en")
+        );
     }
 
     #[test]

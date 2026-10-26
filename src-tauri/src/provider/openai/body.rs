@@ -9,26 +9,35 @@ use super::OpenAiCompat;
 impl OpenAiCompat {
     /// 序列化单条 ChatMessage:纯文本或 vision content 数组(兼容 OpenAI / DeepSeek 等)。
     pub(super) fn serialize_message(m: &ChatMessage) -> serde_json::Value {
-        if m.images.is_empty() {
-            return json!({
+        let mut v = if m.images.is_empty() {
+            json!({
                 "role": m.role,
                 "content": m.content,
-            });
+            })
+        } else {
+            let mut parts = vec![json!({
+                "type": "text",
+                "text": m.content,
+            })];
+            for data_url in &m.images {
+                parts.push(json!({
+                    "type": "image_url",
+                    "image_url": { "url": data_url },
+                }));
+            }
+            json!({
+                "role": m.role,
+                "content": parts,
+            })
+        };
+        // Phase 5e:多轮工具调用的必要字段(缺任一字段模型会 400)
+        if let Some(calls) = &m.tool_calls {
+            v["tool_calls"] = json!(calls);
         }
-        let mut parts = vec![json!({
-            "type": "text",
-            "text": m.content,
-        })];
-        for data_url in &m.images {
-            parts.push(json!({
-                "type": "image_url",
-                "image_url": { "url": data_url },
-            }));
+        if let Some(id) = &m.tool_call_id {
+            v["tool_call_id"] = json!(id);
         }
-        json!({
-            "role": m.role,
-            "content": parts,
-        })
+        v
     }
 
     /// 按Provider 方言把统一思考规格翻译成请求参数(improving.md §1.4 映射表)。
@@ -55,11 +64,13 @@ impl OpenAiCompat {
             // OpenAI:顶层 reasoning_effort minimal/low/medium/high;minimal 仅 gpt-5 系接受,
             // o 系列不认 minimal → Off 不发参数
             "openai" => match spec {
-                ReasoningSpec::Effort { level } => body["reasoning_effort"] = json!(match level {
-                    EffortLevel::Light => "low",
-                    EffortLevel::Medium => "medium",
-                    EffortLevel::High | EffortLevel::Ultra => "high",
-                }),
+                ReasoningSpec::Effort { level } => {
+                    body["reasoning_effort"] = json!(match level {
+                        EffortLevel::Light => "low",
+                        EffortLevel::Medium => "medium",
+                        EffortLevel::High | EffortLevel::Ultra => "high",
+                    })
+                }
                 ReasoningSpec::Budget { .. } => {}
                 ReasoningSpec::Off => {
                     if m.starts_with("gpt-5") {
@@ -157,7 +168,9 @@ impl OpenAiCompat {
     }
 
     /// 解析 images/generations 响应 JSON,兼容 b64_json 与 url 两种返回。
-    pub(super) fn parse_image_response(v: &serde_json::Value) -> Result<ImageResponse, ProviderError> {
+    pub(super) fn parse_image_response(
+        v: &serde_json::Value,
+    ) -> Result<ImageResponse, ProviderError> {
         let item = v
             .get("data")
             .and_then(|d| d.get(0))

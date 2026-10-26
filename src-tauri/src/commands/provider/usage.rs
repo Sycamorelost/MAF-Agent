@@ -80,9 +80,8 @@ pub fn usage_recalc(days: u32) -> Result<UsageRecalcReport, String> {
     let mut stored_total = 0i64;
     let mut current_total = 0i64;
     for m in mixes {
-        let current = pricing_for(&m.provider_id, &m.model_id).and_then(|p| {
-            price_tokens_nano(&p, m.input_tokens, m.output_tokens, m.cached_tokens)
-        });
+        let current = pricing_for(&m.provider_id, &m.model_id)
+            .and_then(|p| price_tokens_nano(&p, m.input_tokens, m.output_tokens, m.cached_tokens));
         stored_total += m.stored_nano;
         current_total += current.unwrap_or(0);
         rows.push(UsageRecalcRow {

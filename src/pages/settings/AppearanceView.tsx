@@ -1,0 +1,100 @@
+//! 设置 · 字体大小 —— 只缩放字号 token(-font-*),不改布局间距;改完立即全局生效。
+
+import { useState } from 'react';
+import {
+  applyUiScale,
+  loadUiScale,
+  UI_SCALE_DEFAULT,
+  UI_SCALE_MAX,
+  UI_SCALE_MIN,
+} from '../../lib/uiScale';
+
+/** 预设档位(百分比)。 */
+const PRESETS: { pct: number; label: string }[] = [
+  { pct: 90, label: '小' },
+  { pct: 100, label: '标准' },
+  { pct: 110, label: '大' },
+  { pct: 120, label: '特大' },
+];
+
+export function AppearanceView() {
+  const [pct, setPct] = useState(() => Math.round(loadUiScale() * 100));
+
+  const onChange = (next: number) => {
+    const applied = Math.round(applyUiScale(next / 100) * 100);
+    setPct(applied);
+  };
+
+  return (
+    <>
+      <h2>字体大小</h2>
+      <p className="set-desc">
+        按比例调整整个界面的字号(含对话正文、设置页、侧栏等)。只放大文字,不改变布局间距,
+        因此不会出现排版错位;调整立即生效并记住,下次启动沿用。
+      </p>
+
+      <div className="set-card">
+        <div className="set-card-h">
+          字号缩放
+          <span className="st">{pct}%</span>
+        </div>
+        <div className="set-card-b">
+          <div className="set-actions" style={{ flexWrap: 'wrap' }}>
+            {PRESETS.map((p) => (
+              <button
+                key={p.pct}
+                className={`btn btn-xs${pct === p.pct ? ' btn-primary' : ''}`}
+                onClick={() => onChange(p.pct)}
+              >
+                {p.label} · {p.pct}%
+              </button>
+            ))}
+            <span className="sp" />
+            <button
+              className="btn btn-xs"
+              disabled={pct === Math.round(UI_SCALE_DEFAULT * 100)}
+              onClick={() => onChange(Math.round(UI_SCALE_DEFAULT * 100))}
+            >
+              恢复默认
+            </button>
+          </div>
+
+          <div className="set-row" style={{ marginTop: 'var(--space-3)' }}>
+            <label className="lbl">自定义</label>
+            <input
+              type="range"
+              min={Math.round(UI_SCALE_MIN * 100)}
+              max={Math.round(UI_SCALE_MAX * 100)}
+              step={5}
+              value={pct}
+              onChange={(e) => onChange(Number(e.target.value))}
+              style={{ flex: 1, maxWidth: 320 }}
+            />
+            <span className="set-hint">
+              {Math.round(UI_SCALE_MIN * 100)}% – {Math.round(UI_SCALE_MAX * 100)}%
+            </span>
+          </div>
+
+          <div className="set-hint" style={{ marginTop: 'var(--space-3)' }}>
+            预览:这是正文的显示效果,模型回复与工具结果都按此字号呈现。
+          </div>
+          <div
+            style={{
+              marginTop: 'var(--space-2)',
+              padding: 'var(--space-3)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-s)',
+              fontSize: 'var(--font-body)',
+              lineHeight: 1.7,
+            }}
+          >
+            正文示例 · MAF Agent 会在这里输出回答。字号随上方设置实时变化。
+            <div className="set-hint" style={{ marginTop: 'var(--space-1)' }}>
+              次要说明文字示例(--font-caption)
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

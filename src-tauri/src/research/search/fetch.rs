@@ -111,7 +111,12 @@ impl SearchEngine for SearXng {
             } else {
                 ""
             };
-            return Err(format!("SearXNG HTTP {}: {}{}", status.as_u16(), body.chars().take(200).collect::<String>(), hint));
+            return Err(format!(
+                "SearXNG HTTP {}: {}{}",
+                status.as_u16(),
+                body.chars().take(200).collect::<String>(),
+                hint
+            ));
         }
 
         let v: serde_json::Value =
@@ -119,7 +124,11 @@ impl SearchEngine for SearXng {
         let mut out = Vec::new();
         if let Some(arr) = v.get("results").and_then(|r| r.as_array()) {
             for item in arr.iter().take(max_results as usize) {
-                let url = item.get("url").and_then(|u| u.as_str()).unwrap_or("").to_string();
+                let url = item
+                    .get("url")
+                    .and_then(|u| u.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if url.is_empty() {
                     continue;
                 }
@@ -188,7 +197,11 @@ impl SearchEngine for Tavily {
         let mut out = Vec::new();
         if let Some(arr) = v.get("results").and_then(|r| r.as_array()) {
             for item in arr.iter().take(max_results as usize) {
-                let url = item.get("url").and_then(|u| u.as_str()).unwrap_or("").to_string();
+                let url = item
+                    .get("url")
+                    .and_then(|u| u.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if url.is_empty() {
                     continue;
                 }
@@ -258,17 +271,21 @@ impl SearchEngine for Bocha {
 
         let v: serde_json::Value =
             serde_json::from_str(&body).map_err(|e| format!("博查响应解析失败: {e}"))?;
-        if let Some(code) = v.get("code").and_then(|c| c.as_i64()) {
-            if code != 200 {
-                let msg = v.get("msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
-                return Err(format!("博查错误 {code}: {msg}"));
-            }
+        if let Some(code) = v.get("code").and_then(|c| c.as_i64())
+            && code != 200
+        {
+            let msg = v.get("msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+            return Err(format!("博查错误 {code}: {msg}"));
         }
 
         let mut out = Vec::new();
         if let Some(arr) = v.pointer("/data/webPages/value").and_then(|r| r.as_array()) {
             for item in arr.iter().take(max_results as usize) {
-                let url = item.get("url").and_then(|u| u.as_str()).unwrap_or("").to_string();
+                let url = item
+                    .get("url")
+                    .and_then(|u| u.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if url.is_empty() {
                     continue;
                 }

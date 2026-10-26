@@ -39,7 +39,9 @@ fn attachments_dir(session_id: &str) -> PathBuf {
 
 /// 校验路径必须位于 attachments 目录内(防越权读盘,OWASP Path Traversal / CWE-22)。
 fn ensure_in_attachments_dir(p: &std::path::Path) -> Result<(), String> {
-    let root = attachments_root().canonicalize().map_err(|e| e.to_string())?;
+    let root = attachments_root()
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
     let canon = p.canonicalize().map_err(|e| format!("路径无效: {e}"))?;
     if canon.starts_with(&root) {
         Ok(())
@@ -127,7 +129,11 @@ pub fn read_attachment_data(path: String) -> Result<String, String> {
     let bytes = std::fs::read(p).map_err(|e| format!("读取附件失败: {e}"))?;
     let mime = match attachment::classify(&path) {
         AttachmentKind::Image => {
-            let ext = path.rsplit('.').next().unwrap_or("png").to_ascii_lowercase();
+            let ext = path
+                .rsplit('.')
+                .next()
+                .unwrap_or("png")
+                .to_ascii_lowercase();
             match ext.as_str() {
                 "jpg" | "jpeg" => "image/jpeg",
                 "gif" => "image/gif",
@@ -228,7 +234,10 @@ fn display_name_from_path(p: &std::path::Path) -> String {
 /// 把附件中心已有文件再次引入某会话:复用磁盘文件(不复制),重新生成元数据。
 /// 文件可能被外部改动过,文本类重新提取保证注入内容新鲜。
 #[tauri::command]
-pub fn insert_attachment_to_session(session_id: String, path: String) -> Result<AttachmentMeta, String> {
+pub fn insert_attachment_to_session(
+    session_id: String,
+    path: String,
+) -> Result<AttachmentMeta, String> {
     crate::memory::validate_id(&session_id)?;
     let p = std::path::Path::new(&path);
     ensure_in_attachments_dir(p)?;
@@ -377,11 +386,7 @@ mod tests {
         }
     }
 
-    fn add_msg(
-        conn: &rusqlite::Connection,
-        session: &str,
-        attachments: Option<&str>,
-    ) -> i64 {
+    fn add_msg(conn: &rusqlite::Connection, session: &str, attachments: Option<&str>) -> i64 {
         crate::db::messages::append_on(
             conn,
             session,
@@ -444,7 +449,9 @@ mod tests {
         // 移除一个 → 剩一个
         remove_from_message_on(&conn, m1, r"D:\att\s1\a.png").unwrap();
         let raw: String = conn
-            .query_row("SELECT attachments FROM messages WHERE id=?1", [m1], |r| r.get(0))
+            .query_row("SELECT attachments FROM messages WHERE id=?1", [m1], |r| {
+                r.get(0)
+            })
             .unwrap();
         let left: Vec<AttachmentMeta> = serde_json::from_str(&raw).unwrap();
         assert_eq!(left.len(), 1);
@@ -453,7 +460,9 @@ mod tests {
         // 再移除 → attachments 变 NULL
         remove_from_message_on(&conn, m1, r"D:\att\s1\b.txt").unwrap();
         let raw: Option<String> = conn
-            .query_row("SELECT attachments FROM messages WHERE id=?1", [m1], |r| r.get(0))
+            .query_row("SELECT attachments FROM messages WHERE id=?1", [m1], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert!(raw.is_none(), "清空后应为 NULL");
 
@@ -482,7 +491,10 @@ mod tests {
         );
 
         assert_eq!(count_references_on(&conn, shared).unwrap(), 2);
-        assert_eq!(count_references_on(&conn, r"D:\att\shared\none.png").unwrap(), 0);
+        assert_eq!(
+            count_references_on(&conn, r"D:\att\shared\none.png").unwrap(),
+            0
+        );
     }
 
     #[test]
@@ -500,6 +512,9 @@ mod tests {
         // 无 ts 前缀(手工放入的文件):保留整体
         assert_eq!(display_name_from_path(Path::new("plain.txt")), "plain.txt");
         // 过短的类前缀不剥
-        assert_eq!(display_name_from_path(Path::new("2026-10_a.txt")), "2026-10_a.txt");
+        assert_eq!(
+            display_name_from_path(Path::new("2026-10_a.txt")),
+            "2026-10_a.txt"
+        );
     }
 }

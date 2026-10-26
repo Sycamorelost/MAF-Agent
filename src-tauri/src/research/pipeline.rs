@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 
 use super::events::{EventSink, ResearchEvent, SourceItem};
 use super::export::run_report;
-use super::{stage, store, EngineParams};
+use super::{EngineParams, stage, store};
 
 mod concise;
 mod decide;
@@ -76,43 +76,44 @@ pub(crate) fn write_stage_progress(id: &str, file: &stage::StagesFile) {
 
 /// H1:每阶段起点热读 stages.json 的最新编排(检查点「调整下阶段」写回后生效),
 /// 运行期状态按 id 保留(含已完成阶段的摘要);返回最新阶段配置列表。
-pub(crate) fn hot_reload_stages(
-    id: &str,
-    file: &mut stage::StagesFile,
-) -> Vec<stage::StageConfig> {
-    if let Some(disk) = store::read_stages(id) {
-        if !disk.configs.is_empty() {
-            let mut states: Vec<stage::StageState> = Vec::with_capacity(disk.configs.len());
-            for c in &disk.configs {
-                let prev = file
-                    .stages
-                    .iter()
-                    .find(|s| s.id == c.id)
-                    .or_else(|| disk.stages.iter().find(|s| s.id == c.id));
-                let mut s = match prev {
-                    Some(s) => s.clone(),
-                    None => stage::StageState {
-                        id: c.id.clone(),
-                        name: c.name.clone(),
-                        kind: c.kind.clone(),
-                        enabled: c.enabled,
-                        status: if c.enabled { "pending".into() } else { "skipped".into() },
-                        summary: String::new(),
-                        sources_count: 0,
-                        rounds: 0,
-                        partial: false,
+pub(crate) fn hot_reload_stages(id: &str, file: &mut stage::StagesFile) -> Vec<stage::StageConfig> {
+    if let Some(disk) = store::read_stages(id)
+        && !disk.configs.is_empty()
+    {
+        let mut states: Vec<stage::StageState> = Vec::with_capacity(disk.configs.len());
+        for c in &disk.configs {
+            let prev = file
+                .stages
+                .iter()
+                .find(|s| s.id == c.id)
+                .or_else(|| disk.stages.iter().find(|s| s.id == c.id));
+            let mut s = match prev {
+                Some(s) => s.clone(),
+                None => stage::StageState {
+                    id: c.id.clone(),
+                    name: c.name.clone(),
+                    kind: c.kind.clone(),
+                    enabled: c.enabled,
+                    status: if c.enabled {
+                        "pending".into()
+                    } else {
+                        "skipped".into()
                     },
-                };
-                // 展示字段跟随最新配置;运行态(状态/摘要/轮次/partial)由引擎持有
-                s.name = c.name.clone();
-                s.kind = c.kind.clone();
-                s.enabled = c.enabled;
-                states.push(s);
-            }
-            file.stages = states;
-            file.configs = disk.configs.clone();
-            return disk.configs;
+                    summary: String::new(),
+                    sources_count: 0,
+                    rounds: 0,
+                    partial: false,
+                },
+            };
+            // 展示字段跟随最新配置;运行态(状态/摘要/轮次/partial)由引擎持有
+            s.name = c.name.clone();
+            s.kind = c.kind.clone();
+            s.enabled = c.enabled;
+            states.push(s);
         }
+        file.stages = states;
+        file.configs = disk.configs.clone();
+        return disk.configs;
     }
     file.configs.clone()
 }
@@ -169,18 +170,18 @@ pub(crate) async fn run_staged(p: &EngineParams, sink: &EventSink) -> Result<Str
                 p.params.max_duration_minutes
             ));
         }
-        if let Some(reason) = &global_exhausted {
-            if !st.is_synthesis() {
-                file.stages[idx].status = "skipped".into();
-                file.updated = chrono::Local::now().to_rfc3339();
-                let _ = store::save_stages(&p.id, &file);
-                sink.emit(ResearchEvent::StageSkipped {
-                    stage: no,
-                    reason: format!("{reason},跳过剩余检索阶段"),
-                });
-                idx += 1;
-                continue;
-            }
+        if let Some(reason) = &global_exhausted
+            && !st.is_synthesis()
+        {
+            file.stages[idx].status = "skipped".into();
+            file.updated = chrono::Local::now().to_rfc3339();
+            let _ = store::save_stages(&p.id, &file);
+            sink.emit(ResearchEvent::StageSkipped {
+                stage: no,
+                reason: format!("{reason},跳过剩余检索阶段"),
+            });
+            idx += 1;
+            continue;
         }
         sink.emit(ResearchEvent::StageStart {
             stage: no,
@@ -201,9 +202,17 @@ pub(crate) async fn run_staged(p: &EngineParams, sink: &EventSink) -> Result<Str
             if p.params.dedup_scope == "stage" {
                 pool.seen_urls.clear();
             }
-            let r =
-                run_research_stage(p, sink, no, &st, &mut pool, &summaries, total_rounds, &started)
-                    .await?;
+            let r = run_research_stage(
+                p,
+                sink,
+                no,
+                &st,
+                &mut pool,
+                &summaries,
+                total_rounds,
+                &started,
+            )
+            .await?;
             total_rounds += r.1 as i64;
             partial = r.2;
             // 全局预算耗尽判定(供后续阶段跳过)

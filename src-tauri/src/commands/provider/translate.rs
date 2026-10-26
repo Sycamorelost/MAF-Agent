@@ -3,11 +3,11 @@
 use serde::Deserialize;
 use tauri::ipc::Channel;
 
-use crate::provider::{keychain, templates, ChatMessage, ChatRequest, StreamChunk};
+use crate::provider::{ChatMessage, ChatRequest, StreamChunk, keychain, templates};
 
 use super::assembly::{build_provider, validate_base_url_scheme};
 use super::chat::spawn_chat_to_channel;
-use super::stream::{run_cancellable, StreamCancelState};
+use super::stream::{StreamCancelState, run_cancellable};
 
 // ---------- translate_stream ----------
 
@@ -62,10 +62,8 @@ pub async fn translate_stream(
     };
 
     // 基础 prompt + 术语表命中注入
-    let mut system = crate::provider::translate_system_prompt(
-        input.source_lang.as_deref(),
-        &input.target_lang,
-    );
+    let mut system =
+        crate::provider::translate_system_prompt(input.source_lang.as_deref(), &input.target_lang);
     if let Some(hints) = crate::commands::translate::glossary_hints(&input.text) {
         system.push_str(&hints);
     }
@@ -77,11 +75,13 @@ pub async fn translate_stream(
                 role: "system".into(),
                 content: system,
                 images: vec![],
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".into(),
                 content: input.text,
                 images: vec![],
+                ..Default::default()
             },
         ],
         temperature: Some(0.2),
@@ -89,6 +89,7 @@ pub async fn translate_stream(
         top_p: None,
         reasoning: None, // 翻译走自有口径,不启用思考
         stream: true,
+        ..Default::default()
     };
 
     spawn_chat_to_channel(provider, req, channel, cancels.0, cancels.1, cancels.2);
@@ -136,7 +137,7 @@ async fn deepl_translate(
                 &cancel_state,
                 &cancel_id,
                 "DeepL 未配置 API Key(设置页 → 模型服务商)".into(),
-            )
+            );
         }
         Err(e) => return bail(&cancel_state, &cancel_id, e),
     };
@@ -148,7 +149,7 @@ async fn deepl_translate(
                 &cancel_state,
                 &cancel_id,
                 format!("DeepL 暂不支持目标语言: {}", input.target_lang),
-            )
+            );
         }
     };
     let source = input
@@ -240,12 +241,7 @@ async fn deepl_translate(
             }
         }
     };
-    tauri::async_runtime::spawn(run_cancellable(
-        cancel_state,
-        cancel_id,
-        cancel_rx,
-        work,
-    ));
+    tauri::async_runtime::spawn(run_cancellable(cancel_state, cancel_id, cancel_rx, work));
 
     Ok(())
 }

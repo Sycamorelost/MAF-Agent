@@ -2,7 +2,12 @@
 
 pub mod agents;
 pub mod attachment;
+pub mod capability;
 pub mod datadir;
+pub mod fs;
+pub mod gui;
+pub mod mcp;
+mod mcp_builtin_tools;
 pub mod memory;
 pub mod notes;
 pub mod provider;
@@ -23,6 +28,7 @@ macro_rules! all_commands {
             crate::commands::memory::crud::create_session,
             crate::commands::memory::crud::list_sessions,
             crate::commands::memory::crud::get_session,
+            crate::commands::memory::crud::session_get_todos,
             crate::commands::memory::crud::rename_session,
             crate::commands::memory::crud::set_session_model,
             crate::commands::memory::crud::delete_session,
@@ -33,6 +39,7 @@ macro_rules! all_commands {
             // message
             crate::commands::memory::crud::append_message,
             crate::commands::memory::crud::list_messages,
+            crate::commands::memory::crud::list_messages_page,
             crate::commands::memory::crud::clear_messages,
             crate::commands::memory::crud::delete_message,
             crate::commands::memory::crud::delete_messages_from,
@@ -185,6 +192,47 @@ macro_rules! all_commands {
             crate::commands::study::study_focus_log,
             crate::commands::study::study_stats,
             crate::commands::study::study_memory_digest,
+            // MCP 工具(Phase 4:配置管理 + 内置时间;Phase 5:运行时 + HITL 审批)
+            crate::commands::mcp::mcp_load_config,
+            crate::commands::mcp::mcp_save_config,
+            crate::commands::mcp::mcp_add_server,
+            crate::commands::mcp::mcp_remove_server,
+            crate::commands::mcp::mcp_start_server,
+            crate::commands::mcp::mcp_list_tools,
+            crate::commands::mcp::mcp_call_tool_with_approval,
+            crate::commands::mcp::mcp_resolve_approval,
+            crate::commands::mcp::mcp_clear_session_allowed,
+            crate::commands::mcp::mcp_collect_tools,
+            crate::commands::mcp::mcp_get_approval_policy,
+            crate::commands::mcp::mcp_set_approval_policy,
+            crate::commands::mcp::get_now,
+            // Phase 6:白名单 shell 命令(直接 Rust,极简安全)
+            crate::commands::mcp::shell_whitelist_exec,
+            // P2:能力令牌(预授权,仅内存)
+            crate::commands::capability::mcp_issue_capability,
+            crate::commands::capability::mcp_list_capabilities,
+            crate::commands::capability::mcp_revoke_capability,
+            crate::commands::capability::mcp_clear_capabilities,
+            // P2:GUI 自动化策略与自检
+            crate::commands::gui::gui_get_policy,
+            crate::commands::gui::gui_save_policy,
+            crate::commands::gui::gui_list_windows,
+            crate::commands::gui::gui_find_elements,
+            // 工作区文件服务(路径沙箱 + 备份回滚 + 办公格式导出)
+            crate::commands::fs::fs_workspace_info,
+            crate::commands::fs::fs_list,
+            crate::commands::fs::fs_read_text,
+            crate::commands::fs::fs_write_text,
+            crate::commands::fs::fs_delete,
+            crate::commands::fs::fs_backup_list,
+            crate::commands::fs::fs_restore,
+            crate::commands::fs::fs_export_docx,
+            crate::commands::fs::fs_export_xlsx,
+            crate::commands::fs::fs_extract_text,
+            crate::commands::fs::fs_zip_list,
+            crate::commands::fs::fs_zip_extract,
+            crate::commands::fs::fs_open_workspace,
+            crate::commands::fs::fs_open_backups,
         ]
     };
 }

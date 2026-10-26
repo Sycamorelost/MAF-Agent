@@ -235,7 +235,11 @@ pub fn list(session_id: &str) -> Result<Vec<BranchInfo>, String> {
     list_on(&conn, session_id)
 }
 
-pub fn create(session_id: &str, from_message_id: i64, name: Option<&str>) -> Result<String, String> {
+pub fn create(
+    session_id: &str,
+    from_message_id: i64,
+    name: Option<&str>,
+) -> Result<String, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     create_on(&conn, session_id, from_message_id, name)
 }
@@ -267,7 +271,10 @@ mod tests {
     }
 
     fn add(conn: &Connection, content: &str, branch: &str) -> i64 {
-        messages::append_on(conn, "s1", "user", content, None, 0, None, None, None, branch).unwrap()
+        messages::append_on(
+            conn, "s1", "user", content, None, 0, None, None, None, branch,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -337,8 +344,11 @@ mod tests {
         let fork2 = create_on(&conn, "s1", f1, None).unwrap();
         add(&conn, "二级 fork 消息", &fork2);
         // 激活 fork,删除后应回退 main
-        conn.execute("UPDATE sessions SET active_branch=?1 WHERE id='s1'", [&fork])
-            .unwrap();
+        conn.execute(
+            "UPDATE sessions SET active_branch=?1 WHERE id='s1'",
+            [&fork],
+        )
+        .unwrap();
 
         delete_on(&conn, "s1", &fork).unwrap();
 
@@ -351,7 +361,11 @@ mod tests {
         assert_eq!(f2_rows[0].id, m1);
         // 激活分支回退 main
         let active: String = conn
-            .query_row("SELECT active_branch FROM sessions WHERE id='s1'", [], |r| r.get(0))
+            .query_row(
+                "SELECT active_branch FROM sessions WHERE id='s1'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(active, "main");
     }

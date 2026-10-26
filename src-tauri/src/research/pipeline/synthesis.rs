@@ -2,14 +2,14 @@
 
 use crate::provider::ChatMessage;
 
+use super::super::EngineParams;
 use super::super::llm::llm_collect;
 use super::super::params::with_references;
 use super::super::prompts::sources_digest;
 use super::super::skills;
 use super::super::stage;
 use super::super::template;
-use super::super::EngineParams;
-use super::{assemble_summaries, Pool, RunError};
+use super::{Pool, RunError, assemble_summaries};
 
 /// 阶段摘要系统提示(内置;可被 stage.summary_prompt 覆盖)。
 const STAGE_SUMMARY_SYSTEM: &str = r#"你是研究阶段摘要撰写器。基于本阶段收集的资料与检索观察,输出该阶段的结构化摘要。
@@ -21,6 +21,8 @@ const STAGE_SUMMARY_SYSTEM: &str = r#"你是研究阶段摘要撰写器。基于
 
 /// 生成阶段摘要(检索阶段收尾;custom summary_prompt 覆盖内置)。
 /// H3:拿到真实 usage 时计入预算(不支持的渠道保持原「摘要不计费」行为)。
+// 参数为流水线阶段所需的独立上下文(引擎参数/阶段配置/检索结果/预算等)
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_stage_summary(
     p: &EngineParams,
     st: &stage::StageConfig,
@@ -37,7 +39,11 @@ pub(crate) async fn run_stage_summary(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or(STAGE_SUMMARY_SYSTEM);
-    let max_total = if eff.read_length == "full" { 12000 } else { 8000 };
+    let max_total = if eff.read_length == "full" {
+        12000
+    } else {
+        8000
+    };
     let digest = sources_digest(&pool.sources[stage_start..], 400, max_total);
     let mut system = template::render(
         tpl,
@@ -91,11 +97,13 @@ pub(crate) async fn run_stage_summary(
                 role: "system".into(),
                 content: system,
                 images: vec![],
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".into(),
                 content: user,
                 images: vec![],
+                ..Default::default()
             },
         ],
     )
@@ -156,12 +164,17 @@ pub(crate) async fn run_synthesis(
     }
     // 用户导入的参考资料:撰写阶段直接作为事实依据
     let system = with_references(system, p);
-    let mut user = format!("研究主题: {}\n阶段: {}(目标:{})\n", p.topic, st.name, st.goal);
+    let mut user = format!(
+        "研究主题: {}\n阶段: {}(目标:{})\n",
+        p.topic, st.name, st.goal
+    );
     if !prev.is_empty() {
         user.push_str("\n【前阶段摘要】\n");
         user.push_str(&prev);
     }
-    user.push_str(&format!("\n\n【资料列表】\n{digest}\n请输出本阶段分析文本。"));
+    user.push_str(&format!(
+        "\n\n【资料列表】\n{digest}\n请输出本阶段分析文本。"
+    ));
 
     let (text, usage) = llm_collect(
         p,
@@ -170,11 +183,13 @@ pub(crate) async fn run_synthesis(
                 role: "system".into(),
                 content: system,
                 images: vec![],
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".into(),
                 content: user,
                 images: vec![],
+                ..Default::default()
             },
         ],
     )

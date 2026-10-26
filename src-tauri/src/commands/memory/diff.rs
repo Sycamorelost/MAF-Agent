@@ -21,14 +21,22 @@ pub fn read_memory(session_id: String) -> Result<MemoryDto, String> {
 
 /// 写入 memory.md(自动快照旧版到 memory.versions/ 并写表)。
 #[tauri::command]
-pub fn write_memory(session_id: String, content: String, note: Option<String>) -> Result<(), String> {
+pub fn write_memory(
+    session_id: String,
+    content: String,
+    note: Option<String>,
+) -> Result<(), String> {
     memory::write_memory(&session_id, &content, note.as_deref().unwrap_or("manual"))
 }
 
 /// 追加文本到 memory.md 指定节(缺省「资料」,节名限定 KNOWN_SECTIONS 白名单;自动补标题)。
 /// note 统一记为 pin_message(消息钉入 / 来源存入 / 研究报告存入均属钉入行为)。
 #[tauri::command]
-pub fn append_memory(session_id: String, text: String, section: Option<String>) -> Result<(), String> {
+pub fn append_memory(
+    session_id: String,
+    text: String,
+    section: Option<String>,
+) -> Result<(), String> {
     let sec = resolve_section(section.as_deref())?;
     let (fm, body) = memory::read_memory(&session_id)?;
     let new_body = if body.trim().is_empty() {
@@ -36,12 +44,19 @@ pub fn append_memory(session_id: String, text: String, section: Option<String>) 
     } else {
         append_to_section(&body, sec, &text)
     };
-    memory::write_memory(&session_id, &memory::frontmatter::render(&fm, &new_body)?, "pin_message")
+    memory::write_memory(
+        &session_id,
+        &memory::frontmatter::render(&fm, &new_body)?,
+        "pin_message",
+    )
 }
 
 /// 解析目标节名:空白缺省「资料」;非 KNOWN_SECTIONS 白名单直接报错。
 pub(crate) fn resolve_section(section: Option<&str>) -> Result<&str, String> {
-    let sec = section.map(str::trim).filter(|s| !s.is_empty()).unwrap_or("资料");
+    let sec = section
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("资料");
     if memory::template::KNOWN_SECTIONS.contains(&sec) {
         Ok(sec)
     } else {
@@ -88,11 +103,10 @@ pub(crate) fn append_to_section(body: &str, heading: &str, text: &str) -> String
     out
 }
 
-/// 手动触发一次版本快照。
+/// 手动触发一次版本快照,返回该版本的数字 id(可直接用于 rollback/read_version)。
 #[tauri::command]
-pub fn snapshot_memory(session_id: String, note: Option<String>) -> Result<String, String> {
-    let p = memory::snapshot_version(&session_id, note.as_deref().unwrap_or("manual"))?;
-    Ok(p.to_string_lossy().to_string())
+pub fn snapshot_memory(session_id: String, note: Option<String>) -> Result<i64, String> {
+    memory::snapshot_version(&session_id, note.as_deref().unwrap_or("manual"))
 }
 
 /// 列出会话的历史版本(倒序)。
@@ -221,11 +235,13 @@ pub async fn summarize_memory(input: SummarizeMemoryInput) -> Result<String, Str
                 role: "system".into(),
                 content: SUMMARIZE_SYSTEM.into(),
                 images: vec![],
+                ..Default::default()
             },
             crate::provider::ChatMessage {
                 role: "user".into(),
                 content: user,
                 images: vec![],
+                ..Default::default()
             },
         ],
         temperature: Some(0.3),
@@ -233,13 +249,11 @@ pub async fn summarize_memory(input: SummarizeMemoryInput) -> Result<String, Str
         top_p: None,
         reasoning: None, // 记忆提炼走自有口径,不启用思考
         stream: true,
+        ..Default::default()
     };
 
     // 4. 流式收全量文本
-    let mut stream = provider
-        .chat_stream(req)
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut stream = provider.chat_stream(req).await.map_err(|e| e.to_string())?;
     let mut out = String::new();
     while let Some(chunk) = stream.next().await {
         match chunk {
@@ -248,6 +262,7 @@ pub async fn summarize_memory(input: SummarizeMemoryInput) -> Result<String, Str
             crate::provider::StreamChunk::Error { message } => return Err(message),
             crate::provider::StreamChunk::Usage { .. } => {}
             crate::provider::StreamChunk::Done { .. } => break,
+            _ => {}
         }
     }
 
@@ -276,12 +291,11 @@ fn clean_summarized_body(raw: &str) -> String {
     }
 
     // 去误带的 frontmatter(--- ... ---)
-    if text.starts_with("---") {
-        if let Ok((_fm, body)) = memory::frontmatter::parse(&text) {
-            if !body.trim().is_empty() {
-                text = body;
-            }
-        }
+    if text.starts_with("---")
+        && let Ok((_fm, body)) = memory::frontmatter::parse(&text)
+        && !body.trim().is_empty()
+    {
+        text = body;
     }
 
     text.trim().to_string()

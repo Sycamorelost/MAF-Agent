@@ -54,10 +54,7 @@ pub fn import_research_reference(
         return Err("文件内容为空".into());
     }
     if bytes.len() > REF_MAX_BYTES {
-        return Err(format!(
-            "文件超出 {}MB 上限",
-            REF_MAX_BYTES / 1024 / 1024
-        ));
+        return Err(format!("文件超出 {}MB 上限", REF_MAX_BYTES / 1024 / 1024));
     }
 
     let dir = research::references_dir();
@@ -147,7 +144,9 @@ pub fn delete_research_reference(name: String) -> Result<(), String> {
         return Err("非法文件名".into());
     }
     let dir = research::references_dir();
-    let root = dir.canonicalize().map_err(|_| "参考资料目录不存在".to_string())?;
+    let root = dir
+        .canonicalize()
+        .map_err(|_| "参考资料目录不存在".to_string())?;
     let target = dir.join(&name);
     if let Ok(canon) = target.canonicalize() {
         if !canon.starts_with(&root) {
@@ -168,10 +167,7 @@ mod tests {
     fn reference_name_whitelist() {
         for bad in ["../x", "a/b.txt", "a\\b.txt", "..", "", "a..b"] {
             assert!(
-                bad.is_empty()
-                    || bad.contains('/')
-                    || bad.contains('\\')
-                    || bad.contains(".."),
+                bad.is_empty() || bad.contains('/') || bad.contains('\\') || bad.contains(".."),
                 "{bad} 应命中拒绝分支"
             );
         }

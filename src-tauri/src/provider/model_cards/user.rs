@@ -34,16 +34,15 @@ pub fn list_model_cards() -> Vec<ModelCard> {
     let vendor = derive_vendor_cards(&load_model_cache(), &cards);
     cards.extend(vendor);
     let p = user_cards_path();
-    if p.exists() {
-        if let Ok(s) = std::fs::read_to_string(&p) {
-            if let Ok(user_cards) = serde_json::from_str::<Vec<ModelCard>>(&s) {
-                for uc in user_cards {
-                    if let Some(slot) = cards.iter_mut().find(|c| c.id == uc.id) {
-                        *slot = uc;
-                    } else {
-                        cards.push(uc);
-                    }
-                }
+    if p.exists()
+        && let Ok(s) = std::fs::read_to_string(&p)
+        && let Ok(user_cards) = serde_json::from_str::<Vec<ModelCard>>(&s)
+    {
+        for uc in user_cards {
+            if let Some(slot) = cards.iter_mut().find(|c| c.id == uc.id) {
+                *slot = uc;
+            } else {
+                cards.push(uc);
             }
         }
     }
@@ -81,17 +80,21 @@ pub fn validate_model_card(c: &ModelCard) -> Result<(), String> {
     ) {
         return Err("成本档位非法".into());
     }
-    if let Some(n) = c.context_window {
-        if !(1..=1_000_000_000).contains(&n) {
-            return Err("上下文窗口数值非法".into());
-        }
+    if let Some(n) = c.context_window
+        && !(1..=1_000_000_000).contains(&n)
+    {
+        return Err("上下文窗口数值非法".into());
     }
-    if let Some(n) = c.max_output {
-        if !(1..=1_000_000_000).contains(&n) {
-            return Err("最大输出数值非法".into());
-        }
+    if let Some(n) = c.max_output
+        && !(1..=1_000_000_000).contains(&n)
+    {
+        return Err("最大输出数值非法".into());
     }
-    if c.tags.len() > 32 || c.tags.iter().any(|t| t.len() > 40 || t.chars().any(|ch| ch.is_control())) {
+    if c.tags.len() > 32
+        || c.tags
+            .iter()
+            .any(|t| t.len() > 40 || t.chars().any(|ch| ch.is_control()))
+    {
         return Err("标签非法".into());
     }
     if let Some(p) = &c.pricing {
@@ -108,10 +111,10 @@ pub fn validate_model_card(c: &ModelCard) -> Result<(), String> {
                 return Err("价格数值非法".into());
             }
         }
-        if let Some(n) = &p.note {
-            if n.len() > 300 || n.chars().any(|ch| ch.is_control()) {
-                return Err("价格说明非法".into());
-            }
+        if let Some(n) = &p.note
+            && (n.len() > 300 || n.chars().any(|ch| ch.is_control()))
+        {
+            return Err("价格说明非法".into());
         }
     }
     Ok(())
@@ -165,9 +168,11 @@ mod tests {
             memory_injection: None,
         };
         save_user_card(&card).unwrap();
-        assert!(list_model_cards()
-            .iter()
-            .any(|c| c.id == "vendor-zhipu-glm-4.7" && c.cost_tier == "premium"));
+        assert!(
+            list_model_cards()
+                .iter()
+                .any(|c| c.id == "vendor-zhipu-glm-4.7" && c.cost_tier == "premium")
+        );
 
         // 非法卡片必须被拒绝
         card.provider = "../evil".into();

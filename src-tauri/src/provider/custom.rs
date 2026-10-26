@@ -25,7 +25,8 @@ pub fn load() -> Result<Option<CustomProviderConfig>, String> {
     if !p.exists() {
         return Ok(None);
     }
-    let text = std::fs::read_to_string(&p).map_err(|e| format!("read custom config failed: {e}"))?;
+    let text =
+        std::fs::read_to_string(&p).map_err(|e| format!("read custom config failed: {e}"))?;
     let cfg: CustomProviderConfig =
         serde_json::from_str(&text).map_err(|e| format!("parse custom config failed: {e}"))?;
     Ok(Some(cfg))

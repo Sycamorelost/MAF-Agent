@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use crate::provider::{ChatMessage, ChatRequest, StreamChunk};
 
+use super::super::EngineParams;
 use super::super::events::{EventSink, ResearchEvent, SourceItem};
 use super::super::export::{finalize_report, run_audit};
 use super::super::llm::{chat_stream_compat, est_tok, llm_collect};
@@ -12,8 +13,7 @@ use super::super::prompts::sources_digest;
 use super::super::skills;
 use super::super::store;
 use super::super::validate::strip_list_marker;
-use super::super::EngineParams;
-use super::{check_cancel, wait_gate, RunError};
+use super::{RunError, check_cancel, wait_gate};
 
 /// 简洁模式轮次上限(防失控;每轮 = 1 次整稿输出 + 1 组轻量检索)。
 const CONCISE_MAX_ROUNDS: u32 = 10;
@@ -72,10 +72,7 @@ fn concise_queries(text: &str, max: u32) -> Vec<String> {
 /// 第 2..N 轮 = 自评上一稿(Thought)→ 轻量检索(Sources/Observation)→ 整稿重写(ReportDelta 流式)。
 /// 复用 legacy 的搜索去重 / 取消暂停 / 事件落盘;token 预算 / 检索次数 / 总时长照常生效;
 /// 各轮稿件以「稿件存档」观察节点留在时间线可回看;最终稿经 finalize_report 统一引用列表。
-pub(crate) async fn run_concise(
-    p: &EngineParams,
-    sink: &EventSink,
-) -> Result<String, RunError> {
+pub(crate) async fn run_concise(p: &EngineParams, sink: &EventSink) -> Result<String, RunError> {
     use std::time::Instant;
 
     let rounds = p.params.max_rounds.clamp(1, CONCISE_MAX_ROUNDS);
@@ -110,9 +107,15 @@ pub(crate) async fn run_concise(
             if p.params.max_duration_minutes > 0
                 && started.elapsed().as_secs() > p.params.max_duration_minutes as u64 * 60
             {
-                guard = Some(format!("已达最大时长 {} 分钟", p.params.max_duration_minutes));
+                guard = Some(format!(
+                    "已达最大时长 {} 分钟",
+                    p.params.max_duration_minutes
+                ));
             } else if p.params.token_budget > 0 && est_tokens > p.params.token_budget as u64 {
-                guard = Some(format!("已达 Token 预算上限(约 {} tok)", p.params.token_budget));
+                guard = Some(format!(
+                    "已达 Token 预算上限(约 {} tok)",
+                    p.params.token_budget
+                ));
             } else if p.params.max_searches > 0 && searches_done >= p.params.max_searches {
                 guard = Some(format!("已达最大检索次数 {} 次", p.params.max_searches));
             }
@@ -140,11 +143,13 @@ pub(crate) async fn run_concise(
                         role: "system".into(),
                         content: CONCISE_EVAL_SYSTEM.into(),
                         images: vec![],
+                        ..Default::default()
                     },
                     ChatMessage {
                         role: "user".into(),
                         content: eval_user,
                         images: vec![],
+                        ..Default::default()
                     },
                 ],
             )
@@ -246,16 +251,16 @@ pub(crate) async fn run_concise(
         return Err(RunError::Fatal("简洁研究未产出报告".into()));
     }
     // 审计技能:仅终稿执行一次(fragments.audit 在 run_report 内逐次调用,这里手动补一次)
-    let ref_anchor = !p.params.free_structure && p.params.report_template().contains("{references}");
+    let ref_anchor =
+        !p.params.free_structure && p.params.report_template().contains("{references}");
     let mut report = finalize_report(&draft, &sources, ref_anchor);
     let frags = skills::fragments(&p.params);
-    if let Some(audit_sys) = frags.audit {
-        if let Ok(appendix) = run_audit(p, audit_sys, &report).await {
-            if !appendix.trim().is_empty() {
-                report.push_str("\n\n");
-                report.push_str(appendix.trim());
-            }
-        }
+    if let Some(audit_sys) = frags.audit
+        && let Ok(appendix) = run_audit(p, audit_sys, &report).await
+        && !appendix.trim().is_empty()
+    {
+        report.push_str("\n\n");
+        report.push_str(appendix.trim());
     }
     Ok(report)
 }
@@ -288,7 +293,11 @@ async fn concise_write(
     // 用户导入的参考资料:整稿撰写的事实依据
     let system = with_references(system, p);
 
-    let max_total = if p.params.read_length == "full" { 24000 } else { 16000 };
+    let max_total = if p.params.read_length == "full" {
+        24000
+    } else {
+        16000
+    };
     let mut user = format!("研究主题: {}\n\n", p.topic);
     if round > 1 && !prev.trim().is_empty() {
         user.push_str("【上一稿报告】\n");
@@ -307,11 +316,13 @@ async fn concise_write(
                 role: "system".into(),
                 content: system,
                 images: vec![],
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".into(),
                 content: user,
                 images: vec![],
+                ..Default::default()
             },
         ],
         temperature: Some(0.3),
@@ -319,6 +330,7 @@ async fn concise_write(
         top_p: None,
         reasoning: None, // 研究链路档位透传为 Phase 2,暂不启用
         stream: true,
+        ..Default::default()
     };
     let mut stream = chat_stream_compat(p, req).await?;
     let mut out = String::new();
@@ -333,6 +345,7 @@ async fn concise_write(
             StreamChunk::Error { message } => return Err(RunError::Fatal(message)),
             StreamChunk::Usage { .. } => {}
             StreamChunk::Done { .. } => break,
+            _ => {}
         }
     }
     let out = out.trim().to_string();

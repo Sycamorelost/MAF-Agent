@@ -3,13 +3,13 @@
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
-use tauri::ipc::Channel;
 use tauri::State;
+use tauri::ipc::Channel;
 
 use crate::commands::provider::validate_base_url_scheme;
 use crate::memory;
 use crate::research::{
-    self, search, store, EngineParams, ProviderRebuild, ResearchEvent, ResearchParams, SourceItem,
+    self, EngineParams, ProviderRebuild, ResearchEvent, ResearchParams, SourceItem, search, store,
 };
 
 use super::{ResearchCtl, ResearchEntry, ResearchRegistry};
@@ -145,11 +145,12 @@ pub async fn research_start(
         if !params.stages.iter().any(|s| s.enabled) {
             return Err("专项研究至少需要一个启用的阶段".into());
         }
-        if params
-            .stages
-            .iter()
-            .any(|s| s.enabled && s.kind == "research" && s.constraints.min_sources.unwrap_or(0) > 0 && s.max_rounds == Some(0))
-        {
+        if params.stages.iter().any(|s| {
+            s.enabled
+                && s.kind == "research"
+                && s.constraints.min_sources.unwrap_or(0) > 0
+                && s.max_rounds == Some(0)
+        }) {
             return Err("检索阶段轮次不能为 0".into());
         }
     } else if params.mode == "concise" {

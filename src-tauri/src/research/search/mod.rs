@@ -16,8 +16,8 @@ mod rank;
 
 #[allow(unused_imports)]
 pub use engine::{
-    build_engine, engine_needs_key, has_engine_key, load_config, save_config, save_engine_key,
-    RawSearchResult, SearchConfig, SearchEngine, ENGINES,
+    ENGINES, RawSearchResult, SearchConfig, SearchEngine, build_engine, engine_needs_key,
+    has_engine_key, load_config, save_config, save_engine_key,
 };
 #[allow(unused_imports)]
 pub use fetch::{Bocha, SearXng, Tavily};

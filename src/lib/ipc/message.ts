@@ -23,6 +23,25 @@ export const appendMessage = (input: AppendMessageInput) =>
 export const listMessages = (sessionId: string, branchId?: string) =>
   invoke<MessageRow[]>('list_messages', { sessionId, branchId: branchId ?? null });
 
+export interface MessagePage {
+  messages: MessageRow[];
+  has_more: boolean;
+}
+
+/** 分页消息:`beforeId` 为空取最近一页,否则取更早一页。 */
+export const listMessagesPage = (
+  sessionId: string,
+  beforeId?: number,
+  limit = 100,
+  branchId?: string,
+) =>
+  invoke<MessagePage>('list_messages_page', {
+    sessionId,
+    branchId: branchId ?? null,
+    beforeId: beforeId ?? null,
+    limit,
+  });
+
 /** 清空当前激活分支的自有消息(其他分支不受影响)。 */
 export const clearMessages = (sessionId: string) =>
   invoke<void>('clear_messages', { sessionId });

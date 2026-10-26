@@ -2,15 +2,15 @@
 
 use std::collections::HashSet;
 
+use super::super::EngineParams;
 use super::super::events::{EventSink, ResearchEvent, SourceItem};
 use super::super::export::run_report;
 use super::super::llm::est_tok;
 use super::super::prompts::DecideCtx;
 use super::super::store;
 use super::super::validate::Decision;
-use super::super::EngineParams;
 use super::decide::decide;
-use super::{check_cancel, wait_gate, RunError};
+use super::{RunError, check_cancel, wait_gate};
 
 /// 快速研究(legacy):原单层 ReAct 循环,事件 stage 字段恒为 0。
 pub(crate) async fn run_legacy(p: &EngineParams, sink: &EventSink) -> Result<String, RunError> {
@@ -69,7 +69,10 @@ pub(crate) async fn run_legacy(p: &EngineParams, sink: &EventSink) -> Result<Str
             check_cancel(p)?;
             wait_gate(p, sink, round, 0).await?;
             if p.params.max_searches > 0 && searches_done >= p.params.max_searches {
-                obs_lines.push(format!("已达最大检索次数 {} 次,停止检索", p.params.max_searches));
+                obs_lines.push(format!(
+                    "已达最大检索次数 {} 次,停止检索",
+                    p.params.max_searches
+                ));
                 break;
             }
             searches_done += 1;

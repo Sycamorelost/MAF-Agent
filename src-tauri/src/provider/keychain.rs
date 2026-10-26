@@ -7,6 +7,7 @@
 //!     无需自管密钥;文件前缀 `dpapi:` + base64(blob)
 //!   - 非 Windows / 旧格式回退:AES-256-GCM,密钥派生 SHA-256(APP_SALT|user|host),
 //!     文件格式 base64(nonce || ciphertext),aad 绑定 provider_id
+//!
 //! 读取时按前缀自动识别两种格式,旧的 AES-GCM 密文可无缝解密。
 //!
 //! 安全边界:DPAPI 保护级别 = 当前 Windows 用户登录会话;攻击者需能在该用户上下文执行代码
@@ -16,10 +17,10 @@
 use std::{fs, path::PathBuf};
 
 use aes_gcm::{
-    aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit, Payload},
 };
-use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
@@ -182,10 +183,13 @@ fn aes_encrypt(provider_id: &str, api_key: &str) -> Result<String, String> {
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher
-        .encrypt(nonce, Payload {
-            msg: api_key.as_bytes(),
-            aad: provider_id.as_bytes(),
-        })
+        .encrypt(
+            nonce,
+            Payload {
+                msg: api_key.as_bytes(),
+                aad: provider_id.as_bytes(),
+            },
+        )
         .map_err(|e| format!("encrypt failed: {e}"))?;
 
     let mut blob = Vec::with_capacity(12 + ciphertext.len());
@@ -207,10 +211,13 @@ fn aes_decrypt(provider_id: &str, encoded: &str) -> Result<String, String> {
     let key = derive_key();
     let cipher = Aes256Gcm::new((&key).into());
     let plain = cipher
-        .decrypt(nonce, Payload {
-            msg: ciphertext,
-            aad: provider_id.as_bytes(),
-        })
+        .decrypt(
+            nonce,
+            Payload {
+                msg: ciphertext,
+                aad: provider_id.as_bytes(),
+            },
+        )
         .map_err(|_| "decrypt failed (key mismatch or corrupted)".to_string())?;
     String::from_utf8(plain).map_err(|e| format!("utf-8 decode failed: {e}"))
 }
@@ -293,12 +300,11 @@ pub fn list_slots(provider_id: &str) -> Result<Vec<u32>, String> {
             continue;
         }
         // `{id}.{n}.bin`(id 不含点号,故解析唯一)
-        if let Some(rest) = s.strip_prefix(&prefix) {
-            if let Some(n) = rest.strip_suffix(".bin") {
-                if let Ok(v) = n.parse::<u32>() {
-                    slots.push(v);
-                }
-            }
+        if let Some(rest) = s.strip_prefix(&prefix)
+            && let Some(n) = rest.strip_suffix(".bin")
+            && let Ok(v) = n.parse::<u32>()
+        {
+            slots.push(v);
         }
     }
     slots.sort_unstable();
@@ -340,13 +346,13 @@ pub fn list_stored() -> Result<Vec<String>, String> {
     for entry in fs::read_dir(&dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let name = entry.file_name();
-        if let Some(s) = name.to_str() {
-            if let Some(stem) = s.strip_suffix(".bin") {
-                // `{id}` 或 `{id}.{n}`,统一取点号前的 provider_id
-                let pid = stem.split('.').next().unwrap_or(stem).to_string();
-                if !pid.is_empty() {
-                    out.push(pid);
-                }
+        if let Some(s) = name.to_str()
+            && let Some(stem) = s.strip_suffix(".bin")
+        {
+            // `{id}` 或 `{id}.{n}`,统一取点号前的 provider_id
+            let pid = stem.split('.').next().unwrap_or(stem).to_string();
+            if !pid.is_empty() {
+                out.push(pid);
             }
         }
     }

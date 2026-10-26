@@ -88,8 +88,8 @@ pub fn research_update_stages(
     if row.mode != "staged" {
         return Err("仅专项研究支持调整阶段".into());
     }
-    let mut file = store::read_stages(&id)
-        .ok_or_else(|| "阶段快照 stages.json 缺失,无法调整".to_string())?;
+    let mut file =
+        store::read_stages(&id).ok_or_else(|| "阶段快照 stages.json 缺失,无法调整".to_string())?;
     file.configs = stages;
     // 状态按 id 保留(含已完成阶段的摘要);新增阶段补 pending / skipped
     let mut states = Vec::with_capacity(file.configs.len());
@@ -113,7 +113,11 @@ pub fn research_update_stages(
                 name: c.name.clone(),
                 kind: c.kind.clone(),
                 enabled: c.enabled,
-                status: if c.enabled { "pending".into() } else { "skipped".into() },
+                status: if c.enabled {
+                    "pending".into()
+                } else {
+                    "skipped".into()
+                },
                 summary: String::new(),
                 sources_count: 0,
                 rounds: 0,

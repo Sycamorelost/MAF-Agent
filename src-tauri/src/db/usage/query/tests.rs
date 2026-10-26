@@ -1,8 +1,8 @@
 //! usage 查询与聚合单测(内存库)。
 
-use super::*;
 use super::entries::{entries_on, key_health_on};
 use super::hourly::hourly_on;
+use super::*;
 use crate::db::schema;
 
 fn mem() -> Connection {
@@ -95,7 +95,11 @@ fn entries_are_newest_first_and_filtered() {
     assert_eq!(only0.len(), 1);
     assert_eq!(only0[0].slot_id, 0);
     // 非数字槽位键 → 空结果
-    assert!(entries_on(&conn, 10, 7, Some("key"), Some("abc")).unwrap().is_empty());
+    assert!(
+        entries_on(&conn, 10, 7, Some("key"), Some("abc"))
+            .unwrap()
+            .is_empty()
+    );
 }
 
 /// Phase 2:按助手归因 + 成本聚合(纳元口径)。
@@ -136,7 +140,8 @@ fn aggregate_by_agent_and_cost() {
 fn legacy_cost_micro_falls_back_to_nano() {
     let conn = mem();
     super::super::insert_on(&conn, &rec("success", 0, 10, None)).unwrap();
-    conn.execute("UPDATE usage_record SET cost_micro = 5", []).unwrap();
+    conn.execute("UPDATE usage_record SET cost_micro = 5", [])
+        .unwrap();
     let sum = summary_on(&conn, "model", 7).unwrap();
     assert_eq!(sum.totals.cost_nano, 5_000);
     assert_eq!(sum.totals.cost_coverage, 1.0);

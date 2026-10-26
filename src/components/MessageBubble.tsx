@@ -93,7 +93,7 @@ function MessageBubbleInner({
           <div className="bubble">
             {reasoning && <ReasoningBlock text={reasoning} />}
             <div className="md">
-              <MemoMarkdown content={msg.content} withCodeBlock />
+              <MemoMarkdown content={msg.content} withCodeBlock={!isUser} />
             </div>
           </div>
         )}

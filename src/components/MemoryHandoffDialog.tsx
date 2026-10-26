@@ -1,6 +1,6 @@
 //! 切换模型交接弹窗(迭代 D3.1):4 种记忆注入策略 + 各策略 token 预估。
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { MemoryStrategy } from '../lib/ipc';
 import { estimateTokens, injectByStrategy } from '../lib/memoryInject';
 
@@ -31,6 +31,15 @@ export default function MemoryHandoffDialog({
   onCancel,
 }: Props) {
   const [strategy, setStrategy] = useState<MemoryStrategy>(currentStrategy);
+
+  /** Esc 取消(与全局搜索一致,避免只能点遮罩) */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
 
   // 各策略的 token 预估(与注入逻辑同一套函数,保证预估 = 实际)
   const estimates = useMemo(() => {

@@ -18,15 +18,15 @@ pub(super) fn inline_figures(html: &str, figures_dir: &std::path::Path) -> Strin
             .collect();
         if is_valid_figure_name(&name) {
             let path = figures_dir.join(&name);
-            if path.parent() == Some(figures_dir) {
-                if let Ok(bytes) = std::fs::read(&path) {
-                    let mime = figure_mime(&name).unwrap_or("application/octet-stream");
-                    use base64::Engine as _;
-                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                    out.push_str(&format!("data:{mime};base64,{b64}"));
-                    rest = &after[name.len()..];
-                    continue;
-                }
+            if path.parent() == Some(figures_dir)
+                && let Ok(bytes) = std::fs::read(&path)
+            {
+                let mime = figure_mime(&name).unwrap_or("application/octet-stream");
+                use base64::Engine as _;
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                out.push_str(&format!("data:{mime};base64,{b64}"));
+                rest = &after[name.len()..];
+                continue;
             }
         }
         out.push_str(MARKER);
@@ -107,7 +107,10 @@ mod tests {
         let html = r#"<img src="figures/t.png"><a href="figures/missing.png">x</a>"#;
         let out = inline_figures(html, &tmp);
         assert!(out.starts_with(r#"<img src="data:image/png;base64,"#));
-        assert!(out.contains(r#"href="figures/missing.png""#), "未命中引用应原样保留");
+        assert!(
+            out.contains(r#"href="figures/missing.png""#),
+            "未命中引用应原样保留"
+        );
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

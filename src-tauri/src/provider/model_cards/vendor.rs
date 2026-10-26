@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::{ModelCard, ModelPricing};
 use super::catalog::vendor_catalog;
 use super::user::USD_TO_CNY;
+use super::{ModelCard, ModelPricing};
 
 // ---------- 厂家模型拉取:元数据缓存 + 价格补全 ----------
 
@@ -51,7 +51,8 @@ impl FetchedModel {
 #[serde(untagged)]
 enum CachedEntry {
     Id(String),
-    Full(FetchedModel),
+    // FetchedModel 体积远大于 String,装箱避免整个枚举被撑大
+    Full(Box<FetchedModel>),
 }
 
 /// 厂家模型缓存文件:`<data_dir>/provider_models.json`,
@@ -79,7 +80,7 @@ pub fn load_model_cache() -> std::collections::HashMap<String, Vec<FetchedModel>
                 .into_iter()
                 .map(|e| match e {
                     CachedEntry::Id(s) => FetchedModel::id_only(s),
-                    CachedEntry::Full(f) => f,
+                    CachedEntry::Full(f) => *f,
                 })
                 .collect();
             (k, models)
@@ -116,10 +117,8 @@ pub fn parse_fetched_models(json: &serde_json::Value) -> Vec<FetchedModel> {
         else {
             continue;
         };
-        let first_u64 = |keys: &[&str]| {
-            keys.iter()
-                .find_map(|k| m.get(*k).and_then(|v| v.as_u64()))
-        };
+        let first_u64 =
+            |keys: &[&str]| keys.iter().find_map(|k| m.get(*k).and_then(|v| v.as_u64()));
         let modalities = |key: &str| {
             m.get(key)
                 .and_then(|v| v.as_array())
@@ -144,11 +143,7 @@ pub fn parse_fetched_models(json: &serde_json::Value) -> Vec<FetchedModel> {
                 "max_context_length",
                 "max_context_tokens",
             ]),
-            max_output: first_u64(&[
-                "max_output_tokens",
-                "max_completion_tokens",
-                "max_output",
-            ]),
+            max_output: first_u64(&["max_output_tokens", "max_completion_tokens", "max_output"]),
             input_modalities: modalities("input_modalities"),
             output_modalities: modalities("output_modalities"),
             pricing: parse_vendor_pricing(m.get("pricing")),
@@ -187,7 +182,8 @@ fn parse_vendor_pricing(v: Option<&serde_json::Value>) -> Option<ModelPricing> {
     }
     // 形态二:OpenRouter USD/token
     if let (Some(pt), Some(cp)) = (get_f("prompt"), get_f("completion")) {
-        let to_cny_m = |per_token: f64| (per_token * 1_000_000.0 * USD_TO_CNY * 10_000.0).round() / 10_000.0;
+        let to_cny_m =
+            |per_token: f64| (per_token * 1_000_000.0 * USD_TO_CNY * 10_000.0).round() / 10_000.0;
         return Some(ModelPricing {
             input: Some(to_cny_m(pt)),
             output: Some(to_cny_m(cp)),
@@ -277,9 +273,13 @@ pub fn derive_vendor_cards(
                 display_name,
                 provider: provider.clone(),
                 official_model_id: f.id.clone(),
-                context_window: f.context_window.or(cat.as_ref().and_then(|c| c.context_window)),
+                context_window: f
+                    .context_window
+                    .or(cat.as_ref().and_then(|c| c.context_window)),
                 max_output: f.max_output.or(cat.as_ref().and_then(|c| c.max_output)),
-                cost_tier: cat.map(|c| c.cost_tier.to_string()).unwrap_or_else(|| "standard".into()),
+                cost_tier: cat
+                    .map(|c| c.cost_tier.to_string())
+                    .unwrap_or_else(|| "standard".into()),
                 tags,
                 pricing,
                 defaults: None,
@@ -292,8 +292,8 @@ pub fn derive_vendor_cards(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::builtin_cards;
+    use super::*;
 
     #[test]
     fn legacy_string_cache_upgrades_to_fetched_models() {
@@ -309,7 +309,7 @@ mod tests {
             .iter()
             .map(|e| match e {
                 CachedEntry::Id(s) => FetchedModel::id_only(s.clone()),
-                CachedEntry::Full(f) => f.clone(),
+                CachedEntry::Full(f) => f.as_ref().clone(),
             })
             .collect();
         assert_eq!(models.len(), 2);
@@ -400,7 +400,10 @@ mod tests {
         assert_eq!(newbie.id, "vendor-deepseek-deepseek-newbie");
         assert!(newbie.pricing.is_none());
         assert_eq!(newbie.cost_tier, "standard");
-        let g46 = cards.iter().find(|c| c.official_model_id == "glm-4.6").unwrap();
+        let g46 = cards
+            .iter()
+            .find(|c| c.official_model_id == "glm-4.6")
+            .unwrap();
         assert_eq!(g46.context_window, Some(204_800));
         assert_eq!(g46.pricing.as_ref().unwrap().input, Some(3.0));
         assert_eq!(g46.pricing.as_ref().unwrap().output, Some(14.0));

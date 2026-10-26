@@ -4,7 +4,10 @@ use base64::Engine as _;
 use serde::Deserialize;
 
 use crate::db::usage::{self, UsageRecord};
-use crate::provider::{rotation::{self, RotationState}, ImageRequest, ImageResponse};
+use crate::provider::{
+    ImageRequest, ImageResponse,
+    rotation::{self, RotationState},
+};
 
 use super::failover::with_key_rotation;
 use super::keys::{build_openai, own_candidates, resolve_spec, rotation_group};
@@ -88,10 +91,20 @@ pub async fn generate_image(
 
     // 风格词与负面提示合并进 prompt(对所有 OpenAI 兼容 Provider 生效)
     let mut final_prompt = input.prompt.clone();
-    if let Some(sp) = input.style_prompt.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(sp) = input
+        .style_prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         final_prompt = format!("{final_prompt}, {sp}");
     }
-    if let Some(neg) = input.negative.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(neg) = input
+        .negative
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         final_prompt = format!("{final_prompt}. Avoid: {neg}");
     }
 
@@ -167,7 +180,10 @@ async fn save_image_response(
     } else if resp.url.starts_with("http://") || resp.url.starts_with("https://") {
         download_image_checked(&resp.url).await?
     } else {
-        return Err(format!("未知的图片返回格式: {}", &resp.url[..resp.url.len().min(64)]));
+        return Err(format!(
+            "未知的图片返回格式: {}",
+            &resp.url[..resp.url.len().min(64)]
+        ));
     };
 
     // 毫秒时间戳,避免同秒多图撞名
@@ -176,10 +192,10 @@ async fn save_image_response(
     std::fs::write(&path, &bytes).map_err(|e| format!("写入图片失败: {e}"))?;
 
     // 参数留档 meta.json(失败不影响出图)
-    if let Some(m) = meta {
-        if let Ok(json) = serde_json::to_string_pretty(m) {
-            let _ = std::fs::write(dir.join(format!("{ts}.meta.json")), json);
-        }
+    if let Some(m) = meta
+        && let Ok(json) = serde_json::to_string_pretty(m)
+    {
+        let _ = std::fs::write(dir.join(format!("{ts}.meta.json")), json);
     }
 
     let data_url = format!(
@@ -257,7 +273,9 @@ fn validate_image_url(url: &str) -> Result<(), String> {
         "http" | "https" => {}
         s => return Err(format!("图片 URL 协议不支持: {s}")),
     }
-    let host = u.host_str().ok_or_else(|| "图片 URL 缺少 host".to_string())?;
+    let host = u
+        .host_str()
+        .ok_or_else(|| "图片 URL 缺少 host".to_string())?;
     // url crate 对 IPv6 字面量返回带方括号形式([::1]),统一去括号后再判定
     let h = host.trim_start_matches('[').trim_end_matches(']');
     if h.eq_ignore_ascii_case("localhost") {
@@ -275,7 +293,9 @@ fn validate_image_url(url: &str) -> Result<(), String> {
 /// 彻底消除需自定义连接器做 IP pinning;当前在可用性与安全间取平衡。
 async fn assert_domain_resolves_public(url: &str) -> Result<(), String> {
     let u = reqwest::Url::parse(url).map_err(|e| format!("图片 URL 无法解析: {e}"))?;
-    let host = u.host_str().ok_or_else(|| "图片 URL 缺少 host".to_string())?;
+    let host = u
+        .host_str()
+        .ok_or_else(|| "图片 URL 缺少 host".to_string())?;
     // 去 IPv6 方括号;能 parse 成 IP 的已由 validate_image_url 同步校验,此处只处理域名
     let h = host.trim_start_matches('[').trim_end_matches(']');
     if h.parse::<std::net::IpAddr>().is_ok() || h.eq_ignore_ascii_case("localhost") {
@@ -343,10 +363,10 @@ pub(crate) async fn download_image_checked(url: &str) -> Result<Vec<u8>, String>
         if !ct.starts_with("image/") {
             return Err(format!("图片响应 Content-Type 非法: {ct}"));
         }
-        if let Some(len) = resp.content_length() {
-            if len as usize > MAX_IMAGE_BYTES {
-                return Err(format!("图片超过 20MB 上限({len} 字节)"));
-            }
+        if let Some(len) = resp.content_length()
+            && len as usize > MAX_IMAGE_BYTES
+        {
+            return Err(format!("图片超过 20MB 上限({len} 字节)"));
         }
 
         let mut buf: Vec<u8> = Vec::new();
@@ -386,15 +406,49 @@ fn ensure_in_images_dir(p: &std::path::Path) -> Result<(), String> {
     }
 }
 
-/// 列出全部历史作品(按文件名时间戳倒序),附缩略图与 meta。
-#[tauri::command]
-pub fn list_images() -> Result<Vec<ImageListItem>, String> {
-    let dir = images_dir();
+/// 缩略图缓存子目录(与源图同盘,便于随作品一起清理/迁移)。
+const THUMB_DIR: &str = ".thumbs";
+
+/// 缩略图缓存路径:`<images>/.thumbs/<stem>.jpg`
+fn thumb_cache_path(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let stem = name.strip_suffix(".png").unwrap_or(name);
+    dir.join(THUMB_DIR).join(format!("{stem}.jpg"))
+}
+
+/// 读缓存:仅当缓存不早于源图时才命中,否则返回 None 触发重算(PERF-1)。
+fn read_thumb_cache(cache: &std::path::Path, src: &std::path::Path) -> Option<Vec<u8>> {
+    let cache_time = std::fs::metadata(cache).ok()?.modified().ok()?;
+    let src_time = std::fs::metadata(src).ok()?.modified().ok()?;
+    if cache_time < src_time {
+        return None;
+    }
+    std::fs::read(cache).ok()
+}
+
+/// 写缓存:先落临时文件再改名,避免并发下读到半成品。
+fn write_thumb_cache(cache: &std::path::Path, jpeg: &[u8]) {
+    let Some(parent) = cache.parent() else {
+        return;
+    };
+    if std::fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    let tmp = cache.with_extension("jpg.tmp");
+    if std::fs::write(&tmp, jpeg).is_ok() && std::fs::rename(&tmp, cache).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+}
+
+/// 目录级实现(可测试):列出 dir 下全部 .png 作品,附缩略图与 meta。
+///
+/// PERF-1:缩略图落盘复用。命中缓存时跳过解码/缩放,历史列表由「每次全量解码」
+/// 降为「读小 jpg + base64」,重复进入绘图页不再付出 400 ms 级代价。
+fn list_images_in(dir: &std::path::Path) -> Result<Vec<ImageListItem>, String> {
     if !dir.exists() {
         return Ok(Vec::new());
     }
     let mut names: Vec<String> = Vec::new();
-    let rd = std::fs::read_dir(&dir).map_err(|e| format!("读取 images 目录失败: {e}"))?;
+    let rd = std::fs::read_dir(dir).map_err(|e| format!("读取 images 目录失败: {e}"))?;
     for e in rd.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
         if name.ends_with(".png") {
@@ -408,19 +462,32 @@ pub fn list_images() -> Result<Vec<ImageListItem>, String> {
         let path = dir.join(&name);
         // 缩略图:按字节内容嗅探格式解码(部分渠道实际返回 JPEG 但沿用 .png 命名,
         // image::open 会按扩展名误选 PNG 解码器导致整张被跳过)→ 256 等比缩 → jpeg q70 → data URL
-        let Ok(bytes) = std::fs::read(&path) else { continue };
-        let Ok(img) = image::load_from_memory(&bytes) else { continue };
-        let thumb_img = img.thumbnail(256, 256);
-        let mut buf = std::io::Cursor::new(Vec::new());
-        if thumb_img
-            .write_to(&mut buf, image::ImageFormat::Jpeg)
-            .is_err()
-        {
-            continue;
-        }
+        let cache = thumb_cache_path(dir, &name);
+        let jpeg = match read_thumb_cache(&cache, &path) {
+            Some(b) => b,
+            None => {
+                let Ok(bytes) = std::fs::read(&path) else {
+                    continue;
+                };
+                let Ok(img) = image::load_from_memory(&bytes) else {
+                    continue;
+                };
+                let thumb_img = img.thumbnail(256, 256);
+                let mut buf = std::io::Cursor::new(Vec::new());
+                if thumb_img
+                    .write_to(&mut buf, image::ImageFormat::Jpeg)
+                    .is_err()
+                {
+                    continue;
+                }
+                let jpeg = buf.into_inner();
+                write_thumb_cache(&cache, &jpeg);
+                jpeg
+            }
+        };
         let thumb = format!(
             "data:image/jpeg;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(buf.into_inner())
+            base64::engine::general_purpose::STANDARD.encode(jpeg)
         );
         let meta_path = dir.join(name.replace(".png", ".meta.json"));
         let meta = std::fs::read_to_string(&meta_path)
@@ -433,6 +500,12 @@ pub fn list_images() -> Result<Vec<ImageListItem>, String> {
         });
     }
     Ok(out)
+}
+
+/// 列出全部历史作品(按文件名时间戳倒序),附缩略图与 meta。
+#[tauri::command]
+pub fn list_images() -> Result<Vec<ImageListItem>, String> {
+    list_images_in(&images_dir())
 }
 
 /// 读取单张图片的完整 data URL(历史列表点击放大时用)。
@@ -491,7 +564,33 @@ mod tests {
     /// M2 回归:公网 http/https 图片 URL 放行。
     #[test]
     fn image_url_allows_public_host() {
-        assert!(validate_image_url("https://oaidalleapiprodscus.blob.core.windows.net/x.png").is_ok());
+        assert!(
+            validate_image_url("https://oaidalleapiprodscus.blob.core.windows.net/x.png").is_ok()
+        );
         assert!(validate_image_url("http://8.8.8.8/x.png").is_ok());
+    }
+
+    /// PERF-1:重复列举应命中缩略图缓存,且缓存落盘到 .thumbs。
+    #[test]
+    fn list_images_reuses_thumbnail_cache() {
+        let dir = std::env::temp_dir().join(format!("maf-img-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let name = "20260101-000000000.png";
+        image::RgbImage::new(16, 16).save(dir.join(name)).unwrap();
+
+        let first = list_images_in(&dir).unwrap();
+        assert_eq!(first.len(), 1);
+        assert!(
+            thumb_cache_path(&dir, name).exists(),
+            "首轮应生成并落盘缩略图缓存"
+        );
+
+        // 二次列举:命中缓存,缩略图结果与首轮一致
+        let second = list_images_in(&dir).unwrap();
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].thumb, first[0].thumb);
+        assert!(second[0].thumb.starts_with("data:image/jpeg;base64,"));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

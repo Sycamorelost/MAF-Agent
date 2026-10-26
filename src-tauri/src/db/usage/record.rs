@@ -5,7 +5,7 @@
 //!   - slot_id / slot_label / key_masked 为 Key 归因主线;
 //!   - 只存 Key 掩码,绝不明文。
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use crate::db;
 

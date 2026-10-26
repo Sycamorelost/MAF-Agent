@@ -381,9 +381,7 @@ mod tests {
         let cards = builtin_model_cards();
         let reasoning = cards
             .iter()
-            .filter(|c| {
-                !c.tags.iter().any(|t| t == "image" || t == "translation")
-            })
+            .filter(|c| !c.tags.iter().any(|t| t == "image" || t == "translation"))
             .count();
         let with_injection = cards
             .iter()
@@ -392,4 +390,3 @@ mod tests {
         assert_eq!(reasoning, with_injection);
     }
 }
-

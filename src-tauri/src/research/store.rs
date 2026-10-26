@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::db;
 
-use super::{stage::StagesFile, ResearchEvent};
+use super::{ResearchEvent, stage::StagesFile};
 
 /// research_sessions 表行。
 #[derive(Debug, Clone, Serialize)]
@@ -72,8 +72,7 @@ pub fn insert(row: &ResearchRow) -> Result<(), String> {
     Ok(())
 }
 
-const COLS: &str =
-    "id, topic, status, rounds, max_rounds, model_id, error, created, updated, mode, current_stage, blueprint_name, stages_done, stages_total";
+const COLS: &str = "id, topic, status, rounds, max_rounds, model_id, error, created, updated, mode, current_stage, blueprint_name, stages_done, stages_total";
 
 fn row_from(r: &rusqlite::Row) -> rusqlite::Result<ResearchRow> {
     Ok(ResearchRow {
@@ -195,8 +194,7 @@ pub fn delete(id: &str) -> Result<(), String> {
 /// 避免运行中的引擎在下一事件点把目录重建并继续写盘(「删而又生」)。
 pub fn delete_row(id: &str) -> Result<(), String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    conn
-        .execute("DELETE FROM research_sessions WHERE id=?1", [id])
+    conn.execute("DELETE FROM research_sessions WHERE id=?1", [id])
         .map_err(|e| e.to_string())?;
     Ok(())
 }

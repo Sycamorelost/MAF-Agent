@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 mod builtin_cards;
 mod catalog;
-mod vendor;
 mod user;
+mod vendor;
 
 /// 价格信息(刊例价,人民币 / 百万 tokens;生图模型为元/张)。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -89,9 +89,11 @@ pub struct ModelCard {
 }
 
 #[allow(unused_imports)]
-pub use user::{card_is_user_overridden, list_model_cards, save_user_card, validate_model_card, USD_TO_CNY};
+pub use user::{
+    USD_TO_CNY, card_is_user_overridden, list_model_cards, save_user_card, validate_model_card,
+};
 #[allow(unused_imports)]
 pub use vendor::{
-    derive_vendor_cards, load_model_cache, model_cache_path, parse_fetched_models,
-    save_model_cache, vendor_card_id, FetchedModel,
+    FetchedModel, derive_vendor_cards, load_model_cache, model_cache_path, parse_fetched_models,
+    save_model_cache, vendor_card_id,
 };

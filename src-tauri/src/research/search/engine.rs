@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::provider::keychain;
 
-use super::fetch::{http_client, Bocha, SearXng, Tavily};
+use super::fetch::{Bocha, SearXng, Tavily, http_client};
 use super::rank::{DeepseekSearch, Zhipu};
 
 /// 各引擎的 API Key 在 keychain 中的 id 前缀(`{engine}-search`)。

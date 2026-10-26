@@ -52,7 +52,9 @@ pub fn get(id: &str) -> Result<Option<SessionRow>, String> {
     let mut stmt = conn
         .prepare(&format!("SELECT {} FROM sessions WHERE id=?1", SELECT_COLS))
         .map_err(|e| e.to_string())?;
-    let mut rows = stmt.query_map([id], row_to_session).map_err(|e| e.to_string())?;
+    let mut rows = stmt
+        .query_map([id], row_to_session)
+        .map_err(|e| e.to_string())?;
     match rows.next() {
         Some(Ok(r)) => Ok(Some(r)),
         Some(Err(e)) => Err(e.to_string()),
@@ -68,7 +70,9 @@ pub fn list() -> Result<Vec<SessionRow>, String> {
             SELECT_COLS
         ))
         .map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], row_to_session).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], row_to_session)
+        .map_err(|e| e.to_string())?;
     let mut out = Vec::new();
     for r in rows {
         out.push(r.map_err(|e| e.to_string())?);
@@ -104,12 +108,15 @@ pub fn update_settings(
     max_context_messages: i64,
 ) -> Result<(), String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    let sp = system_prompt
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
+    let sp = system_prompt.map(str::trim).filter(|s| !s.is_empty());
     conn.execute(
         "UPDATE sessions SET system_prompt=?1, max_context_messages=?2, updated=?3 WHERE id=?4",
-        rusqlite::params![sp, max_context_messages.max(0), chrono::Local::now().to_rfc3339(), id],
+        rusqlite::params![
+            sp,
+            max_context_messages.max(0),
+            chrono::Local::now().to_rfc3339(),
+            id
+        ],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -171,8 +178,12 @@ pub fn set_agent(id: &str, agent_id: Option<&str>) -> Result<(), String> {
 
 /// 读取会话当前激活分支(V9)。
 pub fn active_branch_on(conn: &Connection, id: &str) -> Result<String, String> {
-    conn.query_row("SELECT active_branch FROM sessions WHERE id=?1", [id], |r| r.get(0))
-        .map_err(|e| format!("读取激活分支失败:{e}"))
+    conn.query_row(
+        "SELECT active_branch FROM sessions WHERE id=?1",
+        [id],
+        |r| r.get(0),
+    )
+    .map_err(|e| format!("读取激活分支失败:{e}"))
 }
 
 /// 读取会话当前激活分支(全局连接包装)。
@@ -222,8 +233,7 @@ pub fn delete(id: &str) -> Result<(), String> {
 pub fn delete_if_empty(id: &str) -> Result<bool, String> {
     const GRACE_SECS: i64 = 60;
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    let cutoff =
-        (chrono::Local::now() - chrono::Duration::seconds(GRACE_SECS)).to_rfc3339();
+    let cutoff = (chrono::Local::now() - chrono::Duration::seconds(GRACE_SECS)).to_rfc3339();
     let cnt: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM messages WHERE session_id=?1",
@@ -235,7 +245,10 @@ pub fn delete_if_empty(id: &str) -> Result<bool, String> {
         return Ok(false);
     }
     let n = conn
-        .execute("DELETE FROM sessions WHERE id=?1 AND updated < ?2", rusqlite::params![id, cutoff])
+        .execute(
+            "DELETE FROM sessions WHERE id=?1 AND updated < ?2",
+            rusqlite::params![id, cutoff],
+        )
         .map_err(|e| e.to_string())?;
     Ok(n > 0)
 }
@@ -244,8 +257,7 @@ pub fn delete_if_empty(id: &str) -> Result<bool, String> {
 /// grace 避免误删「刚创建还没发第一条消息」的会话(划词链路先建会话后发消息)。
 pub fn prune_empty(grace_secs: i64) -> Result<Vec<String>, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    let cutoff =
-        (chrono::Local::now() - chrono::Duration::seconds(grace_secs.max(0))).to_rfc3339();
+    let cutoff = (chrono::Local::now() - chrono::Duration::seconds(grace_secs.max(0))).to_rfc3339();
     let mut stmt = conn
         .prepare(
             "SELECT id FROM sessions WHERE updated < ?1 \

@@ -6,7 +6,7 @@ use futures::StreamExt;
 
 use crate::provider::{ChatMessage, ChatRequest, Provider, StreamChunk};
 
-use super::{check_cancel, RunError, StudyParams};
+use super::{RunError, StudyParams, check_cancel};
 
 /// 流式收全量文本(逐 chunk 检查取消;暂停在 chunk 间不挂起,步骤间统一挂起)。
 pub(crate) async fn llm_collect(
@@ -21,11 +21,14 @@ pub(crate) async fn llm_collect(
         top_p: None,
         reasoning: None,
         stream: true,
+        ..Default::default()
     };
     // H3 同款:已回退过则直接复用回退实例;stream_options 被拒时回退重建一次
     let cached = p.fallback.lock().ok().and_then(|g| g.clone());
     let mut stream = if let Some(prov) = cached {
-        prov.chat_stream(req).await.map_err(|e| RunError::Fatal(e.to_string()))?
+        prov.chat_stream(req)
+            .await
+            .map_err(|e| RunError::Fatal(e.to_string()))?
     } else {
         match p.provider.chat_stream(req.clone()).await {
             Ok(s) => s,
@@ -64,15 +67,26 @@ pub(crate) async fn llm_collect(
             StreamChunk::Error { message } => return Err(RunError::Fatal(message)),
             StreamChunk::Usage { .. } => {}
             StreamChunk::Done { .. } => break,
+            _ => {}
         }
     }
     Ok(out)
 }
 
 pub(crate) fn sys_msg(content: String) -> ChatMessage {
-    ChatMessage { role: "system".into(), content, images: Vec::new() }
+    ChatMessage {
+        role: "system".into(),
+        content,
+        images: Vec::new(),
+        ..Default::default()
+    }
 }
 
 pub(crate) fn user_msg(content: String) -> ChatMessage {
-    ChatMessage { role: "user".into(), content, images: Vec::new() }
+    ChatMessage {
+        role: "user".into(),
+        content,
+        images: Vec::new(),
+        ..Default::default()
+    }
 }

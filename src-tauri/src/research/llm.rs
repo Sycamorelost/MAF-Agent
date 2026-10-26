@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use crate::provider::{ChatMessage, ChatRequest, ChatStream, Provider, StreamChunk};
 
-use super::pipeline::{check_cancel, RunError};
 use super::EngineParams;
+use super::pipeline::{RunError, check_cancel};
 
 /// 粗略 token 估算:中英文混合按 3 字符 ≈ 1 tok。
 pub(crate) fn est_tok(s: &str) -> u64 {
@@ -73,6 +73,7 @@ pub(crate) async fn llm_collect(
         top_p: None,
         reasoning: None, // 研究链路档位透传为 Phase 2,暂不启用
         stream: true,
+        ..Default::default()
     };
     let mut stream = chat_stream_compat(p, req).await?;
     let mut out = String::new();
@@ -83,11 +84,13 @@ pub(crate) async fn llm_collect(
             StreamChunk::Delta { content } => out.push_str(&content),
             StreamChunk::Reasoning { .. } => {} // 研究链路只取正文,忽略思考流
             StreamChunk::Error { message } => return Err(RunError::Fatal(message)),
-            StreamChunk::Usage { total_tokens, .. } => {
-                if let Some(t) = total_tokens {
-                    usage = Some(t as u64);
-                }
+            StreamChunk::Usage {
+                total_tokens: Some(t),
+                ..
+            } => {
+                usage = Some(t as u64);
             }
+            StreamChunk::Usage { .. } => {}
             StreamChunk::Done {
                 prompt_tokens,
                 completion_tokens,
@@ -103,6 +106,7 @@ pub(crate) async fn llm_collect(
                 }
                 break;
             }
+            _ => {}
         }
     }
     Ok((out, usage))

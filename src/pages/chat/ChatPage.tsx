@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
+import { mcpClearSessionAllowed } from '../../lib/ipc/mcp';
 import StreamingBubble from '../../components/StreamingBubble';
 import Composer from '../../components/Composer';
 import { ResizeHandle } from '../../components/ResizeHandle';
@@ -8,6 +9,7 @@ import MemPanel from '../../components/MemPanel';
 import MemoryHandoffDialog from '../../components/MemoryHandoffDialog';
 import ModelSwitchDialog from '../../components/ModelSwitchDialog';
 import AgentPickerDialog from '../../components/AgentPickerDialog';
+import OutlinePanel from '../../components/OutlinePanel';
 import { IconChat, IconX, agentIconComponent } from '../../components/icons';
 import { useMessagesStore } from '../../stores/messages';
 import { useSessionsStore } from '../../stores/sessions';
@@ -19,6 +21,7 @@ import type { AttachmentMeta, MessageRow } from '../../lib/ipc';
 import * as ipc from '../../lib/ipc';
 import { MessageList } from './MessageList';
 import { ChatHeader, useModelHandoff } from './ChatHeader';
+import { ChatTodos } from './ChatTodos';
 import { useChatSend } from './useChatSend';
 import { useDraftHandoff } from './useDraftHandoff';
 
@@ -29,6 +32,8 @@ export default function ChatPage() {
   const { id: sessionId } = useParams<{ id: string }>();
   const memPanel = usePanelWidth('mempanel', 320, 240, 520, 'right');
   const { bySession, load } = useMessagesStore();
+  const hasMore = useMessagesStore((s) => (sessionId ? s.hasMore[sessionId] === true : false));
+  const loadOlder = useMessagesStore((s) => s.loadOlder);
   // 流式状态用 boolean selector:只在开始/结束变化两次,ChatPage 不随 50ms 去抖重渲染
   const hasStreaming = useMessagesStore((s) =>
     sessionId ? s.streaming[sessionId] !== undefined : false,
@@ -51,10 +56,22 @@ export default function ChatPage() {
   const [pendingImages, setPendingImages] = useState<Record<string, string>>({});
   const [modelSwitchOpen, setModelSwitchOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const session = sessions.find((s) => s.id === sessionId);
   const messages = sessionId ? (bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
+
+  /** 加载更早一页并保持视口位置(内容前插后补偿滚动高度差) */
+  const onLoadOlder = async () => {
+    if (!sessionId) return;
+    const sc = scrollRef.current;
+    const before = sc ? sc.scrollHeight : 0;
+    await loadOlder(sessionId);
+    requestAnimationFrame(() => {
+      if (sc) sc.scrollTop += sc.scrollHeight - before;
+    });
+  };
   // ---------- B2:当前会话绑定的 Agent ----------
   const agent = useMemo(
     () => (session?.agent_id ? agentTemplates.find((t) => t.agent_id === session.agent_id) ?? null : null),
@@ -115,8 +132,10 @@ export default function ChatPage() {
     load(sessionId);
     loadMemory(sessionId);
     // 离开会话时:空对话默认不保留(后端按真实消息数判断,流式中/已有内容的会话不受影响)
+    // 同时清空 MCP「始终允许」会话缓存,避免跨会话静默放行(Phase 5e 安全要求)
     return () => {
       void useSessionsStore.getState().removeIfEmpty(sessionId);
+      void mcpClearSessionAllowed().catch(() => {});
     };
   }, [sessionId, load, loadMemory]);
 
@@ -192,7 +211,9 @@ export default function ChatPage() {
             branchRefresh={branchRefresh}
             current={current}
             memCollapsed={memPanel.collapsed}
+            outlineOpen={outlineOpen}
             onToggleMemPanel={memPanel.toggleCollapse}
+            onToggleOutline={() => setOutlineOpen((v) => !v)}
             onOpenModelSwitch={() => setModelSwitchOpen(true)}
             onError={chat.setError}
           />
@@ -234,12 +255,20 @@ export default function ChatPage() {
                   </button>
                 </div>
               )}
+              <ChatTodos sessionId={sessionId} onNotice={chat.setCompressNotice} />
               {messages.length === 0 && !hasStreaming && (
                 <div className="main-empty">
                   <div style={{ color: 'var(--text-4)' }}>
                     <IconChat size={48} strokeWidth={1} />
                   </div>
                   <div>开始你的第一段对话吧</div>
+                </div>
+              )}
+              {hasMore && messages.length > 0 && (
+                <div className="load-older">
+                  <button type="button" className="load-older-btn" onClick={onLoadOlder}>
+                    加载更早消息
+                  </button>
                 </div>
               )}
               <MessageList
@@ -323,7 +352,7 @@ export default function ChatPage() {
             </button>
           </Composer>
         </div>
-        {!memPanel.collapsed && (
+        {!memPanel.collapsed && !outlineOpen && (
           <>
             <ResizeHandle panel={memPanel} />
             <MemPanel
@@ -333,6 +362,9 @@ export default function ChatPage() {
               onCollapse={memPanel.toggleCollapse}
             />
           </>
+        )}
+        {outlineOpen && (
+          <OutlinePanel messages={messages} onClose={() => setOutlineOpen(false)} />
         )}
       </div>
 

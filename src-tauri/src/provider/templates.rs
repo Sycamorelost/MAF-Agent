@@ -38,11 +38,7 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
                 "gpt-4o".into(),
                 "gpt-4o-mini".into(),
             ],
-            image_models: vec![
-                "dall-e-3".into(),
-                "dall-e-2".into(),
-                "gpt-image-1".into(),
-            ],
+            image_models: vec!["dall-e-3".into(), "dall-e-2".into(), "gpt-image-1".into()],
             docs_url: Some("https://platform.openai.com/api-keys".into()),
             openai_compat: true,
             all_models: vec![],
@@ -90,11 +86,7 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             id: "zhipu".into(),
             display_name: "智谱 GLM".into(),
             base_url: "https://open.bigmodel.cn/api/paas/v4".into(),
-            models: vec![
-                "glm-4.5".into(),
-                "glm-4-plus".into(),
-                "glm-4-air".into(),
-            ],
+            models: vec!["glm-4.5".into(), "glm-4-plus".into(), "glm-4-air".into()],
             // 智谱图像模型走同一 base_url 的 /images/generations
             image_models: vec!["cogview-3-plus".into(), "cogview-3-flash".into()],
             docs_url: Some("https://open.bigmodel.cn/usercenter/apikeys".into()),
@@ -132,12 +124,12 @@ fn store_path() -> PathBuf {
 /// 首次种子:内置模板 + 旧版 `custom_provider.json` 合并(仅读,不落盘)。
 fn seeded() -> Vec<ProviderTemplate> {
     let mut list = builtin_templates();
-    if let Ok(Some(cfg)) = crate::provider::custom::load() {
-        if let Some(t) = list.iter_mut().find(|t| t.id == "custom") {
-            t.display_name = cfg.display_name;
-            t.base_url = cfg.base_url;
-            t.models = cfg.models;
-        }
+    if let Ok(Some(cfg)) = crate::provider::custom::load()
+        && let Some(t) = list.iter_mut().find(|t| t.id == "custom")
+    {
+        t.display_name = cfg.display_name;
+        t.base_url = cfg.base_url;
+        t.models = cfg.models;
     }
     list
 }
@@ -145,12 +137,11 @@ fn seeded() -> Vec<ProviderTemplate> {
 /// 读取全部模板。文件不存在时返回内置种子列表(不落盘;首次增删改时才写入)。
 pub fn load_all() -> Vec<ProviderTemplate> {
     let p = store_path();
-    if p.exists() {
-        if let Ok(text) = fs::read_to_string(&p) {
-            if let Ok(list) = serde_json::from_str::<Vec<ProviderTemplate>>(&text) {
-                return list;
-            }
-        }
+    if p.exists()
+        && let Ok(text) = fs::read_to_string(&p)
+        && let Ok(list) = serde_json::from_str::<Vec<ProviderTemplate>>(&text)
+    {
+        return list;
     }
     seeded()
 }
@@ -185,7 +176,10 @@ mod tests {
 
     #[test]
     fn builtin_contains_openai() {
-        let t = builtin_templates().into_iter().find(|t| t.id == "openai").unwrap();
+        let t = builtin_templates()
+            .into_iter()
+            .find(|t| t.id == "openai")
+            .unwrap();
         assert_eq!(t.display_name, "OpenAI");
         assert!(t.base_url.starts_with("https://"));
     }

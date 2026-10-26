@@ -1,6 +1,6 @@
 //! Provider 实例组装与 base_url 安全校验。
 
-use crate::provider::{keychain, rotation, Provider};
+use crate::provider::{Provider, keychain, rotation};
 
 use super::keys::{build_openai, own_candidates, resolve_spec};
 
@@ -13,7 +13,13 @@ pub(crate) fn build_provider(
     custom_base_url: Option<&str>,
     custom_display_name: Option<&str>,
 ) -> Result<Box<dyn Provider>, String> {
-    build_provider_with_stream_options(provider_id, model, custom_base_url, custom_display_name, false)
+    build_provider_with_stream_options(
+        provider_id,
+        model,
+        custom_base_url,
+        custom_display_name,
+        false,
+    )
 }
 
 /// H3:build_provider 的可变体,允许开启 stream_options.include_usage(研究链路

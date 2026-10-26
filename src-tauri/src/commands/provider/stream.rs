@@ -9,10 +9,10 @@ pub(crate) struct StreamCancel {
 
 impl StreamCancel {
     fn fire(&self) {
-        if let Ok(mut g) = self.tx.lock() {
-            if let Some(tx) = g.take() {
-                let _ = tx.send(());
-            }
+        if let Ok(mut g) = self.tx.lock()
+            && let Some(tx) = g.take()
+        {
+            let _ = tx.send(());
         }
     }
 }

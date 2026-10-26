@@ -32,16 +32,17 @@
   --space-8: 32px;
   --space-10:40px;
 
-  /* ---- 字号阶梯 ---- */
-  --font-hero: 26px;
-  --font-h2:   16px;
-  --font-h3:   15px;
-  --font-body: 14px;
-  --font-body-em:14px;
-  --font-sub:  13px;
-  --font-caption:12px;
-  --font-micro:11px;
-  --font-mini: 10px;
+  /* ---- 字号阶梯(全部乘以 --ui-scale:设置页「字体大小」按比例缩放全局字号,不动布局间距) ---- */
+  --ui-scale: 1;
+  --font-hero: calc(26px * var(--ui-scale));
+  --font-h2:   calc(16px * var(--ui-scale));
+  --font-h3:   calc(15px * var(--ui-scale));
+  --font-body: calc(14px * var(--ui-scale));
+  --font-body-em:calc(14px * var(--ui-scale));
+  --font-sub:  calc(13px * var(--ui-scale));
+  --font-caption:calc(12px * var(--ui-scale));
+  --font-micro:calc(11px * var(--ui-scale));
+  --font-mini: calc(10px * var(--ui-scale));
 
   /* ---- 品牌 · 图标蓝 ---- */
   --brand:        #1B6CA8;
@@ -558,9 +559,10 @@ body{
 /* ---- 窗口尺寸自适应:字号/按钮/栏高随窗口宽度缩放,不再固定 ---- */
 @media (max-width:1100px){
   :root{
-    --font-hero:23px; --font-h2:15px; --font-h3:14px;
-    --font-body:13px; --font-body-em:13px; --font-sub:12px;
-    --font-caption:11px; --font-micro:10px;
+    /* 窄窗口基准字号下移,仍乘以用户设置的 --ui-scale */
+    --font-hero:calc(23px * var(--ui-scale)); --font-h2:calc(15px * var(--ui-scale)); --font-h3:calc(14px * var(--ui-scale));
+    --font-body:calc(13px * var(--ui-scale)); --font-body-em:calc(13px * var(--ui-scale)); --font-sub:calc(12px * var(--ui-scale));
+    --font-caption:calc(11px * var(--ui-scale)); --font-micro:calc(10px * var(--ui-scale));
     --titlebar-h:34px;
   }
   .btn-primary,.btn-brand{padding:6px 11px}
@@ -571,9 +573,10 @@ body{
 }
 @media (min-width:1600px){
   :root{
-    --font-hero:30px; --font-h2:18px; --font-h3:16px;
-    --font-body:15px; --font-body-em:15px; --font-sub:14px;
-    --font-caption:13px; --font-micro:12px; --font-mini:11px;
+    /* 宽窗口基准字号上移,仍乘以用户设置的 --ui-scale */
+    --font-hero:calc(30px * var(--ui-scale)); --font-h2:calc(18px * var(--ui-scale)); --font-h3:calc(16px * var(--ui-scale));
+    --font-body:calc(15px * var(--ui-scale)); --font-body-em:calc(15px * var(--ui-scale)); --font-sub:calc(14px * var(--ui-scale));
+    --font-caption:calc(13px * var(--ui-scale)); --font-micro:calc(12px * var(--ui-scale)); --font-mini:calc(11px * var(--ui-scale));
     --titlebar-h:42px;
   }
   .btn-primary,.btn-brand{padding:10px 18px}

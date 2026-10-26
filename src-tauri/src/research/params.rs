@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{stage, template, EngineParams};
+use super::{EngineParams, stage, template};
 
 /// 深度研究可配置参数(迭代 D4)。
 ///
@@ -187,7 +187,11 @@ impl ResearchParams {
     /// 终稿 system 提示:free_structure = true 时忽略模板,给最小自由结构指令;
     /// 返回 (system 提示, 是否含 {references} 引用锚点)。自由结构恒无锚点(finalize 统一追加资料来源)。
     pub fn report_system(&self, topic: &str, stages_digest: &str) -> (String, bool) {
-        let lang = if self.output_lang == "en" { "English" } else { "中文" };
+        let lang = if self.output_lang == "en" {
+            "English"
+        } else {
+            "中文"
+        };
         if self.free_structure {
             let mut sys = format!(
                 "你是一名严谨的研究撰写助手。请输出一篇完整、深入的 Markdown 研究报告。\n\n\
@@ -243,4 +247,3 @@ mod tests {
         assert_eq!(p.max_sources, 0);
     }
 }
-

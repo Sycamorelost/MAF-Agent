@@ -1,25 +1,28 @@
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import Titlebar from './components/Titlebar';
 import Sidebar from './components/Sidebar';
 import DataDirSetupDialog from './components/DataDirSetupDialog';
 import * as ipc from './lib/ipc';
-import HomePage from './pages/HomePage';
-import ChatPage from './pages/ChatPage';
-import ResearchPage from './pages/ResearchPage';
-import StudyPage from './pages/StudyPage';
-import DrawPage from './pages/DrawPage';
-import TranslatePage from './pages/TranslatePage';
-import MemoryPage from './pages/MemoryPage';
-import NotesPage from './pages/NotesPage';
-import AttachmentsPage from './pages/AttachmentsPage';
-import SettingsPage from './pages/SettingsPage';
+import McpApprovalDialog from './components/McpApprovalDialog';
 import { useSessionsStore } from './stores/sessions';
 import { useProvidersStore } from './stores/providers';
 import './styles/app.css';
 import 'katex/dist/katex.min.css';
+
+// PERF-4:页面按路由懒加载,首屏只加载布局与当前页,避免 8 MB+ 单包一次性解析。
+const HomePage = lazy(() => import('./pages/HomePage'));
+const ChatPage = lazy(() => import('./pages/ChatPage'));
+const ResearchPage = lazy(() => import('./pages/ResearchPage'));
+const StudyPage = lazy(() => import('./pages/StudyPage'));
+const DrawPage = lazy(() => import('./pages/DrawPage'));
+const TranslatePage = lazy(() => import('./pages/TranslatePage'));
+const MemoryPage = lazy(() => import('./pages/MemoryPage'));
+const NotesPage = lazy(() => import('./pages/NotesPage'));
+const AttachmentsPage = lazy(() => import('./pages/AttachmentsPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 /** 深度研究/绘画/翻译/记忆/设置页自带布局,隐藏会话侧栏(条件挂载,抽屉 body class 随卸载清理)。 */
 function MaybeSidebar() {
@@ -85,25 +88,38 @@ function MainApp() {
     };
   }, [nav]);
 
+  /** 全局 Esc:关闭最上层可关闭浮层(等价于点遮罩,避免所有弹窗都各写一遍) */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const layers = document.querySelectorAll<HTMLElement>('.dialog-mask, .draw-lightbox, .att-lightbox');
+      layers[layers.length - 1]?.click();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <div className="window">
       <Titlebar />
       <div className="body">
         <MaybeSidebar />
         <div className="main">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/chat/:id" element={<ChatPage />} />
-            <Route path="/research" element={<ResearchPage />} />
-            <Route path="/plan" element={<StudyPage />} />
-            <Route path="/draw" element={<DrawPage />} />
-            <Route path="/translate" element={<TranslatePage />} />
-            <Route path="/memory" element={<MemoryPage />} />
-            <Route path="/notes" element={<NotesPage />} />
-            <Route path="/attachments" element={<AttachmentsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Suspense fallback={null}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/chat/:id" element={<ChatPage />} />
+              <Route path="/research" element={<ResearchPage />} />
+              <Route path="/plan" element={<StudyPage />} />
+              <Route path="/draw" element={<DrawPage />} />
+              <Route path="/translate" element={<TranslatePage />} />
+              <Route path="/memory" element={<MemoryPage />} />
+              <Route path="/notes" element={<NotesPage />} />
+              <Route path="/attachments" element={<AttachmentsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </div>
       </div>
     </div>
@@ -140,6 +156,7 @@ export default function App() {
     <HashRouter>
       <DataDirGate />
       <MainApp />
+      <McpApprovalDialog />
     </HashRouter>
   );
 }

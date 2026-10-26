@@ -58,8 +58,8 @@ pub(crate) fn parse_step(text: &str, max_queries: u32) -> Step {
         Some(i) => {
             let line = lines[i].trim();
             let value = line
-                .splitn(2, |c| c == ':' || c == '\u{FF1A}')
-                .nth(1)
+                .split_once([':', '\u{FF1A}'])
+                .map(|x| x.1)
                 .unwrap_or("")
                 .trim()
                 .to_lowercase();
@@ -85,8 +85,8 @@ fn extract_thought(lines: &[&str], action_idx: Option<usize>) -> String {
             let mut parts: Vec<String> = Vec::new();
             let first = lines[i].trim();
             let after = first
-                .splitn(2, |c| c == ':' || c == '\u{FF1A}')
-                .nth(1)
+                .split_once([':', '\u{FF1A}'])
+                .map(|x| x.1)
                 .unwrap_or("")
                 .trim();
             if !after.is_empty() {
@@ -130,7 +130,11 @@ fn collect_queries(lines: &[&str], max: u32) -> Vec<String> {
         }
         match strip_list_marker(t) {
             Some(q) => {
-                let q = q.trim().trim_matches(|c| c == '"' || c == '"').to_string();
+                // 去掉成对包裹的引号(英文直引号 + 中文弯引号)
+                let q = q
+                    .trim()
+                    .trim_matches(|c| c == '"' || c == '\u{201C}' || c == '\u{201D}')
+                    .to_string();
                 if !q.is_empty() {
                     out.push(q);
                 }
@@ -165,10 +169,10 @@ pub(crate) fn strip_list_marker(line: &str) -> Option<String> {
     if idx > 0 {
         let rest = &line[idx..];
         let mut chars = rest.chars();
-        if let Some(sep) = chars.next() {
-            if matches!(sep, '.' | '、' | ')' | ':' | '\u{FF1A}') {
-                return Some(chars.collect::<String>().trim().to_string());
-            }
+        if let Some(sep) = chars.next()
+            && matches!(sep, '.' | '、' | ')' | ':' | '\u{FF1A}')
+        {
+            return Some(chars.collect::<String>().trim().to_string());
         }
     }
     None

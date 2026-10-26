@@ -10,7 +10,7 @@ use crate::study::template;
 
 use super::conn;
 use super::now_str;
-use super::quiz::{parse_quiz, QuizRow};
+use super::quiz::{QuizRow, parse_quiz};
 
 /// 自学单元行。
 #[derive(Debug, Clone, Serialize)]
@@ -25,12 +25,15 @@ pub struct UnitRow {
     pub created: String,
 }
 
+/// 单元生成上下文:(topic, level, lang, 节点名, 难度, 选址原因, 已缓存单元)。
+type UnitContext = (String, String, String, String, i64, String, Option<UnitRow>);
+
 /// 读取计划与知识点的生成上下文;已缓存单元直接返回。
 pub(crate) fn unit_context(
     conn: &rusqlite::Connection,
     plan_id: &str,
     node_id: i64,
-) -> Result<(String, String, String, String, i64, String, Option<UnitRow>), String> {
+) -> Result<UnitContext, String> {
     let (topic, level, lang): (String, String, String) = conn
         .query_row(
             "SELECT topic, level, lang FROM plans WHERE id=?1",
@@ -189,7 +192,9 @@ pub async fn new_quiz(
         let user = if attempt == 1 {
             base_user.clone()
         } else {
-            format!("{base_user}\n\n上一轮输出存在问题:{last_err}\n必须只输出约定 Schema 的 JSON,恰好 5 题。")
+            format!(
+                "{base_user}\n\n上一轮输出存在问题:{last_err}\n必须只输出约定 Schema 的 JSON,恰好 5 题。"
+            )
         };
         let text = llm_plain(
             provider.as_ref(),

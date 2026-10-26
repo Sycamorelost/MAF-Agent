@@ -19,11 +19,11 @@ mod tests;
 mod tokens;
 mod totals;
 
-pub use entries::{entries, key_health, UsageEntry};
-pub use hourly::{hourly, UsageHour};
+pub use entries::{UsageEntry, entries, key_health};
+pub use hourly::{UsageHour, hourly};
 pub use tokens::token_mix;
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 use crate::db;
@@ -92,17 +92,16 @@ pub(crate) fn since_secs(days: u32) -> i64 {
 ///
 /// 分组取前 50;若超过 50 个分类,追加「其他」桶(总数减前 50 之和),
 /// 保证 Σ分组 = 总览,避免用户看到"分组加不起来"。
-pub fn summary_on(
-    conn: &Connection,
-    dimension: &str,
-    days: u32,
-) -> rusqlite::Result<UsageSummary> {
+pub fn summary_on(conn: &Connection, dimension: &str, days: u32) -> rusqlite::Result<UsageSummary> {
     let since = since_secs(days);
     let totals = totals::totals_on(conn, since)?;
 
     let (key_expr, name_expr) = match dimension {
         "provider" => ("provider_id", "COALESCE(provider_name, provider_id)"),
-        "key" => ("CAST(slot_id AS TEXT)", "COALESCE(NULLIF(slot_label,''), '槽位 ' || slot_id)"),
+        "key" => (
+            "CAST(slot_id AS TEXT)",
+            "COALESCE(NULLIF(slot_label,''), '槽位 ' || slot_id)",
+        ),
         "agent" => (
             "COALESCE(NULLIF(agent_id,''), 'none')",
             "COALESCE(NULLIF(agent_name,''), NULLIF(agent_id,''), '未绑定助手')",
@@ -126,7 +125,11 @@ pub fn summary_on(
         .query_map(params![since], |r| {
             let key: String = r.get(0)?;
             let name: String = r.get(1)?;
-            let slot_id = if dimension == "key" { key.parse::<i64>().ok() } else { None };
+            let slot_id = if dimension == "key" {
+                key.parse::<i64>().ok()
+            } else {
+                None
+            };
             Ok(UsageGroup {
                 key,
                 name,

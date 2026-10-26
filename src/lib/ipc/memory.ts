@@ -15,8 +15,9 @@ export const writeMemory = (sessionId: string, content: string, note?: string) =
 export const appendMemory = (sessionId: string, text: string, section?: string) =>
   invoke<void>('append_memory', { sessionId, text, section: section ?? null });
 
+/** 手动触发一次版本快照,返回该版本的数字 id(可直接用于 rollbackMemory/readMemoryVersion)。 */
 export const snapshotMemory = (sessionId: string, note?: string) =>
-  invoke<string>('snapshot_memory', { sessionId, note: note ?? null });
+  invoke<number>('snapshot_memory', { sessionId, note: note ?? null });
 
 export const listMemoryVersions = (sessionId: string) =>
   invoke<VersionItem[]>('list_memory_versions', { sessionId });

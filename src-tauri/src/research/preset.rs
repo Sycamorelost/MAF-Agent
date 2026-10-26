@@ -20,7 +20,9 @@ pub struct ResearchPreset {
 
 /// presets.json 路径:`<data_dir>/research/presets.json`
 fn presets_path() -> PathBuf {
-    crate::paths::data_dir().join("research").join("presets.json")
+    crate::paths::data_dir()
+        .join("research")
+        .join("presets.json")
 }
 
 /// 读取全部预设(文件缺失 / 损坏时返回空表,不报错)。
@@ -38,7 +40,8 @@ pub fn load_presets() -> Vec<ResearchPreset> {
 fn write_all(presets: &[ResearchPreset]) -> Result<(), String> {
     let p = presets_path();
     if let Some(parent) = p.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("mkdir {} failed: {e}", parent.display()))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("mkdir {} failed: {e}", parent.display()))?;
     }
     let text = serde_json::to_string_pretty(presets).map_err(|e| e.to_string())?;
     fs::write(&p, text).map_err(|e| format!("write presets.json failed: {e}"))

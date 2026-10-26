@@ -8,26 +8,37 @@
 //! (`GetAsyncKeyState` / `GetClipboardData`)做轮询式监听,
 //! 不引入 device_query / clipboard 插件。线程常驻整个进程生命周期。
 
+#[cfg(windows)]
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
 use serde::Serialize;
+#[cfg(windows)]
 use tauri::{AppHandle, Emitter, Manager};
 
+#[cfg(windows)]
 use crate::settings;
 
+#[cfg(windows)]
 const CF_UNICODETEXT: u32 = 13;
+#[cfg(windows)]
 const VK_CONTROL: i32 = 0x11;
+#[cfg(windows)]
 const VK_C: i32 = 0x43;
 
 /// 连按两次 Ctrl+C 判定窗口。
+#[cfg(windows)]
 const DOUBLE_WINDOW: Duration = Duration::from_millis(700);
 /// 轮询间隔。
+#[cfg(windows)]
 const POLL: Duration = Duration::from_millis(25);
 /// 设置文件重载间隔(轮询次数)。
+#[cfg(windows)]
 const CONFIG_EVERY: u32 = 40;
 /// 剪贴板文本长度上限(超出截断,避免把整篇文档塞进输入框)。
 const MAX_TEXT: usize = 4000;
 
+#[cfg(windows)]
 #[link(name = "user32")]
 unsafe extern "system" {
     fn GetAsyncKeyState(vkey: i32) -> i16;
@@ -38,13 +49,18 @@ unsafe extern "system" {
     fn SetProcessDPIAware() -> i32;
 }
 
-/// 进程级 DPI 感知。
+/// 进程级 DPI 感知(仅 Windows 需要;其他平台为空实现)。
+#[cfg(windows)]
 pub fn ensure_dpi_aware() {
     unsafe {
         SetProcessDPIAware();
     }
 }
 
+#[cfg(not(windows))]
+pub fn ensure_dpi_aware() {}
+
+#[cfg(windows)]
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn GlobalLock(hmem: isize) -> *mut u16;
@@ -53,12 +69,14 @@ unsafe extern "system" {
 }
 
 /// 指定虚拟键当前是否按下(取高位的当前状态)。
+#[cfg(windows)]
 fn key_down(vk: i32) -> bool {
     unsafe { (GetAsyncKeyState(vk) as u16 & 0x8000) != 0 }
 }
 
 /// 读取剪贴板中的 Unicode 文本;无文本或空串返回 None。
 /// pub(crate):指令库(B3){clipboard} 变量渲染时复用。
+#[cfg(windows)]
 pub(crate) fn read_clipboard_text() -> Option<String> {
     unsafe {
         if IsClipboardFormatAvailable(CF_UNICODETEXT) == 0 {
@@ -89,12 +107,14 @@ pub(crate) fn read_clipboard_text() -> Option<String> {
         CloseClipboard();
 
         let t = text.trim().to_string();
-        if t.is_empty() {
-            None
-        } else {
-            Some(t)
-        }
+        if t.is_empty() { None } else { Some(t) }
     }
+}
+
+/// 非 Windows:剪贴板读取未实现,指令库 {clipboard} 变量将渲染为空。
+#[cfg(not(windows))]
+pub(crate) fn read_clipboard_text() -> Option<String> {
+    None
 }
 
 /// 截断超长文本。
@@ -106,12 +126,14 @@ fn clip_text(mut t: String) -> String {
     t
 }
 
+#[cfg(windows)]
 #[derive(Clone, Serialize)]
 struct SelectionPayload {
     text: String,
 }
 
 /// 启动全局监听线程(进程生命周期内常驻,重复调用会启动多个线程,故只调用一次)。
+#[cfg(windows)]
 pub fn spawn_listener(app: AppHandle) {
     std::thread::spawn(move || {
         let mut cfg = settings::load();
@@ -124,7 +146,7 @@ pub fn spawn_listener(app: AppHandle) {
             std::thread::sleep(POLL);
 
             tick = tick.wrapping_add(1);
-            if tick % CONFIG_EVERY == 0 {
+            if tick.is_multiple_of(CONFIG_EVERY) {
                 cfg = settings::load();
             }
 
@@ -150,7 +172,9 @@ pub fn spawn_listener(app: AppHandle) {
                                     let _ = w.unminimize();
                                     let _ = w.set_focus();
                                 }
-                                let payload = SelectionPayload { text: clip_text(text) };
+                                let payload = SelectionPayload {
+                                    text: clip_text(text),
+                                };
                                 let _ = app.emit_to("main", "selection_ask", payload);
                                 log::info!("selection ask triggered");
                             }
@@ -162,6 +186,10 @@ pub fn spawn_listener(app: AppHandle) {
         }
     });
 }
+
+/// 非 Windows:无全局输入监听,划词提问不可用(空实现)。
+#[cfg(not(windows))]
+pub fn spawn_listener(_app: tauri::AppHandle) {}
 
 #[cfg(test)]
 mod tests {
@@ -181,6 +209,7 @@ mod tests {
         assert_eq!(clip_text(s.clone()), s);
     }
 
+    #[cfg(windows)]
     #[test]
     fn selection_payload_serializes_text() {
         let p = SelectionPayload { text: "hi".into() };

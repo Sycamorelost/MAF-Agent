@@ -184,13 +184,21 @@ pub fn pick_index(
     if cands.is_empty() {
         return None;
     }
-    let cooling = |c: &KeyCandidate| cooldown.get(&c.cooldown_key()).is_some_and(|until| *until > now);
+    let cooling = |c: &KeyCandidate| {
+        cooldown
+            .get(&c.cooldown_key())
+            .is_some_and(|until| *until > now)
+    };
 
     let mut ready: Vec<usize> = (0..cands.len()).filter(|i| !cooling(&cands[*i])).collect();
     if ready.is_empty() {
         // 全冷却:选剩余冷却最短的候选降级尝试(游标保持不变)
-        let idx = (0..cands.len())
-            .min_by_key(|i| cooldown.get(&cands[*i].cooldown_key()).copied().unwrap_or(now))?;
+        let idx = (0..cands.len()).min_by_key(|i| {
+            cooldown
+                .get(&cands[*i].cooldown_key())
+                .copied()
+                .unwrap_or(now)
+        })?;
         return Some((idx, cursor));
     }
     let top = ready.iter().map(|i| cands[*i].priority).max().unwrap_or(0);
@@ -215,7 +223,8 @@ impl RotationState {
         let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let st = map.entry(group.to_string()).or_default();
         // 清理已失效(过期或槽位已删)的冷却记录
-        st.cooldown.retain(|k, until| keys.contains(k) && *until > now);
+        st.cooldown
+            .retain(|k, until| keys.contains(k) && *until > now);
         let (idx, next) = pick_index(cands, &st.cooldown, now, st.cursor)?;
         st.cursor = next;
         Some(idx)
@@ -224,7 +233,10 @@ impl RotationState {
     /// 标记某槽位进入冷却(until 由 Retry-After 或默认冷却算出)。
     pub fn mark_cooldown(&self, group: &str, key: String, until: Instant) {
         let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        map.entry(group.to_string()).or_default().cooldown.insert(key, until);
+        map.entry(group.to_string())
+            .or_default()
+            .cooldown
+            .insert(key, until);
     }
 
     /// 便捷:按秒数标记冷却。
@@ -347,8 +359,18 @@ mod tests {
         let now = Instant::now();
         let none = HashMap::new();
         let cands = vec![
-            KeyCandidate { provider_id: "p".into(), slot: 0, weight: 2, priority: 0 },
-            KeyCandidate { provider_id: "p".into(), slot: 1, weight: 1, priority: 0 },
+            KeyCandidate {
+                provider_id: "p".into(),
+                slot: 0,
+                weight: 2,
+                priority: 0,
+            },
+            KeyCandidate {
+                provider_id: "p".into(),
+                slot: 1,
+                weight: 1,
+                priority: 0,
+            },
         ];
         let mut cursor = 0;
         let mut seq = Vec::new();
@@ -367,8 +389,18 @@ mod tests {
         let now = Instant::now();
         let none = HashMap::new();
         let cands = vec![
-            KeyCandidate { provider_id: "p".into(), slot: 0, weight: 1, priority: 0 },
-            KeyCandidate { provider_id: "p".into(), slot: 1, weight: 1, priority: 5 },
+            KeyCandidate {
+                provider_id: "p".into(),
+                slot: 0,
+                weight: 1,
+                priority: 0,
+            },
+            KeyCandidate {
+                provider_id: "p".into(),
+                slot: 1,
+                weight: 1,
+                priority: 5,
+            },
         ];
         let mut cursor = 0;
         for _ in 0..4 {

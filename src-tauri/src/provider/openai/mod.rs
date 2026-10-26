@@ -25,7 +25,7 @@ use crate::provider::{
 pub struct OpenAiCompat {
     pub id: String,
     pub display_name: String,
-    pub base_url: String,        // 例如 https://api.openai.com/v1
+    pub base_url: String, // 例如 https://api.openai.com/v1
     pub api_key: String,
     /// 是否发送 `stream_options.include_usage`(用于采集精确 Token 用量)。
     /// 默认 **关闭**;仅对话路径按配置开启(部分中转站不认该字段会返回 400)。
@@ -128,6 +128,13 @@ impl Provider for OpenAiCompat {
         // 思考参数:按 provider_id 方言翻译(五家映射 + 自定义保守透传,见 apply_reasoning_params)
         if let Some(spec) = req.reasoning {
             Self::apply_reasoning_params(&mut body, &self.id, &req.model, spec);
+        }
+        // Phase 5e:工具定义(OpenAI function-calling 格式)。空列表不发送,保持向后兼容。
+        if let Some(tools) = req.tools.as_ref().filter(|t| !t.is_empty()) {
+            body["tools"] = json!(tools);
+            if let Some(tc) = &req.tool_choice {
+                body["tool_choice"] = tc.clone();
+            }
         }
         // 请求精确 Token 用量(部分中转站不认该字段 → 由调用方以 with_stream_options(false) 重试)
         if req.stream && self.stream_options {

@@ -18,7 +18,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">MAF Agent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.10.3'} · 桌面端 · Windows
+            版本 {appVersion || '1.15.0'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
@@ -27,9 +27,37 @@ export function AboutView({ appVersion }: AboutViewProps) {
         </div>
       </div>
 
+      {/* 版本更新摘要:只列用户可感知的改动,与 val.md §11 的实施记录对应 */}
+      <div className="set-card">
+        <div className="set-card-h">本次更新 · v1.15.0</div>
+        <div className="set-card-b">
+          <p>
+            安全:依赖漏洞清零——zip 升级至 9.x、webpki-root-certs 修复,CI 接入 cargo
+            audit 检测门禁。
+          </p>
+          <p>
+            安全:审计日志新增密钥脱敏与按大小轮转(8 MB × 3 份),避免明文 token
+            落盘与长期运行占满磁盘。
+          </p>
+          <p>
+            安全:SQLite 启用 WAL 与 busy_timeout,降低并发写入的锁等待与「database is
+            locked」。
+          </p>
+          <p>
+            修复:翻译历史无法删除、空/空白 API Key 可保存、笔记读写尾随换行、
+            快照版本号与回滚入参不一致。
+          </p>
+          <p>
+            性能:页面按路由懒加载,首屏入口包显著缩小;启动迁移增加快路径;
+            图像历史缩略图落盘缓存,重复进入绘图页不再重复解码。
+          </p>
+        </div>
+      </div>
+
       {/*
         开源引用与许可声明。
         来源项目与许可(全文见仓库根目录 LICENSE / NOTICE):
+        - MAF Agent 本体 · Apache-2.0 · https://github.com/Sycamorelost/MAF-Agent
         - nature-skills · Apache-2.0 · 科研方法论文档中文重构
         - Deep-tutor · Apache-2.0 · 学习规划流水线与交互重写
         - Cherry Studio · AGPL-3.0 · 仅架构/交互理念参考,未复制源码
@@ -37,6 +65,21 @@ export function AboutView({ appVersion }: AboutViewProps) {
       <div className="set-card">
         <div className="set-card-h">开源引用与许可</div>
         <div className="set-card-b set-terms">
+          <section className="set-term">
+            <h3 className="set-term-h">MAF Agent 本项目 · Apache License 2.0</h3>
+            <div className="set-term-body">
+              <p>
+                源码获取:
+                <span className="mono">https://github.com/Sycamorelost/MAF-Agent</span>
+              </p>
+              <p>版权所有:Copyright (c) 2026 Sycamorelost / MAF Agent contributors。</p>
+              <p>
+                许可说明:本应用以 Apache License 2.0 开源发布,允许使用、修改与再分发(含商业用途);
+                分发时须保留仓库根目录 LICENSE 与 NOTICE 中的版权与许可声明,并标明修改内容。
+              </p>
+            </div>
+          </section>
+
           <section className="set-term">
             <h3 className="set-term-h">nature-skills · Apache License 2.0</h3>
             <div className="set-term-body">
@@ -94,8 +137,10 @@ export function AboutView({ appVersion }: AboutViewProps) {
           </section>
 
           <p className="set-term-foot">
-            本应用自身以 Apache License 2.0 发布,许可证全文见安装目录 LICENSE 文件,
-            第三方组件声明见 NOTICE 文件。以上声明仅用于致谢与合规披露,不构成对原作者的任何担保。
+            本应用自身以 Apache License 2.0 开源发布,源码见
+            <span className="mono">https://github.com/Sycamorelost/MAF-Agent</span>,
+            许可证全文与第三方组件声明见仓库根目录 LICENSE / NOTICE 文件。
+            以上声明仅用于致谢与合规披露,不构成对原作者的任何担保。
           </p>
         </div>
       </div>
@@ -104,7 +149,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
       <div className="set-card">
         <div className="set-card-h">
           MAF Agent 使用条款
-          <span className="st date">最近更新日期:2026 年 10 月 19 日</span>
+          <span className="st date">最近更新日期:2026 年 10 月 26 日</span>
         </div>
         <div className="set-card-b set-terms">
           {TERMS.map((t) => (

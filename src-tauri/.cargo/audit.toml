@@ -1,0 +1,18 @@
+# cargo-audit 配置(SEC-1)
+#
+# 当前被忽略的三条 RUSTSEC 均来自 `docx-rs 0.4.22` 的传递依赖 `zip 8.6.0`,
+# 其漏洞全部位于 `ZipArchive::extract()` / `ZipStreamReader::extract()`
+# (解包落盘时的符号链接 / SUID 权限处理)。
+#
+# 本项目对 docx 只用 `read_docx`(内存中 `by_name` 读取条目),
+# 从不调用 `extract()`;项目自身的 zip 直接依赖已是 9.0.5(不受影响),
+# `zip_extract_in` 也自行实现了 `enclosed_name` + 跳过符号链接 + 体积上限。
+#
+# 因此这些告警在当前调用路径下不可利用。等 docx-rs 升级到 zip 9 后应删除本忽略;
+# 若本仓库将来新增对 `extract()` 的调用,必须重新评估而不是依赖本忽略。
+[advisories]
+ignore = [
+    "RUSTSEC-2026-0367", # zip: SUID/SGID 位在解包时被保留
+    "RUSTSEC-2026-0368", # zip: extract 创建指向目标目录外的符号链接
+    "RUSTSEC-2026-0369", # zip: extract 通过符号链接应用权限
+]

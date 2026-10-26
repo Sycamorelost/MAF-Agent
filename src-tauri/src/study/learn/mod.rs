@@ -23,18 +23,20 @@ pub mod units;
 use chrono::{Duration, Local};
 
 #[allow(unused_imports)]
-pub use mastery::{grade, node_done, nodes_state, set_mastery, weighted_mastery, NodeState};
+pub use mastery::{NodeState, grade, node_done, nodes_state, set_mastery, weighted_mastery};
 #[allow(unused_imports)]
-pub use quiz::{parse_quiz, quiz_submit, QuizAnswerIn, QuizGrade, QuizQuestion, QuizResult, QuizRow};
-#[allow(unused_imports)]
-pub use review::{
-    current_week, next_interval, review_done, review_queue, today, ReviewItem, TodayItem, TodayPlan,
-    INTERVALS,
+pub use quiz::{
+    QuizAnswerIn, QuizGrade, QuizQuestion, QuizResult, QuizRow, parse_quiz, quiz_submit,
 };
 #[allow(unused_imports)]
-pub use stats::{focus_log, memory_digest, stats, DayStat, StudyStats};
+pub use review::{
+    INTERVALS, ReviewItem, TodayItem, TodayPlan, current_week, next_interval, review_done,
+    review_queue, today,
+};
 #[allow(unused_imports)]
-pub use units::{generate_unit, new_quiz, strip_outer_fence, UnitRow};
+pub use stats::{DayStat, StudyStats, focus_log, memory_digest, stats};
+#[allow(unused_imports)]
+pub use units::{UnitRow, generate_unit, new_quiz, strip_outer_fence};
 
 fn now_str() -> String {
     Local::now().to_rfc3339()
@@ -66,7 +68,13 @@ pub(crate) mod test_util {
         .unwrap();
     }
 
-    pub(crate) fn seed_node(conn: &rusqlite::Connection, plan_id: &str, id: i64, name: &str, stage: i64) {
+    pub(crate) fn seed_node(
+        conn: &rusqlite::Connection,
+        plan_id: &str,
+        id: i64,
+        name: &str,
+        stage: i64,
+    ) {
         conn.execute(
             "INSERT INTO knowledge_nodes(plan_id, stage_index, name, difficulty) VALUES(?1,?2,?3,2)",
             rusqlite::params![plan_id, stage, name],
@@ -80,11 +88,37 @@ pub(crate) mod test_util {
         .unwrap();
     }
 
-    pub(crate) fn seed_quiz(conn: &rusqlite::Connection, plan_id: &str, quiz_id: i64, node_id: i64) {
+    pub(crate) fn seed_quiz(
+        conn: &rusqlite::Connection,
+        plan_id: &str,
+        quiz_id: i64,
+        node_id: i64,
+    ) {
         let qs = vec![
-            QuizQuestion { idx: 0, qtype: "choice".into(), stem: "s0".into(), options: vec!["A. x".into(), "B. y".into()], answer: "A".into(), explanation: "e".into() },
-            QuizQuestion { idx: 1, qtype: "judge".into(), stem: "s1".into(), options: vec![], answer: "对".into(), explanation: "e".into() },
-            QuizQuestion { idx: 2, qtype: "short".into(), stem: "s2".into(), options: vec![], answer: "要点".into(), explanation: "e".into() },
+            QuizQuestion {
+                idx: 0,
+                qtype: "choice".into(),
+                stem: "s0".into(),
+                options: vec!["A. x".into(), "B. y".into()],
+                answer: "A".into(),
+                explanation: "e".into(),
+            },
+            QuizQuestion {
+                idx: 1,
+                qtype: "judge".into(),
+                stem: "s1".into(),
+                options: vec![],
+                answer: "对".into(),
+                explanation: "e".into(),
+            },
+            QuizQuestion {
+                idx: 2,
+                qtype: "short".into(),
+                stem: "s2".into(),
+                options: vec![],
+                answer: "要点".into(),
+                explanation: "e".into(),
+            },
         ];
         conn.execute(
             "INSERT INTO quizzes(id, plan_id, node_id, node_name, payload_json, created) VALUES(?1,?2,?3,'n',?4,'2026-01-01')",

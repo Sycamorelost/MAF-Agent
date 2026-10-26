@@ -39,7 +39,10 @@ pub fn validate_id(id: &str) -> Result<(), String> {
     if id.contains("..") {
         return Err("id 含非法序列".into());
     }
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err("id 含非法字符".into());
     }
     Ok(())
@@ -171,7 +174,11 @@ pub fn write_memory(id: &str, content: &str, note: &str) -> Result<(), String> {
 /// 触发条件(idea/03-memory-flow.md §2.1):
 ///   - 距上次提炼已完成 N 轮对话(默认 2)
 ///   - 会话 token 超阈值(默认 8k)
-pub fn needs_summarize(id: &str, every_n_rounds: i64, token_threshold: i64) -> Result<bool, String> {
+pub fn needs_summarize(
+    id: &str,
+    every_n_rounds: i64,
+    token_threshold: i64,
+) -> Result<bool, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     let (msg_count, total_tokens): (i64, i64) = conn
         .query_row(

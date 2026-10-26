@@ -1,9 +1,8 @@
 //! Key 轮换执行与错误分类 / 冷却策略。
 
 use crate::provider::{
-    keychain,
+    ProviderError, keychain,
     rotation::{KeyCandidate, RotationConfig, RotationState},
-    ProviderError,
 };
 
 /// 非流式辅助请求(模型列表 / 图片生成)的 Key 轮换执行器:

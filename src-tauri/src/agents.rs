@@ -9,6 +9,8 @@ use std::{fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::agents_prompts::prompt_for;
+
 /// Agent 模板(内置与自定义共用同一结构)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentTemplate {
@@ -44,9 +46,17 @@ pub const CATEGORIES: [&str; 6] = ["chat", "doc", "dev", "create", "ops", "meta"
 
 /// 24 个内置模板(idea/07 一~六章;每类 4 个)。
 pub fn builtin_templates() -> Vec<AgentTemplate> {
-    let t = |agent_id: &str, name: &str, icon: &str, category: &str, description: &str,
-             recommended_model: &str, memory_strategy: &str, system_prompt: &str,
-             input_hints: &[&str], memory_write: bool, memory_sections: &[&str]| AgentTemplate {
+    let t = |agent_id: &str,
+             name: &str,
+             icon: &str,
+             category: &str,
+             description: &str,
+             recommended_model: &str,
+             memory_strategy: &str,
+             system_prompt: &str,
+             input_hints: &[&str],
+             memory_write: bool,
+             memory_sections: &[&str]| AgentTemplate {
         agent_id: agent_id.into(),
         name: name.into(),
         icon: icon.into(),
@@ -63,155 +73,323 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
     };
     vec![
         // 一、Chat 类
-        t("product-assistant", "产品助手", "sparkles", "chat",
-          "日常对话、产品设计、通用问答",
-          "gpt-5.2", "full",
-          "你是 MAF Agent 的产品助手。会话记忆已注入,请基于它继续对话。\n核心能力:问答 / 文档理解 / 联网搜索 / 视觉分析\n回复规则:简洁分点、代码用 ```lang 包裹、引用记忆用 (memory §章节)。",
-          &["继续对话…", "帮我分析这份 PDF", "查一下最新行业动态"],
-          true, &["会话摘要", "关键事实与结论", "待办"]),
-        t("chinese-assistant", "中文优化助手", "languages", "chat",
-          "中文表达优化、术语统一、文风调整",
-          "qwen-max", "full",
-          "你是中文表达优化专家。优化但不改变原意:\n1. 消除病句、错别字、口语化表达\n2. 统一专业术语(如「模型参数」而非「模型配置」)\n3. 根据场景调整文风(正式/轻松/学术)\n4. 保留原文 Markdown 结构",
-          &["优化这段中文", "把这段话改得更正式", "统一术语"],
-          true, &[]),
-        t("meeting-minutes", "会议纪要生成器", "clipboard-list", "chat",
-          "会议录音转写 → 结构化纪要 → 自动提炼到 memory.md",
-          "claude-sonnet-4-5", "summary",
-          "你是专业会议纪要生成器。输入:录音转写文本 / 会议笔记。输出:\n# 会议纪要\n## 基本信息(时间/地点/参会人)\n## 议题与决议\n## 待办(负责人 + 截止日期)\n## 未决问题\n自动写入 memory.md「待办」和「关键事实与结论」节。",
-          &["输入转写文本…", "生成纪要", "提取行动项"],
-          true, &["待办", "关键事实与结论"]),
+        t(
+            "product-assistant",
+            "产品助手",
+            "sparkles",
+            "chat",
+            "日常对话、产品设计、通用问答",
+            "gpt-5.2",
+            "full",
+            prompt_for("product-assistant"),
+            &["继续对话…", "帮我分析这份 PDF", "查一下最新行业动态"],
+            true,
+            &["会话摘要", "关键事实与结论", "待办"],
+        ),
+        t(
+            "chinese-assistant",
+            "中文优化助手",
+            "languages",
+            "chat",
+            "中文表达优化、术语统一、文风调整",
+            "qwen-max",
+            "full",
+            prompt_for("chinese-assistant"),
+            &["优化这段中文", "把这段话改得更正式", "统一术语"],
+            true,
+            &[],
+        ),
+        t(
+            "meeting-minutes",
+            "会议纪要生成器",
+            "clipboard-list",
+            "chat",
+            "会议录音转写 → 结构化纪要 → 自动提炼到 memory.md",
+            "claude-sonnet-4-5",
+            "summary",
+            prompt_for("meeting-minutes"),
+            &["输入转写文本…", "生成纪要", "提取行动项"],
+            true,
+            &["待办", "关键事实与结论"],
+        ),
         // 二、Doc 类
-        t("doc-analyst", "文档分析师", "file-text", "doc",
-          "上传文档 → 自动解析 → 提炼要点 → 写入 memory.md",
-          "claude-sonnet-4-5", "full",
-          "你是 MAF Agent 的文档分析师。收到附件自动执行三阶段:\n1. 结构化提取:标题层级 → 关键段落 → 表格摘要\n2. 要点提炼:3-6 条核心结论,每条 ≤ 30 字\n3. 写入记忆:追加到 memory.md「文档摘要」节\n追问时标注章节路径(如 §2.3)。",
-          &["上传文档开始分析", "这份 PDF 的核心论点"],
-          true, &["文档摘要"]),
-        t("diff-reader", "对比阅读器", "git-compare", "doc",
-          "两篇文档并排对比 → 输出差异矩阵 → 总结结论",
-          "gpt-5.2", "none",
-          "你是对比分析专家。输入:文档 A + 文档 B。输出:\n## 核心差异(表格)\n| 维度 | 文档 A | 文档 B | 差异评价 |\n## 结论\n## 建议(选哪篇 / 如何合并)",
-          &["对比这两份竞品文档", "比较 v2 和 v3 版本"],
-          false, &[]),
+        t(
+            "doc-analyst",
+            "文档分析师",
+            "file-text",
+            "doc",
+            "上传文档 → 自动解析 → 提炼要点 → 写入 memory.md",
+            "claude-sonnet-4-5",
+            "full",
+            prompt_for("doc-analyst"),
+            &["上传文档开始分析", "这份 PDF 的核心论点"],
+            true,
+            &["文档摘要"],
+        ),
+        t(
+            "diff-reader",
+            "对比阅读器",
+            "git-compare",
+            "doc",
+            "两篇文档并排对比 → 输出差异矩阵 → 总结结论",
+            "gpt-5.2",
+            "none",
+            prompt_for("diff-reader"),
+            &["对比这两份竞品文档", "比较 v2 和 v3 版本"],
+            false,
+            &[],
+        ),
         // 三、Dev 类
-        t("code-reviewer", "代码审查员", "git-pull-request", "dev",
-          "diff → 逐行审查 → 结构化问题清单",
-          "gpt-5.2", "none",
-          "你是严格的代码审查员。只输出结构化表格:\n| # | 文件 | 行号 | 问题类型 | 严重度 | 描述 | 建议 |\n严重度:P0(阻塞) / P1(必须修) / P2(建议) / P3(nit)\n额外输出:总结段(最多 5 句)+ 风险分布(文本版)。",
-          &["审查当前分支", "对比 main 改动", "检查这段代码"],
-          false, &[]),
-        t("refactor", "重构助手", "refresh-cw", "dev",
-          "输入代码片段 → 输出重构前后 diff + 解释",
-          "deepseek-v3", "none",
-          "你是重构专家。输出格式:\n## 重构目标(1 句)\n## 重构前\n```lang\n原代码\n```\n## 重构后\n```lang\n新代码\n```\n## 改动说明(3-5 句)\n## 性能影响(如有)",
-          &["帮我重构这个函数", "提取组件", "消除重复"],
-          false, &[]),
-        t("bug-hunter", "Bug 猎人", "bug", "dev",
-          "给定报错日志 → 定位根因 → 给出修复 diff",
-          "gpt-5.2", "none",
-          "你是 Bug 猎人。输入:错误日志 + 相关源码(可选)。输出:\n## 根因分析(2-3 层深度)\n## 可能影响范围\n## 修复方案 A(最小改动)/ 方案 B(完整修复)\n## 验证步骤",
-          &["这个报错怎么回事", "React useEffect 无限循环"],
-          false, &[]),
+        t(
+            "code-reviewer",
+            "代码审查员",
+            "git-pull-request",
+            "dev",
+            "diff → 逐行审查 → 结构化问题清单",
+            "gpt-5.2",
+            "none",
+            prompt_for("code-reviewer"),
+            &["审查当前分支", "对比 main 改动", "检查这段代码"],
+            false,
+            &[],
+        ),
+        t(
+            "refactor",
+            "重构助手",
+            "refresh-cw",
+            "dev",
+            "输入代码片段 → 输出重构前后 diff + 解释",
+            "deepseek-v3",
+            "none",
+            prompt_for("refactor"),
+            &["帮我重构这个函数", "提取组件", "消除重复"],
+            false,
+            &[],
+        ),
+        t(
+            "bug-hunter",
+            "Bug 猎人",
+            "bug",
+            "dev",
+            "给定报错日志 → 定位根因 → 给出修复 diff",
+            "gpt-5.2",
+            "none",
+            prompt_for("bug-hunter"),
+            &["这个报错怎么回事", "React useEffect 无限循环"],
+            false,
+            &[],
+        ),
         // 四、Create 类
-        t("deep-researcher", "深度研究员", "search", "create",
-          "多轮检索 + 反思 + 综合输出(独立研究管线)",
-          "deepseek-v3", "summary",
-          "<!-- RESEARCH_MODE:ON -->\n每轮严格输出三段:\n## 反思(Retrospective)\n## 本轮计划(Next Step)\n## 临时假设(Working Hypothesis)\n最终交付:\n# 《主题》研究报告\n## TL;DR / 发现 / 方法 / 局限 / 资料来源",
-          &["研究主题是什么?", "竞品深挖"],
-          true, &["资料", "待办"]),
-        t("prompt-engineer", "生图描述师", "wand-sparkles", "create",
-          "把模糊想法 → 结构化 Stable Diffusion / DALL-E prompt",
-          "gpt-5.2", "none",
-          "你是 AI 生图提示词工程师。输入:用户模糊描述(如「赛博朋克城市」)。输出:\n## DALL-E 3 Prompt\n英文,详细描述 + 风格 + 光影 + 构图 + --ar 参数\n## SDXL Prompt / Negative Prompt\nPositive + Negative + 推荐 LoRA\n## 多方案变体(3 种不同风格)",
-          &["赛博朋克城市夜晚", "水彩风格的猫"],
-          false, &[]),
-        t("translator", "翻译专家", "languages", "create",
-          "专业翻译 + 术语一致 + 格式保留",
-          "glm-translate-4", "none",
-          "你是翻译专家。规则:\n1. 自动检测源语言 → 翻译为目标语言\n2. 代码块/变量名/函数签名不翻译\n3. Markdown 结构完全保留\n4. 专业术语首次出现标注原文\n5. 长文档按段落翻译,保证术语一致",
-          &["翻译成中文", "翻译成英文", "这份技术文档转英文"],
-          false, &[]),
+        t(
+            "deep-researcher",
+            "深度研究员",
+            "search",
+            "create",
+            "多轮检索 + 反思 + 综合输出(独立研究管线)",
+            "deepseek-v3",
+            "summary",
+            prompt_for("deep-researcher"),
+            &["研究主题是什么?", "竞品深挖"],
+            true,
+            &["资料", "待办"],
+        ),
+        t(
+            "prompt-engineer",
+            "生图描述师",
+            "wand-sparkles",
+            "create",
+            "把模糊想法 → 结构化 Stable Diffusion / DALL-E prompt",
+            "gpt-5.2",
+            "none",
+            prompt_for("prompt-engineer"),
+            &["赛博朋克城市夜晚", "水彩风格的猫"],
+            false,
+            &[],
+        ),
+        t(
+            "translator",
+            "翻译专家",
+            "languages",
+            "create",
+            "专业翻译 + 术语一致 + 格式保留",
+            "glm-translate-4",
+            "none",
+            prompt_for("translator"),
+            &["翻译成中文", "翻译成英文", "这份技术文档转英文"],
+            false,
+            &[],
+        ),
         // 五、Ops 类
-        t("compliance-check", "合规检查员", "shield-check", "ops",
-          "检查敏感信息 + 合规风险",
-          "ollama-llama3", "none",
-          "你是合规检查员。检查清单:\n- API Key 是否硬编码\n- 是否含真实姓名/手机号/邮箱\n- TODO/FIXME/HACK 待办\n输出:表格 + 汇总 + 风险分布(文本版)。",
-          &["检查 src/ 合规", "找硬编码密钥"],
-          false, &[]),
-        t("memory-steward", "记忆管家", "archive", "ops",
-          "跨会话搜索记忆、合并、整理偏好标签",
-          "qwen-max", "none",
-          "你是只读记忆管家。可执行:\n- 跨会话关键词搜索 memory.md\n- 多份 memory.md 合并去重\n- 偏好整理:抽取标签云\n- 版本差异:diff 风格输出\n永远不修改 memory.md,如需修改提醒切到其他智能体。",
-          &["搜索\"API\"", "整理偏好", "对比版本"],
-          false, &[]),
+        t(
+            "compliance-check",
+            "合规检查员",
+            "shield-check",
+            "ops",
+            "检查敏感信息 + 合规风险",
+            "ollama-llama3",
+            "none",
+            prompt_for("compliance-check"),
+            &["检查 src/ 合规", "找硬编码密钥"],
+            false,
+            &[],
+        ),
+        t(
+            "memory-steward",
+            "记忆管家",
+            "archive",
+            "ops",
+            "跨会话搜索记忆、合并、整理偏好标签",
+            "qwen-max",
+            "none",
+            prompt_for("memory-steward"),
+            &["搜索\"API\"", "整理偏好", "对比版本"],
+            false,
+            &[],
+        ),
         // 六、Meta 类
-        t("prompt-optimizer", "Prompt 优化器", "sparkles", "meta",
-          "用户给一段 prompt → 输出优化版 + 多风格变体",
-          "claude-sonnet-4-5", "none",
-          "你是 Prompt 优化器。输入:原始 prompt(可能很模糊)。输出:\n## 优化目标(分析原始 prompt 的问题)\n## 优化版 Prompt(结构化 + 角色 + 约束 + 示例)\n## 多风格变体(严谨/创意/简洁)",
-          &["帮我写个 prompt 让 AI 写周报"],
-          false, &[]),
-        t("study-tutor", "学习辅导老师", "chat", "chat",
-          "概念讲解 → 举例 → 出题检验,循序渐进",
-          "qwen-max", "full",
-          "你是学习辅导老师。讲解规则:\n1. 先给一句话结论,再展开原理\n2. 每个抽象概念配一个具体例子\n3. 结尾用 2-3 道小题检验理解(附答案)\n4. 学生答错时只指出关键误区,不直接给全解",
-          &["讲解这个概念", "出几道练习题", "帮我制定学习计划"],
-          true, &["会话摘要", "关键事实与结论", "待办"]),
-        t("contract-reviewer", "合同审阅员", "file-text", "doc",
-          "逐条审阅合同 → 标出风险条款 → 给出修改建议",
-          "claude-sonnet-4-5", "none",
-          "你是合同审阅员。输出:\n## 合同要点(标的/期限/金额/违约责任)\n## 风险条款表\n| 条款 | 原文摘要 | 风险等级 | 建议 |\n风险等级:高/中/低\n## 修改建议(可直接替换的措辞)\n提醒:本输出为辅助审阅,不构成法律意见。",
-          &["审阅这份合同", "找出不利条款", "帮我改这条"],
-          false, &[]),
-        t("report-writer", "报告撰写助手", "note", "doc",
-          "素材 → 结构化报告(背景/方法/结论/建议)",
-          "gpt-5.2", "full",
-          "你是报告撰写助手。输出结构:\n# 标题\n## 一、背景与目标\n## 二、现状分析(可含表格)\n## 三、核心结论(3-5 条)\n## 四、建议与下一步\n要求:数据必须来自用户提供的素材,缺失处标注「待补充」,不得编造。",
-          &["根据这些素材写周报", "整理成调研报告"],
-          true, &["文档摘要", "关键事实与结论"]),
-        t("test-writer", "单元测试生成器", "check", "dev",
-          "给定函数/模块 → 生成边界用例 + 断言",
-          "deepseek-v3", "none",
-          "你是单元测试生成器。输出:\n1. 被测函数的输入输出契约(1-3 句)\n2. 用例表(正常 / 边界 / 异常)\n3. 完整可运行测试代码(用 ```lang 包裹,遵循被测项目的测试框架)\n4. 未覆盖的分支说明\n不得编造不存在的依赖或接口。",
-          &["为这个函数写测试", "补边界用例"],
-          false, &[]),
-        t("copywriter", "营销文案师", "edit", "create",
-          "卖点 → 多平台文案(标题 + 正文 + 话题标签)",
-          "gpt-5.2", "none",
-          "你是营销文案师。输出:\n## 3 个标题方案(各 ≤ 20 字,风格不同)\n## 正文(适配平台:公众号 / 小红书 / 短视频口播)\n## 话题标签(5 个)\n## A/B 测试建议\n禁止夸大功效与绝对化用语(最/第一/100%)。",
-          &["给这款产品写文案", "写个小红书笔记"],
-          false, &[]),
-        t("security-auditor", "安全审计员", "shield-check", "ops",
-          "静态排查注入/越权/密钥泄露等风险,只报告可证实项",
-          "gpt-5.2", "none",
-          "你是安全审计员。规则:\n1. 只报告代码中可证实的风险,标注文件与行号\n2. 每条给出:风险类型 / 触发条件 / 影响 / 修复建议\n3. 不臆测、不列「可能性」清单\n4. 明确区分「已确认」与「需人工复核」",
-          &["审计这段代码的安全性", "有没有注入风险"],
-          false, &[]),
-        t("log-analyst", "日志分析师", "search", "ops",
-          "日志 → 异常聚类 → 时间线 → 根因假设",
-          "gpt-5.2", "none",
-          "你是日志分析师。输出:\n## 关键时间线(按发生顺序)\n## 异常聚类(相同堆栈/错误码合并)\n## 根因假设(按可能性排序,标注依据)\n## 进一步验证所需信息\n只依据给出的日志,缺失信息明确标注。",
-          &["分析这份日志", "为什么报这个错"],
-          false, &[]),
-        t("agent-designer", "智能体设计师", "brain", "meta",
-          "把需求 → 完整智能体定义(角色/约束/示例/记忆策略)",
-          "claude-sonnet-4-5", "none",
-          "你是智能体设计师。输入:用户想要的助手能力。输出:\n## 角色定位(1 句)\n## system_prompt 草稿(含角色 / 能力边界 / 输出格式 / 约束)\n## 推荐分类与推荐模型\n## 记忆策略建议(inject strategy + 是否自动提炼)\n## 3 条 input_hints\n提示:输出的 prompt 可直接粘贴到「新建智能体」表单。",
-          &["帮我设计一个简历优化助手"],
-          false, &[]),
-        t("workflow-planner", "流程规划师", "clipboard-list", "meta",
-          "目标 → 分阶段执行计划 + 依赖 + 验收标准",
-          "gpt-5.2", "none",
-          "你是流程规划师。输出:\n## 目标拆解(1 级 / 2 级任务)\n## 执行顺序与依赖(有依赖的用箭头标注)\n## 每阶段产出物与验收标准\n## 风险与备选路径\n不给出时间估算,只给顺序与依赖。",
-          &["把这个项目拆成计划", "梳理上线流程"],
-          false, &[]),
-        t("requirement-analyst", "需求分析师", "doc", "meta",
-          "零散想法 → 结构化需求(背景/目标/范围/验收)",
-          "claude-sonnet-4-5", "none",
-          "你是需求分析师。输出:\n## 背景与问题\n## 目标(可验证的表述)\n## 范围(包含 / 不包含)\n## 功能点列表(编号 + 描述 + 验收标准)\n## 待确认问题(逐条列出,不替用户拍板)",
-          &["整理这个需求", "把想法写成需求文档"],
-          false, &[]),
+        t(
+            "prompt-optimizer",
+            "Prompt 优化器",
+            "sparkles",
+            "meta",
+            "用户给一段 prompt → 输出优化版 + 多风格变体",
+            "claude-sonnet-4-5",
+            "none",
+            prompt_for("prompt-optimizer"),
+            &["帮我写个 prompt 让 AI 写周报"],
+            false,
+            &[],
+        ),
+        t(
+            "study-tutor",
+            "学习辅导老师",
+            "chat",
+            "chat",
+            "概念讲解 → 举例 → 出题检验,循序渐进",
+            "qwen-max",
+            "full",
+            prompt_for("study-tutor"),
+            &["讲解这个概念", "出几道练习题", "帮我制定学习计划"],
+            true,
+            &["会话摘要", "关键事实与结论", "待办"],
+        ),
+        t(
+            "contract-reviewer",
+            "合同审阅员",
+            "file-text",
+            "doc",
+            "逐条审阅合同 → 标出风险条款 → 给出修改建议",
+            "claude-sonnet-4-5",
+            "none",
+            prompt_for("contract-reviewer"),
+            &["审阅这份合同", "找出不利条款", "帮我改这条"],
+            false,
+            &[],
+        ),
+        t(
+            "report-writer",
+            "报告撰写助手",
+            "note",
+            "doc",
+            "素材 → 结构化报告(背景/方法/结论/建议)",
+            "gpt-5.2",
+            "full",
+            prompt_for("report-writer"),
+            &["根据这些素材写周报", "整理成调研报告"],
+            true,
+            &["文档摘要", "关键事实与结论"],
+        ),
+        t(
+            "test-writer",
+            "单元测试生成器",
+            "check",
+            "dev",
+            "给定函数/模块 → 生成边界用例 + 断言",
+            "deepseek-v3",
+            "none",
+            prompt_for("test-writer"),
+            &["为这个函数写测试", "补边界用例"],
+            false,
+            &[],
+        ),
+        t(
+            "copywriter",
+            "营销文案师",
+            "edit",
+            "create",
+            "卖点 → 多平台文案(标题 + 正文 + 话题标签)",
+            "gpt-5.2",
+            "none",
+            prompt_for("copywriter"),
+            &["给这款产品写文案", "写个小红书笔记"],
+            false,
+            &[],
+        ),
+        t(
+            "security-auditor",
+            "安全审计员",
+            "shield-check",
+            "ops",
+            "静态排查注入/越权/密钥泄露等风险,只报告可证实项",
+            "gpt-5.2",
+            "none",
+            prompt_for("security-auditor"),
+            &["审计这段代码的安全性", "有没有注入风险"],
+            false,
+            &[],
+        ),
+        t(
+            "log-analyst",
+            "日志分析师",
+            "search",
+            "ops",
+            "日志 → 异常聚类 → 时间线 → 根因假设",
+            "gpt-5.2",
+            "none",
+            prompt_for("log-analyst"),
+            &["分析这份日志", "为什么报这个错"],
+            false,
+            &[],
+        ),
+        t(
+            "agent-designer",
+            "智能体设计师",
+            "brain",
+            "meta",
+            "把需求 → 完整智能体定义(角色/约束/示例/记忆策略)",
+            "claude-sonnet-4-5",
+            "none",
+            prompt_for("agent-designer"),
+            &["帮我设计一个简历优化助手"],
+            false,
+            &[],
+        ),
+        t(
+            "workflow-planner",
+            "流程规划师",
+            "clipboard-list",
+            "meta",
+            "目标 → 分阶段执行计划 + 依赖 + 验收标准",
+            "gpt-5.2",
+            "none",
+            prompt_for("workflow-planner"),
+            &["把这个项目拆成计划", "梳理上线流程"],
+            false,
+            &[],
+        ),
+        t(
+            "requirement-analyst",
+            "需求分析师",
+            "doc",
+            "meta",
+            "零散想法 → 结构化需求(背景/目标/范围/验收)",
+            "claude-sonnet-4-5",
+            "none",
+            prompt_for("requirement-analyst"),
+            &["整理这个需求", "把想法写成需求文档"],
+            false,
+            &[],
+        ),
     ]
 }
 
@@ -274,18 +452,25 @@ pub fn upsert_custom(agent: AgentTemplate) -> Result<(), String> {
         return Err("agent_id 不能为空".into());
     }
     if !CATEGORIES.contains(&agent.category.as_str()) {
-        return Err(format!("非法分类:{}(可选:{})", agent.category, CATEGORIES.join("/")));
+        return Err(format!(
+            "非法分类:{}(可选:{})",
+            agent.category,
+            CATEGORIES.join("/")
+        ));
     }
     if !["full", "summary", "none"].contains(&agent.memory_strategy.as_str()) {
         return Err(format!("非法 memory_strategy:{}", agent.memory_strategy));
     }
-    if builtin_templates().iter().any(|b| b.agent_id == agent.agent_id) {
+    if builtin_templates()
+        .iter()
+        .any(|b| b.agent_id == agent.agent_id)
+    {
         return Err(format!("不能覆盖内置模板:{}", agent.agent_id));
     }
-    if let Some(base) = &agent.base_agent {
-        if find(base).is_none() {
-            return Err(format!("变体基座不存在:{base}"));
-        }
+    if let Some(base) = &agent.base_agent
+        && find(base).is_none()
+    {
+        return Err(format!("变体基座不存在:{base}"));
     }
     let mut list = load_custom();
     let mut agent = agent;
@@ -304,7 +489,10 @@ pub fn remove_custom(agent_id: &str) -> Result<(), String> {
         return Err(format!("内置模板不可删除:{agent_id}"));
     }
     let list = load_custom();
-    let next: Vec<_> = list.into_iter().filter(|t| t.agent_id != agent_id).collect();
+    let next: Vec<_> = list
+        .into_iter()
+        .filter(|t| t.agent_id != agent_id)
+        .collect();
     save_custom(&next)
 }
 
@@ -321,10 +509,18 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), 24, "agent_id 必须唯一");
         for t in &list {
-            assert!(CATEGORIES.contains(&t.category.as_str()), "非法分类:{}", t.category);
+            assert!(
+                CATEGORIES.contains(&t.category.as_str()),
+                "非法分类:{}",
+                t.category
+            );
             assert!(["full", "summary", "none"].contains(&t.memory_strategy.as_str()));
             assert!(t.builtin);
-            assert!(!t.system_prompt.trim().is_empty(), "{} 缺 system_prompt", t.agent_id);
+            assert!(
+                !t.system_prompt.trim().is_empty(),
+                "{} 缺 system_prompt",
+                t.agent_id
+            );
             assert!(!t.input_hints.is_empty(), "{} 缺 input_hints", t.agent_id);
         }
         // 每个分类至少 4 个内置模板
@@ -341,7 +537,11 @@ mod tests {
             if t.memory_strategy == "none" {
                 assert!(!t.memory_write, "{} strategy=none 不应写记忆", t.agent_id);
             } else {
-                assert!(t.memory_write, "{} strategy={} 应可写记忆", t.agent_id, t.memory_strategy);
+                assert!(
+                    t.memory_write,
+                    "{} strategy={} 应可写记忆",
+                    t.agent_id, t.memory_strategy
+                );
             }
         }
     }
@@ -395,9 +595,15 @@ mod tests {
     /// B4 / F2:模板变量渲染({date}/{model}/{language}),未知变量保留。
     #[test]
     fn render_prompt_substitutes_known_vars() {
-        let out = render_prompt("今天是{date},模型{model},请用{language}回复。{unknown}", "gpt-x");
+        let out = render_prompt(
+            "今天是{date},模型{model},请用{language}回复。{unknown}",
+            "gpt-x",
+        );
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        assert_eq!(out, format!("今天是{today},模型gpt-x,请用中文回复。{{unknown}}"));
+        assert_eq!(
+            out,
+            format!("今天是{today},模型gpt-x,请用中文回复。{{unknown}}")
+        );
     }
 
     #[test]

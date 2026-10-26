@@ -148,7 +148,12 @@ pub(crate) fn cost_nano_of(
 }
 
 /// token 口径计价核心(支持聚合后的 i64 合计,用于历史复算)。
-pub(crate) fn price_tokens_nano(p: &PricingCtx, input: i64, output: i64, cached: i64) -> Option<i64> {
+pub(crate) fn price_tokens_nano(
+    p: &PricingCtx,
+    input: i64,
+    output: i64,
+    cached: i64,
+) -> Option<i64> {
     if p.input_hit.is_none() && p.input_miss.is_none() && p.output.is_none() {
         return None;
     }

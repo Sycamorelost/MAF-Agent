@@ -1,10 +1,86 @@
 //! OpenAI 兼容流式响应解析:单 chunk JSON → StreamChunk,以及 SSE 字节流组装。
 
+use std::collections::BTreeMap;
+
 use futures::StreamExt;
 
-use crate::provider::{ChatStream, StreamChunk};
+use crate::provider::{ChatStream, StreamChunk, ToolCall, ToolCallFunction};
 
 use super::OpenAiCompat;
+
+/// tool_calls delta 跨 chunk 累积器 —— OpenAI streaming 按 index 分块传递 tool_calls,
+/// arguments 是 JSON 字符串分片,需要拼完才能给前端/MCP 用。
+#[derive(Default)]
+struct ToolAcc {
+    calls: BTreeMap<usize, ToolCallAcc>,
+}
+
+#[derive(Default)]
+struct ToolCallAcc {
+    id: Option<String>,
+    name: Option<String>,
+    arguments: String,
+}
+
+impl ToolAcc {
+    fn feed(&mut self, data: &str) {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else {
+            return;
+        };
+        let Some(choice) = v.get("choices").and_then(|c| c.get(0)) else {
+            return;
+        };
+        let Some(deltas) = choice
+            .get("delta")
+            .and_then(|d| d.get("tool_calls"))
+            .and_then(|t| t.as_array())
+        else {
+            return;
+        };
+        for d in deltas {
+            let idx = d
+                .get("index")
+                .and_then(|i| i.as_u64())
+                .map(|i| i as usize)
+                .unwrap_or(0);
+            let acc = self.calls.entry(idx).or_default();
+            if let Some(id) = d.get("id").and_then(|s| s.as_str())
+                && !id.is_empty()
+            {
+                acc.id = Some(id.to_string());
+            }
+            if let Some(func) = d.get("function") {
+                if let Some(name) = func.get("name").and_then(|s| s.as_str())
+                    && !name.is_empty()
+                {
+                    acc.name = Some(name.to_string());
+                }
+                if let Some(args) = func.get("arguments").and_then(|s| s.as_str()) {
+                    acc.arguments.push_str(args);
+                }
+            }
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.calls.is_empty()
+    }
+
+    fn take(&mut self) -> Vec<ToolCall> {
+        // 取走即清空:避免同一批 tool_calls 在后续 Done chunk 上被重复派发
+        std::mem::take(&mut self.calls)
+            .iter()
+            .map(|(i, a)| ToolCall {
+                id: a.id.clone().unwrap_or_else(|| format!("call_{i}")),
+                r#type: "function".into(),
+                function: ToolCallFunction {
+                    name: a.name.clone().unwrap_or_default(),
+                    arguments: a.arguments.clone(),
+                },
+            })
+            .collect()
+    }
+}
 
 impl OpenAiCompat {
     /// 把 OpenAI 单次响应(JSON)解析成 StreamChunk。
@@ -71,24 +147,22 @@ impl OpenAiCompat {
                 .get("delta")
                 .and_then(|d| d.get("reasoning_content").or_else(|| d.get("reasoning")))
                 .and_then(|c| c.as_str())
+                && !rc.is_empty()
             {
-                if !rc.is_empty() {
-                    return Some(StreamChunk::Reasoning {
-                        content: rc.to_string(),
-                    });
-                }
+                return Some(StreamChunk::Reasoning {
+                    content: rc.to_string(),
+                });
             }
             // delta.content
             if let Some(content) = choice
                 .get("delta")
                 .and_then(|d| d.get("content"))
                 .and_then(|c| c.as_str())
+                && !content.is_empty()
             {
-                if !content.is_empty() {
-                    return Some(StreamChunk::Delta {
-                        content: content.to_string(),
-                    });
-                }
+                return Some(StreamChunk::Delta {
+                    content: content.to_string(),
+                });
             }
             // finish_reason
             if let Some(fr) = choice.get("finish_reason").and_then(|f| f.as_str()) {
@@ -112,23 +186,22 @@ impl OpenAiCompat {
             .and_then(|c| c.as_array())
             .map(|a| a.is_empty())
             .unwrap_or(false)
+            && let Some(usage) = v.get("usage").filter(|u| !u.is_null())
         {
-            if let Some(usage) = v.get("usage").filter(|u| !u.is_null()) {
-                let (input_tokens, output_tokens, total_tokens, reasoning_tokens, cached_tokens) =
-                    usage_of(usage);
-                if input_tokens.is_some()
-                    || output_tokens.is_some()
-                    || total_tokens.is_some()
-                    || reasoning_tokens.is_some()
-                {
-                    return Some(StreamChunk::Usage {
-                        input_tokens,
-                        output_tokens,
-                        total_tokens,
-                        reasoning_tokens,
-                        cached_tokens,
-                    });
-                }
+            let (input_tokens, output_tokens, total_tokens, reasoning_tokens, cached_tokens) =
+                usage_of(usage);
+            if input_tokens.is_some()
+                || output_tokens.is_some()
+                || total_tokens.is_some()
+                || reasoning_tokens.is_some()
+            {
+                return Some(StreamChunk::Usage {
+                    input_tokens,
+                    output_tokens,
+                    total_tokens,
+                    reasoning_tokens,
+                    cached_tokens,
+                });
             }
         }
         None
@@ -148,9 +221,18 @@ pub(super) fn sse_stream(resp: reqwest::Response) -> ChatStream {
     const MAX_SSE_LINE_BYTES: usize = 16 * 1024 * 1024;
 
     let s = futures::stream::unfold(
-        (byte_stream, Vec::<u8>::new(), false),
-        |(mut bs, mut buf, aborted)| async move {
-            // N-4:已产出过超限错误则终止流,防止恶意端反复灌数据制造错误风暴
+        (
+            byte_stream,
+            Vec::<u8>::new(),
+            false,
+            ToolAcc::default(),
+            None,
+        ),
+        |(mut bs, mut buf, aborted, mut tool_acc, mut pending)| async move {
+            // 先吐 pending 里的 chunk(如果有的话 —— ToolCalls 先于 Done)
+            if let Some(p) = pending.take() {
+                return Some((p, (bs, buf, aborted, tool_acc, None)));
+            }
             if aborted {
                 return None;
             }
@@ -165,8 +247,29 @@ pub(super) fn sse_stream(resp: reqwest::Response) -> ChatStream {
                     }
                     if let Some(data) = line.strip_prefix("data:") {
                         let data = data.trim();
+                        // 先喂 tool_calls 累积器(静默忽略非 tool_calls 的 chunk)
+                        tool_acc.feed(data);
                         if let Some(chunk) = OpenAiCompat::parse_chunk(data) {
-                            return Some((chunk, (bs, buf, false)));
+                            // Done(tool_calls) + acc 非空 → 先吐 ToolCalls,再吐 Done
+                            if let StreamChunk::Done {
+                                ref finish_reason, ..
+                            } = chunk
+                                && finish_reason.as_deref() == Some("tool_calls")
+                                && !tool_acc.is_empty()
+                            {
+                                let calls = tool_acc.take();
+                                let tool_calls_chunk = StreamChunk::ToolCalls { calls };
+                                pending = Some(chunk);
+                                return Some((
+                                    tool_calls_chunk,
+                                    (bs, buf, aborted, tool_acc, pending),
+                                ));
+                            }
+                            // Done(stop/...) 时重置 tool_acc
+                            if matches!(chunk, StreamChunk::Done { .. }) {
+                                tool_acc = ToolAcc::default();
+                            }
+                            return Some((chunk, (bs, buf, aborted, tool_acc, pending)));
                         }
                         continue;
                     }
@@ -184,7 +287,7 @@ pub(super) fn sse_stream(resp: reqwest::Response) -> ChatStream {
                                 StreamChunk::Error {
                                     message: "stream 单行超过 16MB 上限,已中止".into(),
                                 },
-                                (bs, buf, true),
+                                (bs, buf, true, tool_acc, pending),
                             ));
                         }
                     }
@@ -193,7 +296,7 @@ pub(super) fn sse_stream(resp: reqwest::Response) -> ChatStream {
                             StreamChunk::Error {
                                 message: format!("stream read error: {e}"),
                             },
-                            (bs, buf, false),
+                            (bs, buf, false, tool_acc, pending),
                         ));
                     }
                     None => return None,
@@ -203,4 +306,41 @@ pub(super) fn sse_stream(resp: reqwest::Response) -> ChatStream {
     );
 
     Box::pin(s)
+}
+
+#[cfg(test)]
+mod tool_acc_tests {
+    use super::ToolAcc;
+
+    /// OpenAI streaming 把 tool_calls 拆成多个 chunk,arguments 是 JSON 分片:
+    /// 必须按 index 分桶拼接,才能还原出可执行的完整调用。
+    #[test]
+    fn accumulates_parallel_tool_calls_by_index() {
+        let mut acc = ToolAcc::default();
+        acc.feed(r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","function":{"name":"read_file","arguments":""}}]}}]}"#);
+        acc.feed(r#"{"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_b","function":{"name":"list_dir","arguments":""}}]}}]}"#);
+        acc.feed(r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\":"}}]}}]}"#);
+        acc.feed(r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"a.txt\"}"}}]}}]}"#);
+        acc.feed(r#"{"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"dir\":\".\"}"}}]}}]}"#);
+
+        let calls = acc.take();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].id, "call_a");
+        assert_eq!(calls[0].function.name, "read_file");
+        assert_eq!(calls[0].function.arguments, r#"{"path":"a.txt"}"#);
+        assert_eq!(calls[1].id, "call_b");
+        assert_eq!(calls[1].function.arguments, r#"{"dir":"."}"#);
+        // take 后累积器清空
+        assert!(acc.is_empty());
+    }
+
+    /// 普通正文 chunk 不含 tool_calls,累积器必须保持为空(不误触发工具循环)。
+    #[test]
+    fn ignores_plain_content_chunks() {
+        let mut acc = ToolAcc::default();
+        acc.feed(r#"{"choices":[{"delta":{"content":"你好"}}]}"#);
+        acc.feed("不是 JSON");
+        acc.feed(r#"{"choices":[]}"#);
+        assert!(acc.is_empty());
+    }
 }

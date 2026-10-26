@@ -1,10 +1,10 @@
 //! ReAct 决策步:按反思策略产出本轮查询。
 
+use super::super::EngineParams;
 use super::super::events::{EventSink, ResearchEvent, SourceItem};
 use super::super::llm::{est_tok, llm_collect};
-use super::super::prompts::{build_plan_all_messages, build_step_messages, DecideCtx};
-use super::super::validate::{parse_step, Decision, StepAction};
-use super::super::EngineParams;
+use super::super::prompts::{DecideCtx, build_plan_all_messages, build_step_messages};
+use super::super::validate::{Decision, StepAction, parse_step};
 use super::RunError;
 
 /// 非反思轮沿用上轮查询时的角度轮换词(避免与历史查询完全重复)。
@@ -62,7 +62,7 @@ pub(crate) async fn decide(
         }
         // 每 3 轮反思:仅第 1、4、7… 轮走完整决策步,中间轮沿用上轮查询 + 角度词
         "every3" => {
-            let reflect_now = round == 1 || (round - 1) % 3 == 0;
+            let reflect_now = round == 1 || (round - 1).is_multiple_of(3);
             if !reflect_now && !last_queries.is_empty() {
                 let angle = ANGLES[(round as usize) % ANGLES.len()];
                 let qs: Vec<String> = last_queries

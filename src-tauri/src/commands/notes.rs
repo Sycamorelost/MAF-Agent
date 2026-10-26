@@ -85,7 +85,12 @@ fn parse_note(text: &str) -> (NoteFrontmatter, String) {
         return (NoteFrontmatter::default(), text.to_string());
     };
     let fm: NoteFrontmatter = serde_yaml::from_str(&rest[..end]).unwrap_or_default();
-    let body = rest[end + 4..].trim_start_matches(['\r', '\n']).to_string();
+    // render_note 末尾固定追加一个 `\n`,这里去掉落盘格式引入的尾随换行,
+    // 保证 save→get 往返严格相等(FUNC-4 修复)。
+    let body = rest[end + 4..]
+        .trim_start_matches(['\r', '\n'])
+        .trim_end_matches(['\r', '\n'])
+        .to_string();
     (fm, body)
 }
 
@@ -98,7 +103,15 @@ fn render_note(fm: &NoteFrontmatter, body: &str) -> String {
 }
 
 /// 按 id 写入/更新 DB 元数据 + 刷新 FTS(幂等 upsert,rid 稳定)。
-fn index_note(id: &str, title: &str, tags: &str, path: &str, created: &str, updated: &str, body: &str) -> Result<(), String> {
+fn index_note(
+    id: &str,
+    title: &str,
+    tags: &str,
+    path: &str,
+    created: &str,
+    updated: &str,
+    body: &str,
+) -> Result<(), String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     // M-13:元数据 upsert 与 FTS 刷新同事务,避免 rid 查询后索引半成品
     // unchecked_transaction:全局 db Mutex 保证同一连接无并发使用
@@ -156,10 +169,20 @@ pub fn notes_list() -> Result<Vec<NoteMeta>, String> {
         let Some((fm, body)) = read_note_file(&path) else {
             continue;
         };
-        let id = if fm.id.trim().is_empty() { stem.to_string() } else { fm.id.clone() };
+        let id = if fm.id.trim().is_empty() {
+            stem.to_string()
+        } else {
+            fm.id.clone()
+        };
         let title = if fm.title.trim().is_empty() {
             // 无标题时用正文首个非空行兜底
-            body.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim().trim_start_matches('#').trim().to_string()
+            body.lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("")
+                .trim()
+                .trim_start_matches('#')
+                .trim()
+                .to_string()
         } else {
             fm.title.clone()
         };
@@ -167,7 +190,15 @@ pub fn notes_list() -> Result<Vec<NoteMeta>, String> {
         let updated = fm.updated.clone();
         let path_str = path.to_string_lossy().to_string();
         let tags = fm.tags.clone();
-        index_note(&id, &title, &tags_to_db(&tags), &path_str, &created, &updated, &body)?;
+        index_note(
+            &id,
+            &title,
+            &tags_to_db(&tags),
+            &path_str,
+            &created,
+            &updated,
+            &body,
+        )?;
         found.insert(id.clone());
         metas.push(NoteMeta {
             id,
@@ -258,7 +289,11 @@ pub fn notes_save(
     let fm = NoteFrontmatter {
         id: note_id.clone(),
         title: title.trim().to_string(),
-        tags: tags.iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+        tags: tags
+            .iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
         created: created.clone(),
         updated: now.clone(),
     };
@@ -294,7 +329,9 @@ pub fn notes_delete(id: String) -> Result<(), String> {
         fs::remove_file(&path).map_err(|e| format!("remove {} failed: {e}", path.display()))?;
     }
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    if let Ok(rid) = conn.query_row("SELECT rid FROM notes WHERE id=?1", [&id], |r| r.get::<_, i64>(0)) {
+    if let Ok(rid) = conn.query_row("SELECT rid FROM notes WHERE id=?1", [&id], |r| {
+        r.get::<_, i64>(0)
+    }) {
         let _ = conn.execute("DELETE FROM notes_fts WHERE rowid=?1", [rid]);
         let _ = conn.execute("DELETE FROM notes WHERE rid=?1", [rid]);
     }
@@ -314,12 +351,14 @@ mod tests {
             created: "2026-10-14T10:00:00+08:00".into(),
             updated: "2026-10-14T10:00:00+08:00".into(),
         };
-        let text = render_note(&fm, "# 标题\n\n正文内容");
+        let body_in = "# 标题\n\n正文内容";
+        let text = render_note(&fm, body_in);
         let (fm2, body) = parse_note(&text);
         assert_eq!(fm2.id, "abcd1234");
         assert_eq!(fm2.title, "记忆术");
         assert_eq!(fm2.tags, vec!["学习".to_string(), "方法".to_string()]);
-        assert!(body.contains("正文内容"));
+        // save→get 严格往返:尾随换行不能被带回来(FUNC-4 回归)
+        assert_eq!(body, body_in);
     }
 
     #[test]

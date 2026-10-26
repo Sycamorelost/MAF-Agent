@@ -6,7 +6,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::memory;
-use crate::research::{self, blueprint, preset, store, template, ResearchEvent, ResearchParams};
+use crate::research::{self, ResearchEvent, ResearchParams, blueprint, preset, store, template};
 
 use super::ResearchRegistry;
 

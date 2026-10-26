@@ -70,7 +70,11 @@ pub enum ResearchEvent {
         stage: u32,
     },
     /// 阶段开始(专项模式)
-    StageStart { stage: u32, name: String, kind: String },
+    StageStart {
+        stage: u32,
+        name: String,
+        kind: String,
+    },
     /// 阶段完成,附阶段摘要与新增资料数;partial=true 表示因失败策略提前中止(M2,default 兼容旧 trail)
     StageDone {
         stage: u32,
@@ -80,15 +84,30 @@ pub enum ResearchEvent {
         partial: bool,
     },
     /// 阶段跳过(停用 / 全局约束耗尽)
-    StageSkipped { stage: u32, reason: String },
+    StageSkipped {
+        stage: u32,
+        reason: String,
+    },
     /// 必覆盖角度缺口提醒(校验为提醒,不阻断)
-    AngleGap { stage: u32, missing: Vec<String> },
+    AngleGap {
+        stage: u32,
+        missing: Vec<String>,
+    },
     /// 检查点:阶段结束暂停等待确认(步骤 3 启用暂停逻辑,本步仅协议)
-    Checkpoint { stage: u32, next: String },
-    ReportDelta { content: String },
-    Done { report: String },
+    Checkpoint {
+        stage: u32,
+        next: String,
+    },
+    ReportDelta {
+        content: String,
+    },
+    Done {
+        report: String,
+    },
     Cancelled,
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 /// 事件出口:同时落盘 + 推前端。发送失败不中断研究(便于事后查 trail)。

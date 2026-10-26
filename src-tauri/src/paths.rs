@@ -91,7 +91,7 @@ fn canon(p: &Path) -> PathBuf {
 /// 去尾部分隔符的小写字符串(Windows 路径大小写不敏感)。
 fn key(p: &Path) -> String {
     p.to_string_lossy()
-        .trim_end_matches(|c| c == '\\' || c == '/')
+        .trim_end_matches(['\\', '/'])
         .to_lowercase()
 }
 
@@ -169,20 +169,20 @@ fn legacy_data_dir() -> PathBuf {
 /// 按优先级解析数据目录(不依赖 AppHandle)。
 fn resolve_data_dir(boot: &Bootstrap) -> PathBuf {
     // 1. 环境变量覆盖
-    if let Some(v) = env::var_os("MAF_DATA_DIR") {
-        if !v.is_empty() {
-            return PathBuf::from(v);
-        }
+    if let Some(v) = env::var_os("MAF_DATA_DIR")
+        && !v.is_empty()
+    {
+        return PathBuf::from(v);
     }
     // 单测:固定用仓库 data/(与历史行为一致,避免误写用户目录)
     if cfg!(test) {
         return legacy_data_dir();
     }
     // 2. 引导配置
-    if let Some(d) = boot.data_dir.as_deref() {
-        if !d.is_empty() {
-            return PathBuf::from(d);
-        }
+    if let Some(d) = boot.data_dir.as_deref()
+        && !d.is_empty()
+    {
+        return PathBuf::from(d);
     }
     // 3. 历史兼容(老版本升级)
     let legacy = legacy_data_dir();
@@ -231,28 +231,28 @@ pub fn init(app: &tauri::AppHandle) -> Result<(), String> {
     let mut resolved = resolve_data_dir(&boot);
 
     // 上一进程已把 data_dir 指向新目录,这里把旧目录数据搬过去(此时无任何文件句柄)
-    if let Some(from) = boot.pending_migration_from.as_deref().map(PathBuf::from) {
-        if !same_path(&from, &resolved) {
-            match migrate_dir(&from, &resolved) {
-                Ok(()) => {
-                    log::info!(
-                        "data dir migrated: {} -> {}",
-                        from.display(),
-                        resolved.display()
-                    );
-                    let mut b = read_bootstrap();
-                    b.data_dir = Some(resolved.display().to_string());
-                    b.pending_migration_from = None;
-                    if let Err(e) = write_bootstrap(&b) {
-                        log::error!("clear pending migration failed: {e}");
-                    }
+    if let Some(from) = boot.pending_migration_from.as_deref().map(PathBuf::from)
+        && !same_path(&from, &resolved)
+    {
+        match migrate_dir(&from, &resolved) {
+            Ok(()) => {
+                log::info!(
+                    "data dir migrated: {} -> {}",
+                    from.display(),
+                    resolved.display()
+                );
+                let mut b = read_bootstrap();
+                b.data_dir = Some(resolved.display().to_string());
+                b.pending_migration_from = None;
+                if let Err(e) = write_bootstrap(&b) {
+                    log::error!("clear pending migration failed: {e}");
                 }
-                Err(e) => {
-                    // 迁移失败:保留标志位,本次回退到旧目录运行,下次启动自动重试(幂等)
-                    log::error!("data dir migration failed: {e}");
-                    let _ = MIGRATION_ERROR.set(e);
-                    resolved = from;
-                }
+            }
+            Err(e) => {
+                // 迁移失败:保留标志位,本次回退到旧目录运行,下次启动自动重试(幂等)
+                log::error!("data dir migration failed: {e}");
+                let _ = MIGRATION_ERROR.set(e);
+                resolved = from;
             }
         }
     }
@@ -436,10 +436,7 @@ mod tests {
     fn same_path_ignores_trailing_sep_and_case() {
         let d = tmp("same_path");
         assert!(same_path(&d, &d));
-        assert!(same_path(
-            &d,
-            &PathBuf::from(format!("{}\\", d.display()))
-        ));
+        assert!(same_path(&d, &PathBuf::from(format!("{}\\", d.display()))));
     }
 
     #[test]
@@ -449,7 +446,11 @@ mod tests {
         let to = base.join("new");
         fs::create_dir_all(from.join("conversations").join("abc")).unwrap();
         fs::write(from.join("metaagent.db"), b"db-bytes").unwrap();
-        fs::write(from.join("conversations").join("abc").join("memory.md"), b"# mem").unwrap();
+        fs::write(
+            from.join("conversations").join("abc").join("memory.md"),
+            b"# mem",
+        )
+        .unwrap();
         fs::write(from.join("settings.json"), b"{}").unwrap();
 
         migrate_dir(&from, &to).unwrap();

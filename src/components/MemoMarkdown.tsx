@@ -7,38 +7,112 @@ import rehypeHighlight from 'rehype-highlight';
 import { IconCheck, IconCopy } from './icons';
 import MermaidBlock from './MermaidBlock';
 import EchartsBlock from './EchartsBlock';
+import { ToolTrace } from './ToolTrace';
 
-/** 代码块容器:悬浮「复制」按钮,复制 pre 内全部文本。 */
-export function CodeBlock({ children }: { children?: React.ReactNode }) {
+/** 超过该行的代码块默认折叠,防止长消息被大段代码刷屏;短片段保持展开。 */
+const CODE_COLLAPSE_LINES = 8;
+
+/** 代码块容器:语言标签 + 行数 + 展开/收起 + 复制。长代码默认折叠。 */
+export function CodeBlock({
+  children,
+  streaming = false,
+}: {
+  children?: React.ReactNode;
+  streaming?: boolean;
+}) {
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
 
-  const onCopy = async () => {
+  const info = extractCode(children);
+  const lang = info?.lang?.toUpperCase() ?? '';
+  const lines = info ? info.text.split('\n').length : 0;
+  // 流式期间不折叠:用户能看到代码实时增长;流式结束后由完整渲染接管折叠
+  const collapsible = !streaming && lines > CODE_COLLAPSE_LINES;
+  const [collapsed, setCollapsed] = useState(collapsible);
+
+  const onCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     const text = preRef.current?.textContent ?? '';
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // 剪贴板不可用时静默
-    }
+    } catch { /* 静默 */ }
   };
 
+  const onToggle = collapsible ? () => setCollapsed((v) => !v) : undefined;
+  const onHeaderKeyDown = collapsible
+    ? (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setCollapsed((v) => !v);
+        }
+      }
+    : undefined;
+
   return (
-    <div className="codeblock">
-      <button
-        type="button"
-        className={`codeblock-copy ${copied ? 'copied' : ''}`}
-        onClick={onCopy}
-        title={copied ? '已复制' : '复制代码'}
+    <div className={`codeblock ${collapsible ? 'collapsible' : ''} ${collapsed ? 'collapsed' : ''}`}>
+      <div
+        className="codeblock-header"
+        onClick={onToggle}
+        onKeyDown={onHeaderKeyDown}
+        role={collapsible ? 'button' : undefined}
+        tabIndex={collapsible ? 0 : undefined}
+        aria-expanded={collapsible ? !collapsed : undefined}
+        title={collapsible ? (collapsed ? '展开代码' : '收起代码') : undefined}
       >
-        {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-        <span>{copied ? '已复制' : '复制'}</span>
-      </button>
+        <span className="codeblock-meta">
+          {collapsible && <span className="codeblock-caret">{collapsed ? '▸' : '▾'}</span>}
+          <span>{lang || 'CODE'}</span>
+          {collapsible && <span className="codeblock-lines">{lines} 行</span>}
+        </span>
+        <button
+          type="button"
+          className={`codeblock-copy ${copied ? 'copied' : ''}`}
+          onClick={onCopy}
+          title={copied ? '已复制' : '复制代码'}
+          style={{
+            position: 'static',
+            opacity: 1,
+            background: 'transparent',
+            border: 'none',
+            color: 'inherit',
+            padding: '0',
+            fontSize: 'inherit',
+            letterSpacing: 0,
+            textTransform: 'none',
+          }}
+        >
+          {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+        </button>
+      </div>
       <pre ref={preRef}>{children}</pre>
     </div>
   );
+}
+
+/** 从 ReactNode 递归提取纯文本(用于 heading slugify)。 */
+function extractText(children: React.ReactNode): string {
+  let out = '';
+  React.Children.forEach(children, (c) => {
+    if (typeof c === 'string' || typeof c === 'number') out += String(c);
+    else if (React.isValidElement(c)) out += extractText((c.props as { children?: React.ReactNode }).children);
+    else if (Array.isArray(c)) c.forEach(extractText);
+  });
+  return out;
+}
+
+/** Slugify:保留中文、英文小写、数字,空格→横杠,其他→空。 */
+function slugify(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[\s]+/g, '-')
+    .replace(/[^\p{L}\p{N}-]+/gu, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80);
 }
 
 /** pre 的结构是 <pre><code className="language-x">text</code></pre>,这里从 children 提取语言与文本。 */
@@ -49,7 +123,8 @@ function extractCode(children: React.ReactNode): { lang: string; text: string } 
     | null
     | undefined;
   if (!el || typeof el !== 'object' || !el.props) return null;
-  const lang = /language-(\w+)/.exec(el.props.className ?? '')?.[1] ?? '';
+  // 语言名允许连字符(maf-tool 等自定义围栏类型)
+  const lang = /language-([\w-]+)/.exec(el.props.className ?? '')?.[1] ?? '';
   const text = String(el.props.children ?? '').replace(/\n$/, '');
   return { lang, text };
 }
@@ -128,36 +203,57 @@ export const MemoMarkdown = React.memo(
       </div>
     );
 
-    // 快路径:无 mermaid/echarts,只需 pre → CodeBlock(或默认)
+    // heading 注入 id:slugify 文本 → 纲要跳转的锚点
+    const headingComponents: Record<string, React.ComponentType<any>> = {};
+    for (const tag of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']) {
+      headingComponents[tag] = ({ children, ...rest }: any) => {
+        const id = slugify(extractText(children));
+        return React.createElement(tag, { ...rest, id }, children);
+      };
+    }
+
+    const baseComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
+      ...headingComponents,
+      table: tableWrap,
+    };
+
+    // 快路径:无 mermaid/echarts,只需 pre → maf-tool 痕迹 / CodeBlock(或默认)
     if (!hasMermaid) {
+      const merged = {
+        ...baseComponents,
+        pre: (p: { children?: React.ReactNode }) => {
+          const info = extractCode(p.children);
+          if (info?.lang === 'maf-tool') return <ToolTrace raw={info.text} />;
+          return withCodeBlock ? <CodeBlock streaming={streaming} {...p} /> : <pre>{p.children}</pre>;
+        },
+        ...extraComponents,
+      };
       return (
         <ReactMarkdown
           remarkPlugins={remark}
           rehypePlugins={rehype}
-          components={
-            withCodeBlock || extraComponents
-              ? { ...(withCodeBlock ? { pre: CodeBlock } : {}), table: tableWrap, ...extraComponents }
-              : { table: tableWrap }
-          }
+          components={merged}
         >
           {body}
         </ReactMarkdown>
       );
     }
 
-    // 慢路径:pre 层分流 —— mermaid/echarts 直接渲染图表,其余走 CodeBlock
+    // 慢路径:pre 层分流 —— mermaid/echarts 直接渲染图表,maf-tool 走工具痕迹,其余走 CodeBlock
     const components: React.ComponentProps<typeof ReactMarkdown>['components'] = {
-      // 表格外包一层横向滚动容器,避免宽表格撑破气泡
-      table: tableWrap,
+      ...baseComponents,
       pre({ children }) {
         const info = extractCode(children);
+        if (info?.lang === 'maf-tool') {
+          return <ToolTrace raw={info.text} />;
+        }
         if (info?.lang === 'mermaid') {
           return <MermaidBlock code={info.text} />;
         }
         if (info?.lang === 'echarts') {
           return <EchartsBlock code={info.text} />;
         }
-        return withCodeBlock ? <CodeBlock>{children}</CodeBlock> : <pre>{children}</pre>;
+        return withCodeBlock ? <CodeBlock streaming={streaming}>{children}</CodeBlock> : <pre>{children}</pre>;
       },
       ...extraComponents,
     };

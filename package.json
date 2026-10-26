@@ -1,12 +1,20 @@
 {
   "name": "metaagent-float",
   "private": true,
-  "version": "1.10.3",
+  "version": "1.15.0",
   "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sycamorelost/MAF-Agent.git"
+  },
+  "packageManager": "pnpm@11.28.8",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
+    "audit": "pnpm audit --audit-level=high",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -32,6 +40,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
     "typescript": "~5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "3.2.4"
   }
 }

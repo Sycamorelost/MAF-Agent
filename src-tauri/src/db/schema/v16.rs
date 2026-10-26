@@ -59,3 +59,27 @@ pub(super) const MIGRATION_V17_INDEX: &str =
 /// 唯独 agent_id + created_at 组合缺失,summary_by(agent) 会全表扫描。
 pub(super) const MIGRATION_V18_INDEX: &str =
     "CREATE INDEX IF NOT EXISTS idx_usage_agent_time ON usage_record(agent_id, created_at);";
+
+/// V19(harness 任务清单):每会话一份 todo,模型整表替换式写入,UI 实时展示。
+pub(super) const MIGRATION_V19_TODOS: &str = r#"
+CREATE TABLE IF NOT EXISTS todos (
+  session_id TEXT NOT NULL,
+  item_id    TEXT NOT NULL,
+  content    TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'pending',
+  priority   TEXT NOT NULL DEFAULT 'medium',
+  ord        INTEGER NOT NULL DEFAULT 0,
+  updated    INTEGER NOT NULL,
+  PRIMARY KEY (session_id, item_id)
+);
+"#;
+
+/// V20(PERF-3):两个高频列表查询的支撑索引。
+///   - idx_sessions_updated:list_sessions 的 `ORDER BY updated DESC` 不再全表排序;
+///   - idx_messages_attachments:list_all_attachments 的「有附件」过滤 + id 倒序
+///     由部分索引直接覆盖,避免对 messages 全表扫描。
+pub(super) const MIGRATION_V20_INDEX: &str = r#"
+CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_attachments ON messages(id DESC)
+  WHERE attachments IS NOT NULL AND attachments <> '[]';
+"#;

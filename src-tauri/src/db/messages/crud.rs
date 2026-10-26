@@ -70,7 +70,18 @@ pub fn append(
     branch_id: &str,
 ) -> Result<i64, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    append_on(&conn, session_id, role, content, model_id, tokens, attachments, sources, reasoning, branch_id)
+    append_on(
+        &conn,
+        session_id,
+        role,
+        content,
+        model_id,
+        tokens,
+        attachments,
+        sources,
+        reasoning,
+        branch_id,
+    )
 }
 
 /// 占位标题前缀(前端创建会话时的默认命名,见 Sidebar/MiniChat/SelectionBubble/FloatingBall)。
@@ -128,7 +139,9 @@ fn auto_title(conn: &rusqlite::Connection, session_id: &str, content: &str) -> R
 /// 并同步重挂 branches.fork_parent_id 引用,避免删除后其他分支可见历史被截断。
 pub fn delete_one_on(conn: &Connection, id: i64) -> Result<(), String> {
     let parent: Option<i64> = conn
-        .query_row("SELECT parent_id FROM messages WHERE id=?1", [id], |r| r.get(0))
+        .query_row("SELECT parent_id FROM messages WHERE id=?1", [id], |r| {
+            r.get(0)
+        })
         .ok()
         .flatten();
     // M-13:链重挂 / 分支指针 / FTS / 删行同事务,中途失败整体回滚
@@ -215,8 +228,11 @@ pub fn update_content(id: i64, content: &str) -> Result<(), String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     // M-13:正文与 FTS 索引同事务(全局 Mutex 串行,unchecked 安全)
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    tx.execute("UPDATE messages SET content=?1 WHERE id=?2", rusqlite::params![content, id])
-        .map_err(|e| e.to_string())?;
+    tx.execute(
+        "UPDATE messages SET content=?1 WHERE id=?2",
+        rusqlite::params![content, id],
+    )
+    .map_err(|e| e.to_string())?;
     if let Err(e) = tx.execute("DELETE FROM messages_fts WHERE rowid=?1", [id]) {
         log::warn!("messages_fts 旧索引删除失败(rowid={id}): {e}");
     }

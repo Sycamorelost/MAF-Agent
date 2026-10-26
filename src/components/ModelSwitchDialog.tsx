@@ -94,6 +94,15 @@ function SummarizeModelSection() {
 }
 
 export default function ModelSwitchDialog({ onClose, onPick }: Props) {
+  /** Esc 关闭(与全局搜索一致,避免只能点遮罩) */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const { templates, hasKey, current, fetchModels, modelConfig, loadModelConfig } =
     useProvidersStore();
   /** 只展示「已配置 Key 且有可用模型」的服务商:可直接使用的模型一目了然 */

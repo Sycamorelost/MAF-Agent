@@ -7,9 +7,9 @@ mod query;
 mod record;
 
 pub use query::{
-    entries, hourly, key_health, summary, token_mix, UsageEntry, UsageGroup, UsageHour,
-    UsageSummary,
+    UsageEntry, UsageGroup, UsageHour, UsageSummary, entries, hourly, key_health, summary,
+    token_mix,
 };
-pub use record::{mask_key, record, UsageRecord};
 #[cfg(test)]
 pub use record::insert_on;
+pub use record::{UsageRecord, mask_key, record};

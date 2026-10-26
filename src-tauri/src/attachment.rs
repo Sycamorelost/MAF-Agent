@@ -135,9 +135,7 @@ fn extract_docx(path: &Path) -> Result<String, String> {
 fn table_to_text(table: &docx_rs::Table, capped: &mut bool) -> String {
     let mut out = String::new();
     'rows: for row in &table.rows {
-        let r = match row {
-            docx_rs::TableChild::TableRow(r) => r,
-        };
+        let docx_rs::TableChild::TableRow(r) = row;
         let cells: Vec<String> = r
             .cells
             .iter()
@@ -170,7 +168,7 @@ fn table_to_text(table: &docx_rs::Table, capped: &mut bool) -> String {
 
 /// xlsx:calamine 自动识别格式,遍历所有 sheet,每行单元格以制表符连接。
 fn extract_xlsx(path: &Path) -> Result<String, String> {
-    use calamine::{open_workbook_auto, Reader};
+    use calamine::{Reader, open_workbook_auto};
     let mut wb = open_workbook_auto(path).map_err(|e| format!("解析表格失败: {e}"))?;
     let mut out = String::new();
     let mut capped = false;
@@ -249,7 +247,10 @@ mod tests {
         let md = dir.join("readme.md");
         std::fs::write(&md, "# 标题\n\n- 列表项\n").unwrap();
         let text = extract_text(&md, classify("readme.md")).unwrap().unwrap();
-        assert!(text.contains("# 标题") && text.contains("- 列表项"), "got: {text}");
+        assert!(
+            text.contains("# 标题") && text.contains("- 列表项"),
+            "got: {text}"
+        );
     }
 
     #[test]
@@ -280,12 +281,13 @@ mod tests {
         let dir = tmp_dir("docx");
         let path = dir.join("sample.docx");
         let doc = docx_rs::Docx::new()
-            .add_paragraph(docx_rs::Paragraph::new().add_run(
-                docx_rs::Run::new().add_text("会议纪要:项目里程碑确认"),
-            ))
-            .add_paragraph(docx_rs::Paragraph::new().add_run(
-                docx_rs::Run::new().add_text("第二阶段下月启动"),
-            ))
+            .add_paragraph(
+                docx_rs::Paragraph::new()
+                    .add_run(docx_rs::Run::new().add_text("会议纪要:项目里程碑确认")),
+            )
+            .add_paragraph(
+                docx_rs::Paragraph::new().add_run(docx_rs::Run::new().add_text("第二阶段下月启动")),
+            )
             .build();
         let mut buf = std::io::Cursor::new(Vec::new());
         doc.pack(&mut buf).unwrap();
@@ -320,9 +322,9 @@ mod tests {
             ]),
         ]);
         let doc = docx_rs::Docx::new()
-            .add_paragraph(docx_rs::Paragraph::new().add_run(
-                docx_rs::Run::new().add_text("成绩表"),
-            ))
+            .add_paragraph(
+                docx_rs::Paragraph::new().add_run(docx_rs::Run::new().add_text("成绩表")),
+            )
             .add_table(table)
             .build();
         let mut buf = std::io::Cursor::new(Vec::new());

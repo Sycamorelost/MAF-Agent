@@ -2,9 +2,9 @@
 
 use crate::provider::ImageRequest;
 
+use super::EngineParams;
 use super::skills;
 use super::store;
-use super::EngineParams;
 
 /// 科研增强:终稿追加 AI 概念示意草稿(默认关)。任何一步失败都静默降级,不影响报告交付。
 pub(crate) async fn attach_image_draft(p: &EngineParams, report: String) -> String {
@@ -87,7 +87,10 @@ async fn save_figure(p: &EngineParams, url: &str) -> Result<String, String> {
             .decode(rest)
             .map_err(|e| format!("base64 解码失败: {e}"))?;
         if decoded.len() > FIGURE_MAX_BYTES {
-            return Err(format!("图示超过 {}MB 上限", FIGURE_MAX_BYTES / 1024 / 1024));
+            return Err(format!(
+                "图示超过 {}MB 上限",
+                FIGURE_MAX_BYTES / 1024 / 1024
+            ));
         }
         decoded
     } else {

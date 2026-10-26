@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import * as ipc from '../../lib/ipc';
 import {
   IconImage,
@@ -65,6 +66,18 @@ export default function DrawResult({
   onUpload,
   toast,
 }: Props) {
+  /** Esc 关闭放大预览 / 上传弹层(与全局搜索一致,避免只能点遮罩) */
+  useEffect(() => {
+    if (!preview && !uploadTarget) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (uploadTarget) onCloseUpload();
+      else onClosePreview();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [preview, uploadTarget, onClosePreview, onCloseUpload]);
+
   return (
     <>
       {/* 右:本次 2×2 画布 + 历史 */}

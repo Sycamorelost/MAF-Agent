@@ -93,8 +93,10 @@ pub fn glossary_save(entries: Vec<GlossaryEntry>) -> Result<(), String> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranslationRecord {
-    /// 落盘文件名(列表时注入;保存时忽略)
-    #[serde(default, skip_serializing)]
+    /// 落盘文件名(列表时注入;保存时为空字符串)。
+    /// 用 `skip_serializing_if` 而非 `skip_serializing`:保存时为空会被跳过(落盘文件干净),
+    /// 列表时已注入真实文件名必须序列化,否则前端删除按钮拿不到文件名(FUNC-1 修复)。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub file_name: String,
     pub created: String,
     pub provider_id: String,
@@ -246,5 +248,27 @@ mod tests {
             .filter(|e| !e.src.trim().is_empty() && !e.dst.trim().is_empty())
             .collect();
         assert!(cleaned.is_empty());
+    }
+
+    /// FUNC-1 回归:file_name 在列表场景(非空)必须序列化,保存场景(空)可省略。
+    #[test]
+    fn translation_record_file_name_serialization() {
+        let with_name = TranslationRecord {
+            file_name: "20261026-000000000.json".into(),
+            created: "t".into(),
+            provider_id: "p".into(),
+            model: "m".into(),
+            source_lang: None,
+            target_lang: "zh".into(),
+            source_text: "hi".into(),
+            result_text: "你好".into(),
+        };
+        let s = serde_json::to_string(&with_name).unwrap();
+        assert!(s.contains("\"file_name\":\"20261026-000000000.json\""));
+
+        // 保存入参 file_name 为空时不写出,落盘文件干净
+        let empty = TranslationRecord { file_name: String::new(), ..with_name };
+        let s2 = serde_json::to_string(&empty).unwrap();
+        assert!(!s2.contains("file_name"));
     }
 }

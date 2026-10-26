@@ -28,13 +28,17 @@ fn norm_letter(s: &str) -> Option<char> {
 /// judge 判分:归一到 对/错 两个布尔。
 fn norm_judge(s: &str) -> Option<bool> {
     let t = s.trim().to_lowercase();
-    if ["对", "正确", "true", "√", "是", "t", "yes"].iter().any(|k| t == *k)
+    if ["对", "正确", "true", "√", "是", "t", "yes"]
+        .iter()
+        .any(|k| t == *k)
         || t.starts_with("对")
         || t.starts_with("正确")
     {
         return Some(true);
     }
-    if ["错", "错误", "false", "×", "x", "否", "f", "no"].iter().any(|k| t == *k)
+    if ["错", "错误", "false", "×", "x", "否", "f", "no"]
+        .iter()
+        .any(|k| t == *k)
         || t.starts_with("错")
     {
         return Some(false);

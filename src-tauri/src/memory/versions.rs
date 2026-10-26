@@ -6,10 +6,11 @@ use chrono::Local;
 
 use crate::db;
 
-use super::{memory_path, validate_id, versions_dir, write_memory, MAX_VERSIONS};
+use super::{MAX_VERSIONS, memory_path, validate_id, versions_dir, write_memory};
 
 /// 手动触发一次版本快照(用于「提炼前」等场景)。
-pub fn snapshot_version(id: &str, note: &str) -> Result<PathBuf, String> {
+/// 返回该版本的数字 id,与 `rollback_to` / `read_version` 的入参对齐(FUNC-3 修复)。
+pub fn snapshot_version(id: &str, note: &str) -> Result<i64, String> {
     validate_id(id)?;
     let mem = memory_path(id);
     if !mem.exists() {
@@ -32,15 +33,18 @@ pub fn snapshot_version(id: &str, note: &str) -> Result<PathBuf, String> {
         rusqlite::params![id, text, now, note],
     )
     .map_err(|e| format!("insert memory_versions failed: {e}"))?;
+    let vid = conn.last_insert_rowid();
 
-    Ok(target)
+    Ok(vid)
 }
 
 /// 列出会话的历史版本(按时间倒序)。
 pub fn list_versions(id: &str) -> Result<Vec<(i64, String, String)>, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, created, note FROM memory_versions WHERE session_id=?1 ORDER BY id DESC")
+        .prepare(
+            "SELECT id, created, note FROM memory_versions WHERE session_id=?1 ORDER BY id DESC",
+        )
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))

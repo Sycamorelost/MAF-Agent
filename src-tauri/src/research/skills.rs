@@ -82,7 +82,11 @@ pub fn init_resource(app: &tauri::AppHandle) {
 /// 资源目录:优先运行期解析,单测/未初始化时回退源码树(开发与测试数据留在 D 盘)。
 pub fn dir() -> Option<PathBuf> {
     RESOURCE_DIR.get().cloned().or_else(|| {
-        Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("skills"))
+        Some(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("resources")
+                .join("skills"),
+        )
     })
 }
 
@@ -318,7 +322,12 @@ mod tests {
         assert_eq!(docs.len(), SKILL_FILES.len());
         // 源码树回退路径在单测环境必然存在
         assert!(docs.iter().all(|d| d.ok), "所有技能文档应可读");
-        assert!(docs.iter().filter(|d| d.file.starts_with("skills/")).count() == 23);
+        assert!(
+            docs.iter()
+                .filter(|d| d.file.starts_with("skills/"))
+                .count()
+                == 23
+        );
     }
 
     #[test]

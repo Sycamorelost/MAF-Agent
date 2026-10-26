@@ -1,11 +1,11 @@
 //! 明细查询与 Key 健康度。
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 use crate::db;
 
-use super::{since_secs, UsageGroup, COST};
+use super::{COST, UsageGroup, since_secs};
 
 /// 明细行(返回给前端;不含任何明文 Key)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,29 +57,29 @@ pub fn entries_on(
     );
     let mut args: Vec<Value> = vec![Value::Integer(since)];
 
-    if let (Some(dim), Some(k)) = (dimension, key) {
-        if !k.is_empty() {
-            match dim {
-                "provider" => {
-                    sql.push_str(" AND provider_id = ?");
-                    args.push(Value::Text(k.to_string()));
+    if let (Some(dim), Some(k)) = (dimension, key)
+        && !k.is_empty()
+    {
+        match dim {
+            "provider" => {
+                sql.push_str(" AND provider_id = ?");
+                args.push(Value::Text(k.to_string()));
+            }
+            "key" => match k.parse::<i64>() {
+                Ok(slot) => {
+                    sql.push_str(" AND slot_id = ?");
+                    args.push(Value::Integer(slot));
                 }
-                "key" => match k.parse::<i64>() {
-                    Ok(slot) => {
-                        sql.push_str(" AND slot_id = ?");
-                        args.push(Value::Integer(slot));
-                    }
-                    // 槽位键非数字:不可能命中,直接空结果(避免退化为全表)
-                    Err(_) => return Ok(Vec::new()),
-                },
-                "agent" => {
-                    sql.push_str(" AND COALESCE(NULLIF(agent_id,''),'none') = ?");
-                    args.push(Value::Text(k.to_string()));
-                }
-                _ => {
-                    sql.push_str(" AND model_id = ?");
-                    args.push(Value::Text(k.to_string()));
-                }
+                // 槽位键非数字:不可能命中,直接空结果(避免退化为全表)
+                Err(_) => return Ok(Vec::new()),
+            },
+            "agent" => {
+                sql.push_str(" AND COALESCE(NULLIF(agent_id,''),'none') = ?");
+                args.push(Value::Text(k.to_string()));
+            }
+            _ => {
+                sql.push_str(" AND model_id = ?");
+                args.push(Value::Text(k.to_string()));
             }
         }
     }

@@ -1,10 +1,7 @@
 //! 深度研究相关 Tauri commands(Phase 2)。
 
 use std::collections::HashMap;
-use std::sync::{
-    atomic::AtomicBool,
-    Arc, Mutex,
-};
+use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 mod events;
 mod export;

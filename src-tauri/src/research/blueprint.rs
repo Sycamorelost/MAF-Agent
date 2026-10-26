@@ -11,7 +11,7 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 
 use super::stage::StageConfig;
-use super::{preset, ResearchParams};
+use super::{ResearchParams, preset};
 
 /// 一条研究方案。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,7 +221,8 @@ fn builtin_tech_choice() -> Blueprint {
     );
     Blueprint {
         name: "技术选型评估".into(),
-        desc: "三阶段:候选方案收集 → 指标对比验证 → 选型建议。产出推荐方案、适用前提与回退路径。".into(),
+        desc: "三阶段:候选方案收集 → 指标对比验证 → 选型建议。产出推荐方案、适用前提与回退路径。"
+            .into(),
         builtin: true,
         params: ResearchParams {
             mode: "staged".into(),
@@ -341,7 +342,8 @@ fn read_user_file() -> Vec<Blueprint> {
 fn write_user_file(list: &[Blueprint]) -> Result<(), String> {
     let p = blueprints_path();
     if let Some(parent) = p.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("mkdir {} failed: {e}", parent.display()))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("mkdir {} failed: {e}", parent.display()))?;
     }
     let text = serde_json::to_string_pretty(list).map_err(|e| e.to_string())?;
     fs::write(&p, text).map_err(|e| format!("write blueprints.json failed: {e}"))
@@ -485,7 +487,12 @@ mod tests {
             assert!(!b.params.stages.is_empty(), "{} 无阶段", b.name);
             let ids: std::collections::HashSet<_> =
                 b.params.stages.iter().map(|s| s.id.as_str()).collect();
-            assert_eq!(ids.len(), b.params.stages.len(), "{} 阶段 id 必须唯一", b.name);
+            assert_eq!(
+                ids.len(),
+                b.params.stages.len(),
+                "{} 阶段 id 必须唯一",
+                b.name
+            );
             assert!(
                 b.params.stages.iter().all(|s| s.enabled),
                 "{} 内置阶段应全部启用",
@@ -502,7 +509,10 @@ mod tests {
                 b.name
             );
             assert!(
-                b.params.stages.iter().all(|s| !s.name.trim().is_empty() && !s.goal.trim().is_empty()),
+                b.params
+                    .stages
+                    .iter()
+                    .all(|s| !s.name.trim().is_empty() && !s.goal.trim().is_empty()),
                 "{} 阶段名/目标不能为空",
                 b.name
             );
@@ -519,7 +529,11 @@ mod tests {
         for b in builtins() {
             for s in &b.params.stages {
                 if !s.constraints.must_cover_angles.is_empty() {
-                    assert_eq!(s.kind, "research", "{} 的 {} 非检索阶段不应带必覆盖角度", b.name, s.name);
+                    assert_eq!(
+                        s.kind, "research",
+                        "{} 的 {} 非检索阶段不应带必覆盖角度",
+                        b.name, s.name
+                    );
                 }
             }
         }

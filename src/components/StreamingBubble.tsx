@@ -44,7 +44,8 @@ export default function StreamingBubble({
             />
           )}
           <div className="md">
-            <MemoMarkdown content={text + ' ▍'} withCodeBlock streaming />
+            <MemoMarkdown content={text} withCodeBlock streaming />
+            <span className="stream-cursor" aria-hidden="true" />
           </div>
         </div>
         <div className="meta">{modelId && <span>{modelId}</span>}</div>

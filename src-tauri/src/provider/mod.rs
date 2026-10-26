@@ -11,29 +11,78 @@
 //!   - 流式输出通过 Channel 推到前端(tauri::ipc::Channel)
 //!   - 图像/翻译接口预留默认实现,未接入的 Provider 返回 NotSupported
 
-pub mod openai;
-pub mod templates;
-pub mod keychain;
 pub mod custom;
+pub mod keychain;
 pub mod model_cards;
 pub mod model_config;
+pub mod openai;
 pub mod reasoning;
 pub mod rotation;
+pub mod templates;
 
 use async_trait::async_trait;
+use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
-use futures::Stream;
 
 /// 对话消息(与 OpenAI chat.completions 协议对齐)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
-    pub role: String,      // system / user / assistant
+    pub role: String, // system / user / assistant / tool
     pub content: String,
     /// 图片附件(base64 data URL 列表;迭代 D1)。
     /// 非空时序列化为 OpenAI vision content 数组;空数组完全不参与序列化,向后兼容。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<String>,
+    // ---- Phase 5e:工具调用字段(Option + skip_serializing_if,完全向后兼容) ----
+    /// assistant 角色消息携带的 tool_calls(模型请求调用工具时产生)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    /// tool 角色消息:对应哪个 assistant 的 tool_call(id)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+impl Default for ChatMessage {
+    fn default() -> Self {
+        Self {
+            role: "user".into(),
+            content: String::new(),
+            images: Vec::new(),
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+}
+
+/// 工具调用单元(OpenAI 风格;Phase 5e 新增)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub id: String,
+    pub r#type: String, // "function"
+    pub function: ToolCallFunction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallFunction {
+    pub name: String,
+    pub arguments: String, // JSON 字符串,需要 serde_json::from_str 解析
+}
+
+/// 工具定义(chat_request.tools 字段,告诉模型可用什么工具;Phase 5e 新增)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDef {
+    pub r#type: String, // "function"
+    pub function: ToolFunctionDef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolFunctionDef {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<serde_json::Value>,
 }
 
 /// 统一思考强度档位(与前端四档 Light/Medium/High/Ultra 一一对应)。
@@ -86,10 +135,31 @@ pub struct ChatRequest {
     /// 是否流式;false 时退化为一次性返回(包成单元素流)
     #[serde(default = "default_true")]
     pub stream: bool,
+    // ---- Phase 5e:工具调用 ----
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolDef>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<serde_json::Value>,
 }
 
 fn default_true() -> bool {
     true
+}
+
+impl Default for ChatRequest {
+    fn default() -> Self {
+        Self {
+            model: String::new(),
+            messages: Vec::new(),
+            temperature: None,
+            max_tokens: None,
+            top_p: None,
+            reasoning: None,
+            stream: true,
+            tools: None,
+            tool_choice: None,
+        }
+    }
 }
 
 /// 流式输出的最小单元。
@@ -124,6 +194,17 @@ pub enum StreamChunk {
     },
     /// 错误
     Error { message: String },
+    // ---- Phase 5e:工具调用 chunk ----
+    /// 流式模型返回的 tool_calls(增量累积后组装完整结构)。
+    ToolCalls { calls: Vec<ToolCall> },
+    /// 工具执行完毕后,dispatch 层注入的 tool 消息结果(转发前端 + 落库)。
+    ToolCallResult {
+        tool_call_id: String,
+        tool_name: String,
+        server_name: String,
+        content: String,
+        ok: bool,
+    },
 }
 
 /// 流式响应:Pin<Box<dyn Stream>>。Provider 内部可自由组合 reqwest SSE / 测试 mock。
@@ -136,11 +217,11 @@ pub struct ImageRequest {
     pub model: String,
     pub prompt: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub size: Option<String>,        // "1024x1024"
+    pub size: Option<String>, // "1024x1024"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub style: Option<String>,       // vivid / natural
+    pub style: Option<String>, // vivid / natural
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,6 +284,47 @@ pub trait Provider: Send + Sync {
             "{} 不支持图像生成",
             self.display_name()
         )))
+    }
+}
+
+/// 子调用 LLM 通道(harness:上下文压缩 / 子智能体委派共用)。
+/// 由 chat 链路按当前会话 provider/模型构造一次、跨轮复用;只活在内存,不落库。
+pub struct SubLlm {
+    pub provider: Box<dyn Provider>,
+    pub model: String,
+}
+
+impl SubLlm {
+    /// 非流式收集一次对话正文(内部走流式拼接;忽略思考流与用量统计)。
+    /// 子调用不带工具,天然不可能递归触发工具链(防 delegate 无限嵌套)。
+    pub async fn collect(
+        &self,
+        messages: Vec<ChatMessage>,
+        max_tokens: u32,
+    ) -> Result<String, String> {
+        use futures::StreamExt;
+        let req = ChatRequest {
+            model: self.model.clone(),
+            messages,
+            max_tokens: Some(max_tokens),
+            stream: true,
+            ..Default::default()
+        };
+        let mut stream = self
+            .provider
+            .chat_stream(req)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut out = String::new();
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                StreamChunk::Delta { content } => out.push_str(&content),
+                StreamChunk::Error { message } => return Err(message),
+                StreamChunk::Done { .. } => break,
+                _ => {}
+            }
+        }
+        Ok(out)
     }
 }
 

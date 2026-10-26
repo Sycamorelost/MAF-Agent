@@ -19,7 +19,7 @@ pub use crud::{
     update_content,
 };
 #[allow(unused_imports)]
-pub use search::{list, list_on, recent, recent_on};
+pub use search::{list, list_on, list_page, list_page_on, recent, recent_on};
 
 use serde::{Deserialize, Serialize};
 
@@ -63,8 +63,7 @@ fn row_to_message(r: &rusqlite::Row) -> rusqlite::Result<MessageRow> {
     })
 }
 
-const SELECT_COLS: &str =
-    "id, session_id, role, content, model_id, created, tokens, attachments, sources, parent_id, branch_id, reasoning";
+const SELECT_COLS: &str = "id, session_id, role, content, model_id, created, tokens, attachments, sources, parent_id, branch_id, reasoning";
 
 /// 分支可见链 CTE:从分支尾(分支内 MAX id;空分支取分叉点)沿 parent_id 回溯到根。
 /// 空 main(分叉点 NULL)锚点为 NULL,链为空集,查询结果自然为空。
@@ -108,12 +107,35 @@ mod tests {
     #[test]
     fn append_persists_reasoning() {
         let conn = setup();
-        append_on(&conn, "s1", "assistant", "回答", None, 10, None, None, Some("我先想想"), "main")
-            .unwrap();
+        append_on(
+            &conn,
+            "s1",
+            "assistant",
+            "回答",
+            None,
+            10,
+            None,
+            None,
+            Some("我先想想"),
+            "main",
+        )
+        .unwrap();
         let rows = list_on(&conn, "s1", "main").unwrap();
         assert_eq!(rows[0].reasoning, "我先想想");
         // 无思考消息默认空串(而非 NULL,前端类型简单)
-        append_on(&conn, "s1", "assistant", "第二条", None, 5, None, None, None, "main").unwrap();
+        append_on(
+            &conn,
+            "s1",
+            "assistant",
+            "第二条",
+            None,
+            5,
+            None,
+            None,
+            None,
+            "main",
+        )
+        .unwrap();
         let rows = list_on(&conn, "s1", "main").unwrap();
         assert_eq!(rows[1].reasoning, "");
     }
@@ -122,16 +144,35 @@ mod tests {
     #[test]
     fn reasoning_not_indexed_by_fts() {
         let conn = setup();
-        append_on(&conn, "s1", "assistant", "正常回答", None, 1, None, None, Some("内部独有思考词"), "main")
-            .unwrap();
+        append_on(
+            &conn,
+            "s1",
+            "assistant",
+            "正常回答",
+            None,
+            1,
+            None,
+            None,
+            Some("内部独有思考词"),
+            "main",
+        )
+        .unwrap();
         // 正文命中
         let hit: i64 = conn
-            .query_row("SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH '正常回答'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH '正常回答'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(hit, 1);
         // 思考词不命中
         let miss: i64 = conn
-            .query_row("SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH '内部独有思考词'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH '内部独有思考词'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(miss, 0);
     }
@@ -185,6 +226,28 @@ mod tests {
         let all = recent_on(&conn, "s1", "main", 99).unwrap();
         assert_eq!(all.len(), 4);
         assert_eq!(all[0].id, a);
+    }
+
+    #[test]
+    fn list_page_walks_backwards_with_has_more() {
+        let conn = setup();
+        let a = add(&conn, "user", "问一", "main");
+        let b = add(&conn, "assistant", "答一", "main");
+        let c = add(&conn, "user", "问二", "main");
+        let d = add(&conn, "assistant", "答二", "main");
+        let e = add(&conn, "user", "问三", "main");
+
+        // 最近一页:升序返回
+        let (page1, more1) = list_page_on(&conn, "s1", "main", None, 2).unwrap();
+        assert_eq!(ids(&page1), vec![d, e]);
+        assert!(more1);
+        // 以本页第一条为游标,继续向前
+        let (page2, more2) = list_page_on(&conn, "s1", "main", Some(page1[0].id), 2).unwrap();
+        assert_eq!(ids(&page2), vec![b, c]);
+        assert!(more2);
+        let (page3, more3) = list_page_on(&conn, "s1", "main", Some(page2[0].id), 2).unwrap();
+        assert_eq!(ids(&page3), vec![a]);
+        assert!(!more3);
     }
 
     #[test]

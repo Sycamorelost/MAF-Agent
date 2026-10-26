@@ -16,6 +16,8 @@ import { StorageView } from './settings/StorageView';
 import { AboutView } from './settings/AboutView';
 import { SelectionView } from './settings/SelectionView';
 import { NavMenuView } from './settings/NavMenuView';
+import { AppearanceView } from './settings/AppearanceView';
+import { McpView } from './settings/McpView';
 
 export default function SettingsPage() {
   const [searchParams] = useSearchParams();
@@ -221,9 +223,11 @@ export default function SettingsPage() {
     search: searchView,
     translate: translateView,
     selection: selectionView,
+    appearance: <AppearanceView />,
     navmenu: navmenuView,
     usage: usageView,
     storage: storageView,
+    mcp: <McpView />,
     about: aboutView,
   };
 

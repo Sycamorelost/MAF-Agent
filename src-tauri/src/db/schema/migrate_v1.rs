@@ -165,14 +165,16 @@ CREATE INDEX IF NOT EXISTS idx_study_logs_plan ON study_logs(plan_id, at);
 ///   - sessions.system_prompt        TEXT          — 会话级系统提示词
 ///   - sessions.max_context_messages INTEGER       — 上下文滑窗(0 = 全部)
 ///   - messages.attachments          TEXT          — 附件元数据 JSON 数组
+///
 /// V5(迭代 D2):
 ///   - sessions.web_search_enabled   INTEGER       — 对话内联网开关(0/1)
 ///   - messages.sources              TEXT          — 联网来源 JSON 数组(assistant 消息)
+///
 /// V6(迭代 D3):切换模型时的记忆注入策略(full/summary/hybrid/none)
 /// V7(迭代 B2):Agent 模板绑定
 ///   - sessions.agent_id              TEXT          — 绑定的 Agent 模板(NULL = 空白会话)
+///
 /// SQLite 的 ALTER TABLE ADD COLUMN 无 IF NOT EXISTS,故先查 PRAGMA table_info。
-
 /// 若列不存在则 ALTER TABLE 加列(幂等,版本漂移自愈)。
 pub(super) fn ensure_column(
     conn: &Connection,

@@ -50,7 +50,11 @@ mod tests {
         assert!(s.contains("id: abc123de"));
         assert!(s.contains("conversation: \"测试会话\""));
         for sec in KNOWN_SECTIONS {
-            assert!(s.contains(&format!("# {}", sec)), "missing section: {}", sec);
+            assert!(
+                s.contains(&format!("# {}", sec)),
+                "missing section: {}",
+                sec
+            );
         }
     }
 }
