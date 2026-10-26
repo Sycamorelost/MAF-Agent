@@ -55,7 +55,8 @@ pub struct SavePathPick {
 }
 
 /// 导出路径规范(H-2):必须绝对路径、扩展名与白名单一致、父目录已存在(不替调用方创建任意目录)。
-fn ensure_export_path(raw: &str, allowed_ext: &str) -> Result<std::path::PathBuf, String> {
+/// 会话导出(commands/memory/crud.rs)复用同一套校验。
+pub fn ensure_export_path(raw: &str, allowed_ext: &str) -> Result<std::path::PathBuf, String> {
     let target = std::path::PathBuf::from(raw.trim());
     if !target.is_absolute() {
         return Err("导出路径必须为绝对路径".into());
@@ -77,8 +78,8 @@ fn ensure_export_path(raw: &str, allowed_ext: &str) -> Result<std::path::PathBuf
 }
 
 /// 覆盖校验(H-2):目标已是文件且未显式 overwrite 时拒绝(返回 TARGET_EXISTS);
-/// 同名目录一律拒绝,避免目录被文件覆盖的怪异状态。
-fn ensure_writable(target: &std::path::Path, overwrite: bool) -> Result<(), String> {
+/// 同名目录一律拒绝,避免目录被文件覆盖的怪异状态。会话导出同样复用。
+pub fn ensure_writable(target: &std::path::Path, overwrite: bool) -> Result<(), String> {
     match target.metadata() {
         Ok(meta) if meta.is_file() => {
             if overwrite {

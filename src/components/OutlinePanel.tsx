@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { jumpToMessage } from '../lib/jumpToMessage';
 import { useActiveMessageId } from '../lib/useActiveMessageId';
+import { estimateReasoningTokens } from './ReasoningBlock';
 import type { MessageRow } from '../lib/ipc';
 
 interface Props {
@@ -47,6 +48,30 @@ export default function OutlinePanel({ messages, onClose }: Props) {
     [messages],
   );
 
+  // 会话统计(原消息 meta 行的 token 信息聚合上移到这里,精简气泡下方排版)
+  const stats = useMemo(() => {
+    const assistants = messages.filter((m) => m.role === 'assistant');
+    const outTokens = assistants.reduce((s, m) => s + (m.tokens ?? 0), 0);
+    const thinkTokens = assistants.reduce(
+      (s, m) => s + (m.reasoning ? estimateReasoningTokens(m.reasoning) : 0),
+      0,
+    );
+    const models = [...new Set(assistants.map((m) => m.model_id).filter(Boolean))] as string[];
+    const times = messages.map((m) => m.created).filter(Boolean).sort();
+    const range =
+      times.length > 0
+        ? `${new Date(times[0]).toLocaleTimeString('zh-CN')} – ${new Date(times[times.length - 1]).toLocaleTimeString('zh-CN')}`
+        : '';
+    return {
+      q: messages.length - assistants.length,
+      a: assistants.length,
+      outTokens,
+      thinkTokens,
+      models,
+      range,
+    };
+  }, [messages]);
+
   return (
     <aside className="outline-panel">
       <div className="outline-head">
@@ -61,6 +86,27 @@ export default function OutlinePanel({ messages, onClose }: Props) {
           ✕
         </button>
       </div>
+      {messages.length > 0 && (
+        <div className="outline-stats">
+          <div className="outline-stats-row">
+            <span>提问 {stats.q} / 回答 {stats.a}</span>
+            {stats.range && <span>{stats.range}</span>}
+          </div>
+          {stats.outTokens > 0 && (
+            <div className="outline-stats-row">
+              <span>
+                输出 {stats.outTokens} tok
+                {stats.thinkTokens > 0 && `(含思考约 ${stats.thinkTokens})`}
+              </span>
+            </div>
+          )}
+          {stats.models.length > 0 && (
+            <div className="outline-stats-row outline-stats-models" title={stats.models.join('\n')}>
+              <span>{stats.models.join(' · ')}</span>
+            </div>
+          )}
+        </div>
+      )}
       <div className="outline-list">
         {items.length === 0 && (
           <div style={{ padding: 16, color: 'var(--text-3)', fontSize: 'var(--font-caption)' }}>

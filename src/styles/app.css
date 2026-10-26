@@ -1316,6 +1316,58 @@ body.aside-open .main { padding-left: var(--aside-w); }
   font-weight: 600;
   color: var(--text-1);
 }
+/* 会话标题改名入口(幽灵按钮,贴标题右侧) */
+.chat-title-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+  transition: .15s;
+}
+.chat-title-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+/* 标题内联编辑行 */
+.chat-title-edit {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chat-title-edit input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--brand-line);
+  border-radius: var(--radius-s);
+  background: var(--bg-main);
+  color: var(--text-1);
+  font-size: var(--font-h3);
+  font-weight: 600;
+  font-family: var(--font);
+  outline: none;
+}
+.chat-title-edit button {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--bg-main);
+  color: var(--text-3);
+  cursor: pointer;
+}
+.chat-title-edit button:hover { background: var(--bg-hover); color: var(--text-1); }
 /* 会话头部:记忆面板展开/收起开关 */
 .chat-panel-toggle {
   width: 28px;
@@ -4168,6 +4220,29 @@ body.aside-open .main { padding-left: var(--aside-w); }
   font-size: var(--font-micro);
   color: var(--text-4);
 }
+/* 会话统计块(原消息 meta 的 token 信息聚合展示处) */
+.outline-stats {
+  padding: var(--space-2) var(--pad-x-narrow);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--font-micro);
+  color: var(--text-3);
+}
+.outline-stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.outline-stats-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.outline-stats-models { color: var(--text-4); }
 
 /* ============ Phase 5d:HITL 审批对话框 ============ */
 

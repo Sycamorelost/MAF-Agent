@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   IconCheck,
   IconChevronDown,
+  IconDownload,
   IconEdit,
   IconPullRequest,
   IconTrash,
@@ -12,9 +13,64 @@ import { useMessagesStore } from '../../stores/messages';
 import { useMemoryStore } from '../../stores/memory';
 import { useProvidersStore } from '../../stores/providers';
 import { useSessionsStore } from '../../stores/sessions';
-import type { MemoryStrategy, SessionRow } from '../../lib/ipc';
+import type { MemoryStrategy, MessageRow, SessionRow } from '../../lib/ipc';
 import * as ipc from '../../lib/ipc';
 import { estimateTokens } from '../../lib/memoryInject';
+import { safeExportName } from '../research/helpers';
+
+/** 会话导出 Markdown:标题 + 元信息 + 逐条 Q/A(思考过程折叠为 details)。 */
+function buildSessionMarkdown(title: string, msgs: MessageRow[]): string {
+  const q = msgs.filter((m) => m.role === 'user').length;
+  const a = msgs.filter((m) => m.role === 'assistant').length;
+  const lines: string[] = [
+    `# ${title}`,
+    '',
+    `- 导出时间:${new Date().toLocaleString('zh-CN')}`,
+    `- 消息数:${msgs.length} 条(提问 ${q} / 回答 ${a})`,
+    '',
+    '---',
+    '',
+  ];
+  for (const m of msgs) {
+    const time = m.created ? new Date(m.created).toLocaleString('zh-CN') : '';
+    if (m.role === 'user') {
+      lines.push(`### 用户 · ${time}`, '', m.content, '');
+      const att = parseCount(m.attachments);
+      if (att > 0) lines.push(`> 附件 ×${att}`, '');
+    } else if (m.role === 'assistant') {
+      lines.push(`### 助手${m.model_id ? `(${m.model_id})` : ''} · ${time}`, '');
+      if (m.reasoning) {
+        lines.push('<details>', '<summary>思考过程</summary>', '', m.reasoning, '', '</details>', '');
+      }
+      lines.push(m.content, '');
+      const srcs = parseSources(m.sources);
+      if (srcs.length > 0) {
+        lines.push('来源:', ...srcs.map((s) => `- [${s.title || s.url}](${s.url})`), '');
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+function parseCount(json: string | null): number {
+  if (!json) return 0;
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function parseSources(json: string | null): { title?: string; url: string }[] {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr.filter((s) => s && typeof s.url === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 
 /** 分支显示名:用户自定义 > 默认(主分支 / 分支 xxxx)。 */
 function branchLabel(b: ipc.BranchInfo | undefined, fallbackId: string): string {
@@ -54,10 +110,70 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   // ---------- F4:会话分支树 ----------
   const setActiveBranch = useSessionsStore((s) => s.setActiveBranch);
+  const renameSession = useSessionsStore((s) => s.rename);
   const [branches, setBranches] = useState<ipc.BranchInfo[]>([]);
   const [branchOpen, setBranchOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // 会话标题内联改名(后端 rename_session 会同步 memory.md 标题)
+  const [titleEdit, setTitleEdit] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exported, setExported] = useState(false);
+
+  const onRenameTitle = async () => {
+    if (titleEdit === null) return;
+    const t = titleEdit.trim();
+    setTitleEdit(null);
+    if (!t || t === title) return;
+    try {
+      await renameSession(sessionId, t);
+    } catch (e) {
+      onError(`重命名会话失败:${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  /** 导出当前分支消息为 Markdown:另存为对话框 → 令牌写盘(与报告导出同流程)。 */
+  const onExport = async () => {
+    if (exporting) return;
+    const msgs = useMessagesStore.getState().bySession[sessionId] ?? [];
+    if (msgs.length === 0) {
+      onError('当前会话没有可导出的消息');
+      return;
+    }
+    setExporting(true);
+    try {
+      const pick = await ipc.pickSavePath(
+        '导出会话(Markdown)',
+        `${safeExportName(title || '会话')}.md`,
+        'Markdown 文档',
+        'md',
+      );
+      if (!pick) return;
+      const md = buildSessionMarkdown(title, msgs);
+      const doExport = (overwrite: boolean) =>
+        ipc.sessionExportMarkdown(sessionId, md, pick.token, overwrite);
+      let saved: string;
+      try {
+        saved = await doExport(pick.existed);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg === ipc.EXPORT_TARGET_EXISTS) {
+          if (!window.confirm(`目标文件已存在:\n${pick.path}\n\n确认覆盖?`)) return;
+          saved = await doExport(true);
+        } else {
+          throw e;
+        }
+      }
+      if (saved) {
+        setExported(true);
+        setTimeout(() => setExported(false), 1500);
+      }
+    } catch (e) {
+      onError(`导出失败:${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExporting(false);
+    }
+  };
   const activeBranchInfo = useMemo(
     () => branches.find((b) => b.branch_id === activeBranch),
     [branches, activeBranch],
@@ -114,7 +230,50 @@ export function ChatHeader({
 
   return (
     <div className="chat-head">
-      <span className="chat-title ellipsis">{title}</span>
+      {titleEdit !== null ? (
+        <div className="chat-title-edit">
+          <input
+            autoFocus
+            value={titleEdit}
+            onChange={(e) => setTitleEdit(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void onRenameTitle();
+              if (e.key === 'Escape') setTitleEdit(null);
+            }}
+            onBlur={() => void onRenameTitle()}
+          />
+          <button
+            type="button"
+            title="确认"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => void onRenameTitle()}
+          >
+            <IconCheck size={14} />
+          </button>
+          <button
+            type="button"
+            title="取消"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setTitleEdit(null)}
+          >
+            <IconX size={14} />
+          </button>
+        </div>
+      ) : (
+        <>
+          <span className="chat-title ellipsis" title={title}>
+            {title}
+          </span>
+          <button
+            type="button"
+            className="chat-title-btn"
+            title="重命名会话(同步更新记忆标题)"
+            onClick={() => setTitleEdit(title)}
+          >
+            <IconEdit size={13} />
+          </button>
+        </>
+      )}
       {/* F4:分支指示条(仅多分支或激活分支非 main 时显示) */}
       {(branches.length > 1 || activeBranch !== 'main') && (
         <div className="branch-chip-wrap">
@@ -218,6 +377,15 @@ export function ChatHeader({
         {current ? current.model : '未配置模型'}
         {current && <span className="tag">{current.providerId}</span>}
         <IconChevronDown size={13} />
+      </button>
+      <button
+        type="button"
+        className="chat-panel-toggle"
+        onClick={() => void onExport()}
+        disabled={exporting}
+        title={exported ? '已导出' : '导出会话为 Markdown'}
+      >
+        {exported ? <IconCheck size={14} /> : <IconDownload size={14} />}
       </button>
       <button
         type="button"

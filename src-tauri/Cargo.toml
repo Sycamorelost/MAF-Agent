@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "1.16.0"
+version = "1.16.1"
 description = "MAF Agent —— 本地优先的桌面智能体框架"
 authors = ["梧桐吾桐 (Sycamorelost)"]
 license = "Apache-2.0"

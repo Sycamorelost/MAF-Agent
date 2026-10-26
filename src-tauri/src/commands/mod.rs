@@ -30,6 +30,7 @@ macro_rules! all_commands {
             crate::commands::memory::crud::get_session,
             crate::commands::memory::crud::session_get_todos,
             crate::commands::memory::crud::rename_session,
+            crate::commands::memory::crud::session_export_markdown,
             crate::commands::memory::crud::set_session_model,
             crate::commands::memory::crud::delete_session,
             crate::commands::memory::crud::delete_session_if_empty,

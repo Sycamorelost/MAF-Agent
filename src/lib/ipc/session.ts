@@ -40,6 +40,14 @@ export const chatNoticeEvent = (sessionId: string) => `chat-notice-${sessionId}`
 export const renameSession = (id: string, title: string) =>
   invoke<void>('rename_session', { id, title });
 
+/** 导出会话为 Markdown(前端组装内容,后端凭 pickSavePath 令牌写盘),返回实际写入路径。 */
+export const sessionExportMarkdown = (
+  id: string,
+  markdown: string,
+  token: string,
+  overwrite: boolean,
+) => invoke<string>('session_export_markdown', { id, markdown, token, overwrite });
+
 export const setSessionModel = (id: string, modelId: string) =>
   invoke<void>('set_session_model', { id, modelId });
 

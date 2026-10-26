@@ -72,6 +72,28 @@ pub fn rename_session(id: String, title: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 导出会话为 Markdown:内容由前端按当前分支视图组装,后端只做路径/令牌校验与写盘。
+/// 与研究报告导出同一套安全模型(N-6 令牌 + H-2 路径规范与覆盖校验)。
+#[tauri::command]
+pub fn session_export_markdown(
+    id: String,
+    markdown: String,
+    token: String,
+    overwrite: bool,
+    tokens: State<'_, crate::commands::research::ExportPathTokens>,
+) -> Result<String, String> {
+    memory::validate_id(&id)?;
+    // 会话必须存在,避免向孤儿 id 写文件
+    sessions::get(&id)?.ok_or("会话不存在")?;
+    let target = crate::commands::research::ensure_export_path(
+        &tokens.resolve(&token)?.to_string_lossy(),
+        "md",
+    )?;
+    crate::commands::research::ensure_writable(&target, overwrite)?;
+    std::fs::write(&target, markdown).map_err(|e| format!("写入 Markdown 失败: {e}"))?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
 /// 改会话当前模型。
 #[tauri::command]
 pub fn set_session_model(id: String, model_id: String) -> Result<(), String> {

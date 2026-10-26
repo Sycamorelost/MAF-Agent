@@ -5,7 +5,7 @@ import React from 'react';
 import 'highlight.js/styles/vs2015.css';
 import type { MessageRow, SourceItem } from '../lib/ipc';
 import { MemoMarkdown, CodeBlock } from './MemoMarkdown';
-import ReasoningBlock, { estimateReasoningTokens } from './ReasoningBlock';
+import ReasoningBlock from './ReasoningBlock';
 import { AttachmentCards } from './bubble/AttachmentCards';
 import { SourceCards } from './bubble/SourceCards';
 import { IconCheck, IconCopy, IconEdit, IconPin, IconQuote, IconRefresh, IconSwap, IconTranslate, IconTrash } from './icons';
@@ -102,18 +102,6 @@ function MessageBubbleInner({
           {msg.model_id && <span>{msg.model_id}</span>}
           {msg.model_id && msg.created && ' · '}
           {msg.created && <span>{new Date(msg.created).toLocaleTimeString('zh-CN')}</span>}
-          {!isUser && (msg.tokens ?? 0) > 0 && (
-            <span
-              className="tok-split"
-              title={
-                reasoning
-                  ? `其中思考 ${estimateReasoningTokens(reasoning)} tok(估算,已含在输出内) / 回答 ${msg.tokens} tok`
-                  : `回答 ${msg.tokens} tok`
-              }
-            >
-              {reasoning ? `其中思考 ${estimateReasoningTokens(reasoning)} / 回答 ${msg.tokens} tok` : `${msg.tokens} tok`}
-            </span>
-          )}
           {hasActions && (
             <span className="msg-actions">
               <button type="button" title={copied ? '已复制' : '复制'} onClick={onCopy}>

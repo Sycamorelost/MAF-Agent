@@ -18,7 +18,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">MAF Agent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.16.0'} · 桌面端 · Windows
+            版本 {appVersion || '1.16.1'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
@@ -27,27 +27,21 @@ export function AboutView({ appVersion }: AboutViewProps) {
         </div>
       </div>
 
-      {/* 版本更新摘要:只列用户可感知的改动,与 val.md(背景主题专项计划)的实施范围对应 */}
+      {/* 版本更新摘要:只列用户可感知的改动 */}
       <div className="set-card">
-        <div className="set-card-h">本次更新 · v1.16.0</div>
+        <div className="set-card-h">本次更新 · v1.16.1</div>
         <div className="set-card-b">
           <p>
-            新增:主题配色——预制 6 套主题(默认纯白 / 雾霾蓝 / 深夜蓝 / 松烟绿 /
-            暖橙日落 / 樱花粉),一键切换界面配色;只改变背景与文字颜色,
-            不影响按钮与排版。
+            新增:会话改名——会话头部标题旁的铅笔按钮进入改名,确认后会话标题与
+            记忆文件(memory.md)标题同步更新。
           </p>
           <p>
-            新增:自定义壁纸——上传 JPG / PNG / WebP 图片(单张不超过 8 MB)作为界面背景,
-            图片之上叠加半透明渐变保证文字可读;支持遮罩不透明度调节;
-            壁纸与主题互斥,更换即时生效。
+            新增:会话导出——会话头部下载按钮将当前会话导出为 Markdown 文件,
+            含每轮提问与回答(带模型与时间)、思考过程(折叠展示)、来源列表与附件计数。
           </p>
           <p>
-            新增:界面字号缩放——85%–130% 预设档位加自定义滑块,设置实时生效并记住,
-            下次启动自动恢复。
-          </p>
-          <p>
-            优化:全部背景与文字颜色改为 CSS 变量驱动;消息编辑框改为圆角边框;
-            壁纸缩略图与背景共用同一份图像资源,降低内存占用。
+            优化:消息下方信息行精简为「模型 · 时间」;提问/回答数、输出 token
+            (含思考估算)、会话时间范围与所用模型,统一汇总到纲要面板顶部。
           </p>
         </div>
       </div>
