@@ -18,7 +18,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">MAF Agent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.15.0'} · 桌面端 · Windows
+            版本 {appVersion || '1.15.1'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
@@ -29,11 +29,11 @@ export function AboutView({ appVersion }: AboutViewProps) {
 
       {/* 版本更新摘要:只列用户可感知的改动,与 val.md §11 的实施记录对应 */}
       <div className="set-card">
-        <div className="set-card-h">本次更新 · v1.15.0</div>
+        <div className="set-card-h">本次更新 · v1.15.1</div>
         <div className="set-card-b">
           <p>
-            安全:依赖漏洞清零——zip 升级至 9.x、webpki-root-certs 修复,CI 接入 cargo
-            audit 检测门禁。
+            修复:MCP server 每次对话被 kill+重启——已改为进程幂等复用,
+            启动探活成功则跳过;子进程控制台弹窗已抑制。
           </p>
           <p>
             安全:审计日志新增密钥脱敏与按大小轮转(8 MB × 3 份),避免明文 token

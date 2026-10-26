@@ -348,16 +348,30 @@ pub async fn mcp_collect_tools(
     let mut out = Vec::new();
     for server in servers {
         let name = server.name.clone();
-        // 未启动则尝试懒启动一次,失败则跳过(不阻塞本次对话)
+        // 懒启动:应用启动时已统一拉起过所有 enabled server,
+        // 这里只在 handle 不存在或已 stale(进程死了)时才启动/重启一次;
+        // 幂等保护在 start_server 内部:健康运行的 server 不会被 kill+respawn。
         let tools = match runtime.list_tools(&name).await {
             Ok(t) => t,
-            Err(_) => match runtime.start_from_config(&server, &dir).await {
-                Ok(()) => match runtime.list_tools(&name).await {
-                    Ok(t) => t,
-                    Err(_) => continue,
-                },
-                Err(_) => continue,
-            },
+            Err(_) => {
+                let was_running = runtime.is_running(&name).await;
+                match runtime.start_from_config(&server, &dir).await {
+                    Ok(()) => match runtime.list_tools(&name).await {
+                        Ok(t) => t,
+                        Err(e) => {
+                            log::warn!("重启后仍 list_tools 失败 `{name}`: {e}");
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        log::warn!(
+                            "{} MCP server `{name}` 失败: {e}",
+                            if was_running { "stale 重启" } else { "懒启动" }
+                        );
+                        continue;
+                    }
+                }
+            }
         };
         for t in tools {
             let params = if t.input_schema.is_null() {

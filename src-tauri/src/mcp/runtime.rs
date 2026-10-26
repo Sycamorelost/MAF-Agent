@@ -64,7 +64,13 @@ struct McpHandle {
 }
 
 impl McpRuntime {
-    /// 启动一个 server。
+    /// 查询指定 server 是否已启动(仅检查 handle 存在,不做 RPC 探活,低开销)。
+    pub async fn is_running(&self, name: &str) -> bool {
+        self.handles.lock().await.contains_key(name)
+    }
+
+    /// 启动一个 server。已在运行的 server 不会被 kill+respawn(幂等)。
+    /// 探活失败才清理 stale handle 后重新 spawn。
     pub async fn start_server(
         &self,
         name: &str,
@@ -72,10 +78,26 @@ impl McpRuntime {
         args: &[String],
         env: &[(String, String)],
     ) -> Result<(), String> {
-        let mut lock = self.handles.lock().await;
-        if let Some(old) = lock.remove(name) {
-            drop(old);
+        // --- 第一段:幂等检查 ---
+        // 先只检查 key 是否存在,不持锁做 RPC 探活(RunningService 是 Send,peer() 不是 &self)
+        {
+            let exists = self.handles.lock().await.contains_key(name);
+            if exists {
+                // 探活:list_tools 成功说明健康,幂等跳过
+                if let Ok(()) = self.peek_alive(name).await {
+                    log::debug!("[MCP] server `{name}` 已在运行,跳过启动");
+                    return Ok(());
+                }
+                // stale:清理
+                let mut lock = self.handles.lock().await;
+                if let Some(old) = lock.remove(name) {
+                    drop(old);
+                    log::info!("[MCP] server `{name}` 连接已断,清理旧进程后重启");
+                }
+            }
         }
+
+        let mut lock = self.handles.lock().await;
 
         let client_info = ClientConfig::new(
             ClientCapabilities::default(),
@@ -107,6 +129,19 @@ impl McpRuntime {
 
         log::info!("[MCP] server `{name}` started");
         Ok(())
+    }
+
+    /// 探活:对已持有的 handle 做一次轻量 RPC,成功即认为健康;超时 5s 保护,
+    /// 避免 server 进程挂住时无限阻塞其他 MCP 操作。
+    async fn peek_alive(&self, name: &str) -> Result<(), String> {
+        use tokio::time::{Duration, timeout};
+        timeout(
+            Duration::from_secs(5),
+            self.list_tools(name),
+        )
+        .await
+        .map_err(|_| format!("probe `{name}` 超时(5s,进程可能已挂)"))?
+        .map(|_| ())
     }
 
     /// 按配置启动 server —— 统一入口,UI 手动启动与对话前懒启动都走这里。
@@ -144,19 +179,34 @@ impl McpRuntime {
     }
 
     /// 启动远端 Streamable HTTP MCP server(无子进程,无本地执行面)。
+    /// 幂等:已在运行且探活成功时跳过重连;连接已断才重连。
     pub async fn start_http(
         &self,
         name: &str,
         url: &str,
         headers: &HashMap<String, String>,
     ) -> Result<(), String> {
-        // 先握手(不持锁),成功后再替换旧连接 —— 新连接失败时旧连接仍可用
+        // --- 第一段:幂等检查 ---
+        {
+            let exists = self.handles.lock().await.contains_key(name);
+            if exists {
+                if let Ok(()) = self.peek_alive(name).await {
+                    log::debug!("[MCP] http server `{name}` 已在运行,跳过启动");
+                    return Ok(());
+                }
+                // stale:清理
+                let mut lock = self.handles.lock().await;
+                if let Some(old) = lock.remove(name) {
+                    drop(old);
+                    log::info!("[MCP] http server `{name}` 连接已断,清理旧连接后重启");
+                }
+            }
+        }
+
+        // 真正重连(不持锁)
         let runtime = crate::mcp::http::connect(name, url, headers).await?;
 
         let mut lock = self.handles.lock().await;
-        if let Some(old) = lock.remove(name) {
-            drop(old);
-        }
         lock.insert(
             name.to_string(),
             McpHandle {
@@ -278,6 +328,8 @@ impl McpRuntime {
 /// `.cmd/.bat` 再交给 `cmd.exe /C` 执行。
 #[cfg(windows)]
 fn build_command(command: &str, args: &[String]) -> Result<Command, String> {
+    // 禁止子进程弹出黑色控制台窗口(npx/node/python 等)
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let (exe, needs_shell) = resolve_windows_command(command)?;
     if needs_shell {
         // 走 cmd.exe 时参数会二次解析,必须拒绝 shell 元字符
@@ -287,10 +339,12 @@ fn build_command(command: &str, args: &[String]) -> Result<Command, String> {
         let mut c = Command::new("cmd");
         c.raw_arg("/C");
         c.raw_arg(build_cmd_line(&exe, args));
+        c.creation_flags(CREATE_NO_WINDOW);
         return Ok(c);
     }
     let mut c = Command::new(&exe);
     c.args(args);
+    c.creation_flags(CREATE_NO_WINDOW);
     Ok(c)
 }
 
