@@ -8,7 +8,7 @@ MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，�
 
 | 项目 | 说明 |
 |---|---|
-| **版本** | v1.16.2 |
+| **版本** | v1.16.3 |
 | **许可证** | Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明） |
 | **平台** | Windows 10 / 11（64 位） |
 

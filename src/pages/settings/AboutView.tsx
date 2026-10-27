@@ -18,7 +18,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">MAF Agent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.16.2'} · 桌面端 · Windows
+            版本 {appVersion || '1.16.3'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
@@ -29,15 +29,20 @@ export function AboutView({ appVersion }: AboutViewProps) {
 
       {/* 版本更新摘要:只列用户可感知的改动 */}
       <div className="set-card">
-        <div className="set-card-h">本次更新 · v1.16.2</div>
+        <div className="set-card-h">本次更新 · v1.16.3</div>
         <div className="set-card-b">
           <p>
-            优化:窄窗自适应——窗口最小尺寸由 520×400 放宽至 380×280;
-            新增 480px / 420px 两档响应式断点,标题栏与模型切换器缩为图标形态,
-            页头提示自动隐藏,列表卡片内边距紧凑,支持更窄更小的窗口布局。
+            性能：长会话首字延迟大幅下降。新增「上下文窗口」设置（默认 24 条，0=全部）；
+            记忆提炼改为增量水位线，不再每轮重复触发；后端上下文硬上限收紧到 40 条 / 48k 字符，
+            超限时自动摘要压缩早期轮次而非丢弃；工具结果截断到 1000 字符，单条请求 token 显著下降。
           </p>
           <p>
-            修复:极窄窗下模型切换器仅显示状态点与箭头,避免会话头部按钮溢出。
+            功能：彻底移除壁纸模块，改为 6 套主题色 + 字号缩放；新增对话工具调用总开关（默认关闭，需用时在 MCP 设置里打开）；
+            内置工具描述精简，思考默认关闭；新会话记忆注入策略默认 hybrid。
+          </p>
+          <p>
+            修复：上下文压缩器尾部保留预算与新上限不一致导致压缩失效；旧库新建会话仍沿用 full 策略；
+            切换模型页组件间距适配；玻璃面板与代码块对比度优化。
           </p>
         </div>
       </div>
