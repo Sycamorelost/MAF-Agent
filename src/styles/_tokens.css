@@ -566,6 +566,27 @@ body{
   .cards{gap:var(--space-2)}
   .composer-bar{padding:var(--space-2) var(--space-3) var(--space-3)}
 }
+/* 极窄窗(380-420px):压低内边距/字号/标题栏高度,组件缩成图标按钮 */
+@media (max-width:420px){
+  :root{
+    --pad-x:var(--space-3);
+    --pad-x-narrow:var(--space-2);
+    --sidebar-w:200px;
+    --aside-w:220px;
+    --titlebar-h:32px;
+    --font-h3:calc(13px * var(--ui-scale));
+    --font-body:calc(12.5px * var(--ui-scale));
+    --font-sub:calc(11.5px * var(--ui-scale));
+    --font-caption:calc(10.5px * var(--ui-scale));
+    --font-micro:calc(9.5px * var(--ui-scale));
+  }
+  .titlebar{gap:var(--space-1)}
+  .menu-btn{width:28px;height:28px}
+  .tb-pill{padding:1px;gap:1px}
+  .tb-pill-btn{width:24px;height:22px}
+  .tb-pill-btn svg{width:13px;height:13px}
+  .win-btn{width:28px}
+}
 /* 宽窗:栏宽升档,避免大屏下内容仍被限制在窄列 */
 @media (min-width:1600px){
   :root{ --mempanel-w:360px; }

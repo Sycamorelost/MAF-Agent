@@ -1392,6 +1392,24 @@ body.aside-open .main { padding-left: var(--aside-w); }
   .model-switch { min-width: 0; padding: 6px 8px; }
   .model-switch .tag { display: none; }
 }
+/* 窄窗(<480px):页头换行、隐藏次要提示,列表卡片紧凑 */
+@media (max-width: 480px) {
+  .pg-main-head { flex-wrap: wrap; row-gap: 0; }
+  .pg-main-head .topic { width: 100%; }
+  .pg-hint { width: 100%; margin-top: 2px; }
+  .rp-hist-list { padding: var(--space-2) var(--pad-x); }
+  .rp-hist-item { padding: var(--space-2) var(--space-3); gap: var(--space-2); }
+}
+/* 极窄窗(<420px):模型切换器缩成状态点+箭头,会话头部按钮更小 */
+@media (max-width: 420px) {
+  .chat-head { height: 42px; padding: 0 var(--space-2); gap: var(--space-1); }
+  .model-switch { padding: 4px 6px; font-size: 0 !important; }
+  .model-switch .stat-dot { display: inline-block; }
+  .model-switch svg { font-size: 13px; color: var(--text-3); }
+  .chat-panel-toggle { width: 26px; height: 26px; }
+  .chat-title-btn { width: 22px; height: 22px; }
+  .pg-hint { display: none; }
+}
 
 /* ============ 深度研究(Phase 2) ============ */
 
