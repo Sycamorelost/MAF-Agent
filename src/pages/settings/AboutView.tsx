@@ -18,7 +18,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">MAF Agent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.16.1'} · 桌面端 · Windows
+            版本 {appVersion || '1.16.2'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
@@ -29,19 +29,15 @@ export function AboutView({ appVersion }: AboutViewProps) {
 
       {/* 版本更新摘要:只列用户可感知的改动 */}
       <div className="set-card">
-        <div className="set-card-h">本次更新 · v1.16.1</div>
+        <div className="set-card-h">本次更新 · v1.16.2</div>
         <div className="set-card-b">
           <p>
-            新增:会话改名——会话头部标题旁的铅笔按钮进入改名,确认后会话标题与
-            记忆文件(memory.md)标题同步更新。
+            优化:窄窗自适应——窗口最小尺寸由 520×400 放宽至 380×280;
+            新增 480px / 420px 两档响应式断点,标题栏与模型切换器缩为图标形态,
+            页头提示自动隐藏,列表卡片内边距紧凑,支持更窄更小的窗口布局。
           </p>
           <p>
-            新增:会话导出——会话头部下载按钮将当前会话导出为 Markdown 文件,
-            含每轮提问与回答(带模型与时间)、思考过程(折叠展示)、来源列表与附件计数。
-          </p>
-          <p>
-            优化:消息下方信息行精简为「模型 · 时间」;提问/回答数、输出 token
-            (含思考估算)、会话时间范围与所用模型,统一汇总到纲要面板顶部。
+            修复:极窄窗下模型切换器仅显示状态点与箭头,避免会话头部按钮溢出。
           </p>
         </div>
       </div>

@@ -2,11 +2,15 @@
 
 > 本地优先的 AI 桌面工作台 —— 把研究、学习与创作的过程，留在自己手里。
 
-MAF Agent(MetaAgent Float)是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust + React 19** 构建。与云端 AI 助手不同，MAF 不托管任何模型与数据：你自备 API Key，数据全部存储在本机(SQLite + 纯文本文件)，只与你的模型服务商直连。
+MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust + React 19** 构建。
 
-- **版本**:v1.16.1
-- **许可证**:Apache-2.0(附带 [NOTICE](NOTICE) 第三方衍生声明)
-- **平台**:Windows 10 / 11(64 位)
+与云端 AI 助手不同，MAF **不托管任何模型与数据**：你自备 API Key，数据全部存储在本机（SQLite + 纯文本文件），只与你的模型服务商直连。
+
+| 项目 | 说明 |
+|---|---|
+| **版本** | v1.16.2 |
+| **许可证** | Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明） |
+| **平台** | Windows 10 / 11（64 位） |
 
 ---
 
@@ -100,20 +104,20 @@ MAF Agent(MetaAgent Float)是一款开源的 Windows 桌面 AI 工作站，基�
 
 | 层 | 技术 |
 |---|---|
-| 桌面框架 | Tauri 2.12(Rust + 系统 WebView2,不捆绑 Chromium) |
+| 桌面框架 | Tauri 2.12（Rust + 系统 WebView2，不捆绑 Chromium） |
 | 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
-| 后端 | Rust(edition 2024,rust 1.90+),147 个 IPC 命令 |
-| 本地数据库 | SQLite(rusqlite,bundled,SCHEMA_VERSION 18) |
-| 网络 | reqwest(rustls-tls)+ SSE 流式解析,Rust 层直推前端 |
-| 附件解析 | pdf-extract / docx-rs / calamine(全部本地原生) |
-| 密钥保护 | Windows DPAPI + AES-GCM 双路径加密(`provider/keychain.rs`) |
+| 后端 | Rust（edition 2024，rust 1.90+），约 190 个 IPC 命令 |
+| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 20） |
+| 网络 | reqwest（rustls-tls）+ SSE 流式解析，Rust 层直推前端 |
+| 附件解析 | pdf-extract / docx-rs / calamine（全部本地原生） |
+| 密钥保护 | Windows DPAPI + AES-GCM 双路径加密（`provider/keychain.rs`） |
 | 渲染 | react-markdown + KaTeX + Mermaid + ECharts + highlight.js |
 
 **架构要点**
 
-- 复用系统 WebView2 而非捆绑 Chromium:安装包约 **24 MB**,显著小于 Electron 系同类产品
+- 复用系统 WebView2 而非捆绑 Chromium：安装包约 **12–16 MB**（NSIS / MSI），显著小于 Electron 系同类产品
 - 附件解析、搜索排序、流式转发、密钥链等重逻辑全部在 Rust 原生层完成
-- 严格 CSP 白名单:`default-src 'self'; object-src 'none'; base-uri 'none'`,无远程脚本
+- 严格 CSP 白名单：`default-src 'self'; object-src 'none'; base-uri 'none'`，无远程脚本
 - 前端构建产物约 8.4 MB
 
 ---
@@ -175,7 +179,7 @@ pnpm tauri build
 
 ```bash
 cd src-tauri
-cargo test        # Rust 单元测试(236 项)
+cargo test        # Rust 单元测试(约 330 项)
 cargo check       # 静态检查
 ```
 
@@ -210,7 +214,7 @@ MetaAgent Float/
     ├── tauri.conf.json         # 窗口、CSP、打包配置
     ├── resources/skills/       # 23 份科研方法论技能文档
     └── src/
-        ├── commands/           # 147 个 Tauri IPC 命令
+        ├── commands/           # 约 190 个 Tauri IPC 命令
         │   ├── provider/       # 模型接入/密钥链/流式/用量
         │   ├── research/       # 研究管线/导出/参考文献
         │   ├── memory/         # 记忆 CRUD/版本 diff
