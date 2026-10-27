@@ -202,19 +202,35 @@ pub struct SummarizeMemoryInput {
 pub async fn summarize_memory(input: SummarizeMemoryInput) -> Result<String, String> {
     use futures::StreamExt;
 
-    // 1. 读现有 memory.md
-    let (fm, body) = memory::read_memory(&input.session_id)?;
+    // 1. 读现有 memory.md(frontmatter 用于回写水位线)
+    let (mut fm, body) = memory::read_memory(&input.session_id)?;
 
-    // 2. 最近 50 条消息
-    let recent = messages::recent(&input.session_id, 50)?;
+    // 2. 最近 20 条消息(控制提炼输入预算:长会话不再把全量历史喂给提炼模型)
+    let recent = messages::recent(&input.session_id, 20)?;
     if recent.is_empty() {
         return Err("会话无消息,无需提炼".into());
     }
-    let history_text = recent
-        .iter()
-        .map(|m| format!("{}: {}", m.role, m.content))
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    // 单条截断 1000 字符、正文总量 ≤ 8000 字符,防止提炼调用本身变成 1w+ token
+    const PER_MSG_CHARS: usize = 1_000;
+    const TOTAL_CHARS: usize = 8_000;
+    let mut picked: Vec<String> = Vec::new();
+    let mut used = 0usize;
+    for m in recent.iter().rev() {
+        let text = if m.content.chars().count() > PER_MSG_CHARS {
+            let cut: String = m.content.chars().take(PER_MSG_CHARS).collect();
+            format!("{cut}…(已截断)")
+        } else {
+            m.content.clone()
+        };
+        let line = format!("{}: {}", m.role, text);
+        if used + line.len() > TOTAL_CHARS && !picked.is_empty() {
+            break;
+        }
+        used += line.len();
+        picked.push(line);
+    }
+    picked.reverse();
+    let history_text = picked.join("\n\n");
 
     // 3. 组请求
     let user = format!(
@@ -272,7 +288,9 @@ pub async fn summarize_memory(input: SummarizeMemoryInput) -> Result<String, Str
         return Err("提炼结果为空".into());
     }
 
-    // 6. 用现有 frontmatter 重新渲染完整文件内容
+    // 6. 用现有 frontmatter 重新渲染完整文件内容(并把提炼水位线推进到本次最后一条消息)
+    fm.summarized_msg_id = recent.last().map(|m| m.id).unwrap_or(fm.summarized_msg_id);
+    fm.updated = chrono::Local::now().to_rfc3339();
     memory::frontmatter::render(&fm, &new_body)
 }
 

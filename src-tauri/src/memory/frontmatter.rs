@@ -25,6 +25,9 @@ pub struct Frontmatter {
     pub memory_version: u32,
     #[serde(default)]
     pub updated: String,
+    /// 上次提炼时已覆盖到的最后一条消息 id(增量判定用;0 = 从未提炼)
+    #[serde(default)]
+    pub summarized_msg_id: i64,
 
     /// 用户自定义字段,序列化时平铺回去
     #[serde(flatten)]
@@ -44,6 +47,7 @@ impl Default for Frontmatter {
             models_used: Vec::new(),
             memory_version: 1,
             updated: String::new(),
+            summarized_msg_id: 0,
             extra: BTreeMap::new(),
         }
     }

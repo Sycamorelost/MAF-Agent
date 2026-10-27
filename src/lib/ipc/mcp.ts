@@ -29,6 +29,8 @@ export interface McpConfig {
   servers: McpServerConfig[];
   /** Phase 6:是否向模型暴露内置工具(get_now / shell_exec / fs_*)。默认开启(开箱即用)。 */
   builtin_tools?: boolean;
+  /** 对话工具调用总开关:关闭时不下发任何工具定义(省 token/降延迟)。默认关闭。 */
+  tools_enabled?: boolean;
   /** 预置服务已合并到哪一版(后端用于补齐新增预置项,前端只做透传)。 */
   presets_version?: number;
   /** 下载资源优先使用国内镜像(npx→npmmirror,uvx/pip→清华 PyPI)。默认开启。 */

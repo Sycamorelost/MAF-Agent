@@ -517,7 +517,7 @@ export function useModelHandoff({
   // D8:交接弹窗预选策略(目标模型的单模型配置 > 会话当前策略)
   const modelConfig = useProvidersStore((s) => s.modelConfig);
   const handoffDefaultStrategy: MemoryStrategy = (() => {
-    const fallback = session?.memory_injection_strategy ?? 'full';
+    const fallback = session?.memory_injection_strategy ?? 'hybrid';
     if (!handoff) return fallback;
     const i = handoff.to.indexOf('/');
     if (i < 0) return fallback;

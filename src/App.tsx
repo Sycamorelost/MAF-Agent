@@ -105,24 +105,6 @@ function MainApp() {
     useThemeStore.getState().applyTheme(useThemeStore.getState().theme);
   }, []);
 
-  /** 启动时从 AppSettings 读取壁纸路径,读为 data URL 后挂载(WebView2 不支持 file://)。 */
-  useEffect(() => {
-    ipc
-      .getSettings()
-      .then(async (s) => {
-        useThemeStore.getState().setWallpaperCover(s.wallpaper_cover ?? 0);
-        if (s.wallpaper_path) {
-          try {
-            const dataUrl = await ipc.readWallpaper(s.wallpaper_path);
-            useThemeStore.getState().setWallpaper(s.wallpaper_path, dataUrl);
-          } catch (e) {
-            console.error('[wallpaper] 读取壁纸失败:', e);
-          }
-        }
-      })
-      .catch((e) => console.error('[wallpaper] 读取设置失败:', e));
-  }, []);
-
   return (
     <div className="window">
       <Titlebar />

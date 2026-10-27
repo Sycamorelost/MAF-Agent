@@ -3,8 +3,10 @@
 
 use crate::provider::{ChatMessage, SubLlm};
 
-/// 压缩后尾部保留的字符预算(≈最近 30k tokens;需小于 chat.rs 的 MAX_CONTEXT_CHARS 留出摘要空间)。
-const KEEP_TAIL_CHARS: usize = 120_000;
+/// 压缩后尾部保留的字符预算(≈最近 15k tokens)。
+/// 必须明显小于 chat.rs 的 MAX_CONTEXT_CHARS(48k):否则「保留尾部」会把全部消息都留下,
+/// head 为空 → 永远返回 Ok(0),LLM 摘要压缩形同虚设,早期对话被 prune_context 直接丢弃。
+const KEEP_TAIL_CHARS: usize = 30_000;
 /// 摘要输出 token 上限。
 const SUMMARY_MAX_TOKENS: u32 = 1200;
 /// 单条消息进摘要素材的截断长度(防超大工具结果灌进摘要请求)。

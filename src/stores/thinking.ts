@@ -9,11 +9,11 @@ export interface ThinkingSelection {
   level: ThinkingLevel;
 }
 
-/** 全局默认档位(improving.md:默认 Medium)。 */
+/** 全局默认档位(选择开启思考时使用的档位)。 */
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = 'medium';
 
 interface ThinkingState {
-  /** sessionId -> 用户选择;缺省 = on + 全局默认档 */
+  /** sessionId -> 用户选择;缺省 = 关闭思考(需要时在对话页手动开启) */
   bySession: Record<string, ThinkingSelection>;
   init: (sessionId: string, defaultLevel?: ThinkingLevel) => void;
   set: (sessionId: string, sel: ThinkingSelection) => void;
@@ -27,7 +27,8 @@ export const useThinkingStore = create<ThinkingState>((set, get) => ({
     set((s) => ({
       bySession: {
         ...s.bySession,
-        [sessionId]: { on: true, level: defaultLevel ?? DEFAULT_THINKING_LEVEL },
+        // 默认关闭思考:长上下文下思考 token 会显著拉长首字延迟,需要时由用户手动开启
+        [sessionId]: { on: false, level: defaultLevel ?? DEFAULT_THINKING_LEVEL },
       },
     }));
   },

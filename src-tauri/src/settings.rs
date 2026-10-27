@@ -26,16 +26,13 @@ pub struct AppSettings {
     /// 导航菜单中隐藏的功能项(对话/设置始终显示;空 = 全部显示)
     #[serde(default)]
     pub hidden_nav_items: Vec<String>,
-    /// 自定义壁纸绝对路径(None = 未设置,用主题纯色背景)
-    #[serde(default)]
-    pub wallpaper_path: Option<String>,
-    /// 壁纸遮罩不透明度 0-100(0=壁纸完全可见,100=主题默认遮罩)
-    #[serde(default = "default_wallpaper_cover")]
-    pub wallpaper_cover: u8,
+    /// 对话上下文窗口:每轮携带的历史消息条数(0 = 全部;默认 24)
+    #[serde(default = "default_context_window")]
+    pub context_window_messages: u32,
 }
 
-fn default_wallpaper_cover() -> u8 {
-    100
+fn default_context_window() -> u32 {
+    24
 }
 
 impl Default for AppSettings {
@@ -46,8 +43,7 @@ impl Default for AppSettings {
             selection_ask_enabled: true,
             minimize_to_tray: false,
             hidden_nav_items: Vec::new(),
-            wallpaper_path: None,
-            wallpaper_cover: 100,
+            context_window_messages: default_context_window(),
         }
     }
 }

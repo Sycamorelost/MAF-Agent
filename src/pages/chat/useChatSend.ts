@@ -82,6 +82,21 @@ export function useChatSend({
       alive = false;
     };
   }, []);
+  /** 全局上下文窗口(条数):会话自身未设置(max_context_messages=0)时作为默认值。
+   *  默认 24 条 ≈ 12 轮,避免长会话把全部历史原样重发导致 token 线性膨胀。 */
+  const [ctxWindow, setCtxWindow] = useState(24);
+  useEffect(() => {
+    let alive = true;
+    ipc
+      .getSettings()
+      .then((s) => alive && setCtxWindow(s.context_window_messages ?? 24))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  /** 上次做过记忆预算检查的正文快照:内容没变就不重复检查(避免每轮同步等待提炼调用) */
+  const lastBudgetMemRef = useRef<string | null>(null);
   /** 用指定记忆正文 + 策略组 system(交接确认时用最新值,不等 state 生效)。
    *  B4:sessions.system_prompt 是唯一基座事实源(绑定 Agent / 应用为提示词时
    *  后端已把渲染变量的 prompt 写入);agent 模板原文仅在旧数据(绑定但会话 prompt 为空)时兜底。 */
@@ -97,7 +112,7 @@ export function useChatSend({
     [session?.system_prompt, agent, studyDigest],
   );
   const buildSystem = useCallback(
-    (): string => buildSystemWith(memoryBody, session?.memory_injection_strategy ?? 'full'),
+    (): string => buildSystemWith(memoryBody, session?.memory_injection_strategy ?? 'hybrid'),
     [memoryBody, session?.memory_injection_strategy, buildSystemWith],
   );
   /** F5:用指定模型(缺省当前模型)跑一次流式;modelOverride 只影响本次,不改全局/会话模型,
@@ -146,9 +161,10 @@ export function useChatSend({
             // 思考流分流:独立缓冲去抖,折叠块展示,不进正文
             else if (chunk.type === 'reasoning') pushStreamReasoning(sessionId, chunk.content);
             // Phase 5e:工具执行结果 —— 以 maf-tool 围栏块并入正文(小字一行 + 折叠详情)
+            // 性能:该正文会落库并随历史每轮重发,故单条结果截断到 1000 字符(原 4000)
             else if (chunk.type === 'tool_call_result') {
-              const body = chunk.content.length > 4000
-                ? `${chunk.content.slice(0, 4000)}\n…(已截断)`
+              const body = chunk.content.length > 1000
+                ? `${chunk.content.slice(0, 1000)}\n…(已截断,完整结果见工具详情)`
                 : chunk.content;
               const payload = JSON.stringify({
                 s: chunk.server_name, t: chunk.tool_name, ok: chunk.ok, c: body,
@@ -191,7 +207,7 @@ export function useChatSend({
   const rebuildHistory = (): { role: string; content: string }[] => {
     if (!sessionId) return [];
     const latest = useMessagesStore.getState().bySession[sessionId] ?? [];
-    return rebuildSendHistory(latest, session?.max_context_messages ?? 0, buildSystem());
+    return rebuildSendHistory(latest, session?.max_context_messages || ctxWindow, buildSystem());
   };
 
   // ---------- 消息操作(useCallback 稳定引用,配合 MessageList memo) ----------
@@ -280,12 +296,21 @@ export function useChatSend({
   // ---------- D3.5:记忆预算护栏(发送前检测,超限自动压缩) ----------
   const enforceMemoryBudget = async () => {
     if (!sessionId || !current) return;
+    // 记忆正文未变则跳过:避免每轮都排队一次「提炼」LLM 调用,徒增首字延迟
+    if (lastBudgetMemRef.current === memoryBody) return;
+    lastBudgetMemRef.current = memoryBody;
     const notice = await compressMemoryIfOverBudget(sessionId, current, loadMemory);
     if (notice) setCompressNotice(notice);
   };
-  /** 构建带滑窗与附件注入的历史(系统提示算 1 条;历史消息条数 = maxMsg,0=全部)。 */
+  /** 构建带滑窗与附件注入的历史(系统提示算 1 条;历史消息条数 = maxMsg,0=全部)。
+   *  会话未单独设置(0)= 跟随全局设置(默认 24 条),避免长会话全量重发。 */
   const buildHistory = (extraUser: { content: string; images?: string[] } | null) =>
-    buildSendHistory(messages, session?.max_context_messages ?? 0, buildSystem(), extraUser);
+    buildSendHistory(
+      messages,
+      session?.max_context_messages || ctxWindow,
+      buildSystem(),
+      extraUser,
+    );
   /** overrideText:首页草稿直发用(绕过输入框状态);overrideAtt 同理携带首页已落盘的附件。
    *  发送失败时回填输入框。 */
   const onSend = async (

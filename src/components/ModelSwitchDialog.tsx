@@ -181,8 +181,8 @@ export default function ModelSwitchDialog({ onClose, onPick }: Props) {
                   {fetchMsg[t.id]}
                 </div>
               )}
-              <div style={{ padding: '0 var(--pad-x) var(--space-3)' }}>
-                <div className="provider-models" style={{ padding: 0 }}>
+              <div style={{ padding: 0 }}>
+                <div className="provider-models">
                   {t.models.map((m) => {
                     const card = matchCard(t.id, m);
                     return (

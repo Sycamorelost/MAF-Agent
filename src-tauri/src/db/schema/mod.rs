@@ -136,11 +136,12 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     )?;
     ensure_column(&tx, "messages", "sources", "TEXT")?;
     // V6(迭代 D3):切换模型时的记忆注入策略(full/summary/hybrid/none)
+    // 默认 hybrid:摘要+结论+待办按需注入,避免每轮全量注入 memory.md(省 token / 降延迟)
     ensure_column(
         &tx,
         "sessions",
         "memory_injection_strategy",
-        "TEXT NOT NULL DEFAULT 'full'",
+        "TEXT NOT NULL DEFAULT 'hybrid'",
     )?;
     // V7(迭代 B2):会话绑定 Agent 模板
     ensure_column(&tx, "sessions", "agent_id", "TEXT")?;

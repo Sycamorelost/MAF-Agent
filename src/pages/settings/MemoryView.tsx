@@ -90,6 +90,32 @@ export function MemoryView({
           </div>
         </div>
       </div>
+
+      <div className="set-card">
+        <div className="set-card-h">上下文与性能</div>
+        <div className="set-card-b">
+          <div className="set-row">
+            <label className="lbl">上下文窗口</label>
+            <select
+              className="pg-field"
+              value={String(settings?.context_window_messages ?? 24)}
+              onChange={(e) =>
+                onPatchSettings({ context_window_messages: Number(e.target.value) })
+              }
+            >
+              <option value="8">8 条(约 4 轮,最快)</option>
+              <option value="16">16 条(约 8 轮)</option>
+              <option value="24">24 条(约 12 轮,推荐)</option>
+              <option value="40">40 条(约 20 轮)</option>
+              <option value="0">全部历史(最慢,长会话慎用)</option>
+            </select>
+          </div>
+          <p className="set-desc" style={{ margin: 'var(--space-2) 0 0' }}>
+            每轮随请求携带的历史消息条数。条数越多,长会话的 token 与首字延迟越高;
+            超出窗口的旧内容仍会通过记忆提炼摘要保留。
+          </p>
+        </div>
+      </div>
     </>
   );
 }

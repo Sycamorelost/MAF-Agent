@@ -56,6 +56,11 @@ pub struct McpConfig {
     /// 极少数 OpenAI 兼容中转站不接受 `tools` 字段会 400,此时可在设置里关掉。
     #[serde(default = "default_true")]
     pub builtin_tools: bool,
+    /// 对话工具调用总开关(应用级)。关闭时不向模型下发任何工具定义,
+    /// 每次请求可省去数千 token 的工具 schema,显著降低长会话首字延迟。
+    /// 默认关闭:纯对话场景不需要工具;需要文件/命令/联网能力时在设置页打开。
+    #[serde(default)]
+    pub tools_enabled: bool,
     /// 预置服务已合并到哪一版。旧配置文件为 0,加载时据此补齐新增的预置项(只补一次)。
     #[serde(default)]
     pub presets_version: u32,
@@ -194,6 +199,7 @@ pub fn default_servers() -> McpConfig {
     McpConfig {
         servers: preset_servers(),
         builtin_tools: true,
+        tools_enabled: false,
         presets_version: PRESETS_VERSION,
         china_mirror: true,
     }

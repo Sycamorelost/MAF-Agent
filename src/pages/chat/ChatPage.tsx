@@ -329,7 +329,7 @@ export default function ChatPage() {
                     capability: chat.thinkCap,
                     providerId: current.providerId,
                     model: current.model,
-                    selection: thinkingSel ?? { on: true, level: DEFAULT_THINKING_LEVEL },
+                    selection: thinkingSel ?? { on: false, level: DEFAULT_THINKING_LEVEL },
                     onSelect: (sel) => {
                       if (sessionId) setThinking(sessionId, sel);
                     },

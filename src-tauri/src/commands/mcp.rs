@@ -313,6 +313,10 @@ pub async fn mcp_collect_tools(
     runtime: State<'_, McpRuntime>,
     state: State<'_, McpState>,
 ) -> Result<Vec<crate::provider::ToolDef>, String> {
+    // 总开关关闭:不下发任何工具定义(省掉每次请求数千 token 的 schema 开销)
+    if !state.0.lock().map(|c| c.tools_enabled).unwrap_or(false) {
+        return Ok(Vec::new());
+    }
     // 只收集「已启用」配置里的 server,防止用户停用后仍被调用
     let servers: Vec<McpServerConfig> = state
         .0

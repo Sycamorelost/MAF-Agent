@@ -542,9 +542,9 @@ fn spawn_chat_with_failover(
 }
 
 /// 单次请求最多携带的消息条数(50 轮工具调用时防止上下文无限膨胀)。
-const MAX_CONTEXT_MESSAGES: usize = 80;
-/// 单次请求上下文的最大字符数(约 120k tokens;工具结果普遍很大,先按预算裁最早的轮次)。
-const MAX_CONTEXT_CHARS: usize = 240_000;
+const MAX_CONTEXT_MESSAGES: usize = 40;
+/// 单次请求上下文的最大字符数(约 24k tokens;超出先按预算裁最早的轮次)。
+const MAX_CONTEXT_CHARS: usize = 48_000;
 
 /// 是否超预算(触发 LLM 压缩;压缩后仍超限由 prune_context 硬裁剪兜底)。
 fn context_over_budget(messages: &[ChatMessage]) -> bool {

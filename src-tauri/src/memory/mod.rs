@@ -92,7 +92,10 @@ pub fn create_session_with_id(id: &str, title: &str, model_id: &str) -> Result<P
     let now = Local::now().to_rfc3339();
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     conn.execute(
-        "INSERT INTO sessions(id, title, created, updated, model_id, memory_version) VALUES(?1,?2,?3,?3,?4,1)",
+        // memory_injection_strategy 显式写 'hybrid':旧库的列默认值仍是 'full',
+        // 只改建表默认值对已存在的数据库不生效(ensure_column 不会改写已有列)。
+        "INSERT INTO sessions(id, title, created, updated, model_id, memory_version, memory_injection_strategy) \
+         VALUES(?1,?2,?3,?3,?4,1,'hybrid')",
         rusqlite::params![id, title, now, model_id],
     )
     .map_err(|e| format!("insert sessions failed: {e}"))?;
@@ -168,22 +171,28 @@ pub fn write_memory(id: &str, content: &str, note: &str) -> Result<(), String> {
 
 // ---------------- 提炼(占位) ----------------
 
-/// 提炼器在 Phase 1 仅做骨架:
-/// 真实提炼依赖 Provider(§3.3)生成摘要;此处先实现「是否需要提炼」的判断。
+/// 提炼触发判断(增量口径):只统计「上次提炼之后新增」的消息。
 ///
 /// 触发条件(idea/03-memory-flow.md §2.1):
 ///   - 距上次提炼已完成 N 轮对话(默认 2)
-///   - 会话 token 超阈值(默认 8k)
+///   - 新增部分的 token 超阈值(默认 8k)
+///
+/// 关键修复:旧实现统计全会话消息数,提炼后不清零 → 一旦过阈值就永远返回 true,
+/// 导致每次回复后都额外发起一次提炼 LLM 调用。现以 memory.md frontmatter 的
+/// `summarized_msg_id` 作为水位线,提炼后自动归零。
 pub fn needs_summarize(
     id: &str,
     every_n_rounds: i64,
     token_threshold: i64,
 ) -> Result<bool, String> {
+    let watermark = read_memory(id)
+        .map(|(fm, _)| fm.summarized_msg_id)
+        .unwrap_or(0);
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     let (msg_count, total_tokens): (i64, i64) = conn
         .query_row(
-            "SELECT COUNT(*), COALESCE(SUM(tokens),0) FROM messages WHERE session_id=?1",
-            [id],
+            "SELECT COUNT(*), COALESCE(SUM(tokens),0) FROM messages WHERE session_id=?1 AND id > ?2",
+            rusqlite::params![id, watermark],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .map_err(|e| e.to_string())?;

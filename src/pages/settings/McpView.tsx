@@ -212,6 +212,31 @@ export function McpView() {
         </div>
       )}
 
+      <div className="mcp-time-card" style={{ marginBottom: 'var(--space-3)' }}>
+        <div className="mcp-time-label">🔌 对话工具调用(总开关)</div>
+        <label className="mcp-builtin-toggle">
+          <input
+            type="checkbox"
+            checked={!!cfg.tools_enabled}
+            onChange={async (e) => {
+              const newCfg: McpConfig = { ...cfg, tools_enabled: e.target.checked };
+              await mcpSaveConfig(newCfg);
+              setCfg(newCfg);
+              setMsg(
+                e.target.checked
+                  ? "工具调用已开启:模型可调用下方 server 与内置工具"
+                  : "工具调用已关闭:每次请求不再下发工具定义,可显著降低 token 与首字延迟",
+              );
+            }}
+          />
+          <span>向模型下发工具定义(关闭可省数千 token/次,纯对话更快)</span>
+        </label>
+        <div className="mcp-time-hint">
+          关闭后模型将看不到任何工具(内置工具与下方所有 MCP server),
+          只做纯文本对话;需要文件、命令或联网能力时再打开。
+        </div>
+      </div>
+
       {now && (
         <div className="mcp-time-card">
           <div className="mcp-time-label">⏰ 内置时间工具(不走 MCP)</div>

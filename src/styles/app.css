@@ -1012,7 +1012,7 @@ body.aside-open .main { padding-left: var(--aside-w); }
 .provider-block {
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
   overflow: hidden;
 }
 .provider-head {
@@ -1020,7 +1020,7 @@ body.aside-open .main { padding-left: var(--aside-w); }
   background: var(--bg-side);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-2);
 }
 .provider-head .name { font-weight: 600; }
 .provider-head .badge {
@@ -1029,21 +1029,31 @@ body.aside-open .main { padding-left: var(--aside-w); }
   background: rgba(31,146,84,.1);
   padding: 2px 8px;
   border-radius: 10px;
+  white-space: nowrap;
 }
 .provider-head .badge.no-key { color: var(--text-3); background: var(--bg-hover); }
+/* 「从厂家拉取」按钮:比通用 tool-chip 更收敛,与标题行保持同一视觉重量 */
+.provider-head .tool-chip {
+  padding: 4px 10px;
+  font-size: var(--font-caption);
+  line-height: 1.4;
+}
 .provider-models {
-  padding: var(--space-2) var(--pad-x);
+  padding: var(--space-3) var(--pad-x) var(--space-4);
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-4);
 }
 .model-chip {
-  padding: 4px 10px;
+  padding: 6px 12px;
   border-radius: var(--radius-m);
   font-size: var(--font-caption);
+  line-height: 1.4;
   border: 1px solid var(--border);
   background: var(--bg-main);
   cursor: pointer;
+  white-space: nowrap;
 }
 .model-chip:hover { background: var(--bg-hover); }
 .model-chip.active {
@@ -1052,14 +1062,14 @@ body.aside-open .main { padding-left: var(--aside-w); }
   border-color: var(--brand);
 }
 /* 模型卡元信息(D7.1) */
-.model-chip-wrap { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.model-chip-wrap { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .model-chip-meta {
   display: flex;
   gap: 6px;
   align-items: center;
   font-size: calc(var(--font-caption) - 1px);
   color: var(--text-3);
-  padding-left: 2px;
+  padding-left: 4px;
 }
 .cost-badge {
   padding: 0 6px;
@@ -1281,12 +1291,6 @@ body.aside-open .main { padding-left: var(--aside-w); }
   letter-spacing: -.3px;
   color: var(--text-1);
   text-align: center;
-  /* 轻微文字阴影,在壁纸上制造"浮起"质感 */
-  text-shadow: 0 2px 12px rgba(0,0,0,.08);
-}
-/* 壁纸模式:加深文字阴影,让标题从复杂壁纸中清晰浮起 */
-:root[data-has-wallpaper] .greeting {
-  text-shadow: 0 2px 18px rgba(0,0,0,.18), 0 0 1px rgba(255,255,255,.4);
 }
 .sub { margin-top: var(--space-2); font-size: var(--font-body); color: var(--text-3); text-align: center; }
 
@@ -2218,21 +2222,21 @@ body.aside-open .main { padding-left: var(--aside-w); }
 
 .summarize-section {
   border-top: 1px solid var(--border);
-  padding: var(--space-3) var(--pad-x);
+  padding: var(--space-4) var(--pad-x);
 }
 .summarize-title {
   font-size: var(--font-caption);
   font-weight: 600;
   color: var(--text-2);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-3);
 }
 .summarize-row {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--space-3);
   align-items: center;
 }
 .summarize-row select { flex: 1; min-width: 0; }
-.summarize-row .btn { flex-shrink: 0; }
+.summarize-row .btn { flex-shrink: 0; min-width: 72px; }
 
 /* ============ B2 Agent 模板 ============ */
 
