@@ -47,8 +47,8 @@ pub enum ApprovalMode {
     Manual,
     /// 只读类工具自动放行,写/执行类仍弹窗
     Auto,
-    /// 完全不弹窗,直接执行。此模式下:shell 走 run_unrestricted(无白名单/路径/元字符校验,
-    /// fs 沙箱仍生效);GUI 自动化与能力令牌等高级功能仅在此模式下可用(总开关)。
+    /// 完全不弹窗,直接执行。此模式下:shell 走 run_unrestricted(无白名单/路径/元字符校验),
+    /// 写前备份仍生效;GUI 自动化与能力令牌等高级功能仅在此模式下可用(总开关)。
     Full,
     /// 按 allow 白名单放行,其余弹窗
     Custom,

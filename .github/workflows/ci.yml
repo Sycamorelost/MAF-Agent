@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  # 前端单元测试(vitest,≥30 条准入线,当前 104 条)+ 类型检查与构建
+  # 前端单元测试(vitest,当前 111 条)+ 类型检查与构建
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -33,10 +33,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - name: Rust 缓存
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      - name: cargo fmt --check(格式检查)
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+      - name: cargo clippy(静态检查)
+        working-directory: src-tauri
+        run: cargo clippy --lib --all-targets -- -D warnings -A clippy::field_reassign_with_default
       - name: cargo test
         working-directory: src-tauri
         run: cargo test --lib
@@ -55,6 +63,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - name: Tauri Linux 系统依赖
         run: |
           sudo apt-get update
@@ -66,3 +76,6 @@ jobs:
       - name: cargo check(仅编译检查)
         working-directory: src-tauri
         run: cargo check --lib
+      - name: cargo clippy(跨平台 lint)
+        working-directory: src-tauri
+        run: cargo clippy --lib --all-targets -- -D warnings -A clippy::field_reassign_with_default

@@ -1,13 +1,44 @@
-//! 内置工具(get_now / shell_exec / 工作区文件工具)的 function-calling 定义。
+//! 内置工具(get_now / shell_exec / 文件工具)的 function-calling 定义。
 //!
-//! 默认不暴露 —— 由设置页开关控制,避免向不支持 tools 字段的中转站发送请求导致 400。
+//! R4/D2:拆成「只读」与「写入」两组。只读工具默认随对话下发(开箱可用,
+//! 长文档的 doc_search/doc_read 不再依赖工具总开关);写入/执行类工具需同时打开
+//! 「工具总开关」与「内置工具」开关,避免默认就把 shell 暴露给模型。
 //! 描述保持精简:工具定义每轮都会随请求下发,冗长描述会持续消耗 token 并拉高延迟。
+
+use std::collections::HashSet;
+use std::sync::LazyLock;
 
 use crate::provider::{ToolDef, ToolFunctionDef};
 use serde_json::json;
 
-/// 全部内置工具定义(仅当 `builtin_tools` 开关打开时随对话下发)。
+/// 全部内置工具名(只读 + 写入)。从 schema 定义单源派生,
+/// 避免 `mcp/builtin.rs` 再维护一份硬编码名单。
+pub(crate) static ALL_BUILTIN_TOOL_NAMES: LazyLock<HashSet<String>> = LazyLock::new(|| {
+    readonly_tool_defs()
+        .into_iter()
+        .chain(write_tool_defs())
+        .map(|t| t.function.name)
+        .collect()
+});
+
+/// 写入/执行类工具名(需审批)。从 `write_tool_defs` 派生。
+pub(crate) static WRITE_TOOL_NAMES: LazyLock<HashSet<String>> = LazyLock::new(|| {
+    write_tool_defs()
+        .into_iter()
+        .map(|t| t.function.name)
+        .collect()
+});
+
+/// 全部内置工具定义(只读 + 写入)。供设置页展示与审计使用。
+#[allow(dead_code)]
 pub fn builtin_tool_defs() -> Vec<ToolDef> {
+    let mut out = readonly_tool_defs();
+    out.extend(write_tool_defs());
+    out
+}
+
+/// 只读内置工具:不改变磁盘与系统状态,默认下发,免审批。
+pub fn readonly_tool_defs() -> Vec<ToolDef> {
     vec![
         tool(
             "get_now",
@@ -82,9 +113,94 @@ pub fn builtin_tool_defs() -> Vec<ToolDef> {
             "网络接口:名称、IP、累计收发流量。",
             json!({ "type": "object", "properties": {} }),
         ),
+        // 文件工具:path 支持绝对路径(本机任意位置),相对路径以工作区为基准;详见 fs 模块
+        tool(
+            "fs_list",
+            "列出目录内容。path 省略时列默认工作区根;相对路径按工作区解析,也支持绝对路径如 D:\\资料。",
+            json!({
+                "type": "object",
+                "properties": { "path": { "type": "string", "description": "目录路径,可留空;支持绝对路径" } }
+            }),
+        ),
+        tool(
+            "fs_read",
+            "读取本机文本文件(默认 3.2 万字符,硬上限 5 万);path 支持绝对路径;大文件用 offset 续读。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "文件路径,支持绝对路径" },
+                    "offset": { "type": "number", "description": "跳过前 N 个字符(分页续读)" },
+                    "max_chars": { "type": "number", "description": "本次读取上限(字符,最大 5 万)" }
+                },
+                "required": ["path"]
+            }),
+        ),
+        tool(
+            "fs_grep",
+            "在本机文本文件中检索关键词,返回「文件:行号:内容」;path 可为绝对路径或工作区相对路径(目录或单文件)。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "pattern": { "type": "string", "description": "关键词(不区分大小写)" },
+                    "path": { "type": "string", "description": "检索目录或文件,可留空;支持绝对路径" },
+                    "limit": { "type": "number", "description": "最多返回条数,默认 50" }
+                },
+                "required": ["pattern"]
+            }),
+        ),
+        tool(
+            "file_extract",
+            "提取本机文件正文:docx/xlsx/pdf/pptx/epub/html/文本;path 支持绝对路径。",
+            json!({
+                "type": "object",
+                "properties": { "path": { "type": "string", "description": "文件路径,支持绝对路径" } },
+                "required": ["path"]
+            }),
+        ),
+        // 文档驻留层(R3 C1/C2):会话内已上传文档按块检索与回看,长文档不必全量注入
+        tool(
+            "doc_search",
+            "在本会话已上传的文档中按块检索片段,返回块序号、页码、章节与命中片段;追问长文档细节时优先用它。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "检索关键词" },
+                    "doc": { "type": "string", "description": "限定文档名或 doc_id,可省略" },
+                    "limit": { "type": "number", "description": "返回块数,默认 6,最大 20" }
+                },
+                "required": ["query"]
+            }),
+        ),
+        tool(
+            "doc_read",
+            "按块序号读取本会话文档原文(带页码/章节);doc 省略且会话仅一份文档时自动选中。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "doc": { "type": "string", "description": "文档名或 doc_id,可省略" },
+                    "start": { "type": "number", "description": "起始块序号(0 起),默认 0" },
+                    "count": { "type": "number", "description": "读取块数,默认 3" }
+                }
+            }),
+        ),
+        tool(
+            "zip_list",
+            "列出本机 zip 压缩包内文件;path 支持绝对路径。",
+            json!({
+                "type": "object",
+                "properties": { "path": { "type": "string", "description": "zip 文件路径,支持绝对路径" } },
+                "required": ["path"]
+            }),
+        ),
+    ]
+}
+
+/// 写入/执行类内置工具:需「工具总开关 + 内置工具」同时打开才下发。
+pub fn write_tool_defs() -> Vec<ToolDef> {
+    vec![
         tool(
             "shell_exec",
-            "执行本机命令。command 填程序名(git/dir/where),参数放 args 数组;默认仅工作区内只读命令,解释器与写操作被拒绝。结果首行 [exit=N ...],N≠0 为失败。",
+            "执行本机命令。command 填程序名(git/dir/where),参数放 args 数组;默认仅只读命令白名单,路径不限目录,解释器与写操作被拒绝;系统级操作(环境变量/服务/注册表)需审批模式切到「完全信任」。结果首行 [exit=N ...],N≠0 为失败。",
             json!({
                 "type": "object",
                 "properties": {
@@ -105,34 +221,13 @@ pub fn builtin_tool_defs() -> Vec<ToolDef> {
                 "required": ["command"]
             }),
         ),
-        // 工作区文件工具:相对路径 + 自动备份,详见 fs 模块
-        tool(
-            "fs_list",
-            "列出工作区目录(相对路径,留空为根)。",
-            json!({
-                "type": "object",
-                "properties": { "path": { "type": "string", "description": "相对路径,可留空" } }
-            }),
-        ),
-        tool(
-            "fs_read",
-            "读取工作区文本文件(默认上限 20 万字符)。",
-            json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string", "description": "工作区相对路径" },
-                    "max_chars": { "type": "number", "description": "读取上限(字符)" }
-                },
-                "required": ["path"]
-            }),
-        ),
         tool(
             "fs_write",
-            "写入工作区文本文件(自动建目录,覆盖前自动备份)。",
+            "写入本机文本文件(自动建目录,覆盖前自动备份);path 支持绝对路径。",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "工作区相对路径" },
+                    "path": { "type": "string", "description": "目标文件路径,支持绝对路径" },
                     "content": { "type": "string", "description": "文件内容" }
                 },
                 "required": ["path", "content"]
@@ -140,33 +235,49 @@ pub fn builtin_tool_defs() -> Vec<ToolDef> {
         ),
         tool(
             "fs_delete",
-            "删除工作区文件(删除前自动备份)。",
+            "删除本机文件(删除前自动备份);path 支持绝对路径,仅支持文件。",
             json!({
                 "type": "object",
-                "properties": { "path": { "type": "string" } },
+                "properties": { "path": { "type": "string", "description": "文件路径,支持绝对路径" } },
                 "required": ["path"]
             }),
         ),
         tool(
             "fs_export_docx",
-            "导出 .docx 到工作区(正文按行分段)。",
+            "导出 .docx,自动套用学术/通用版式:Heading 大纲级别、正文首行缩进与 1.5 倍行距、三线表、封面、目录、页眉页码。正文用 Markdown:#/##/### 标题、- 或 1. 列表、| 表格 |、``` 代码块、**粗体**、`行内代码`、> 引用、![图注](图片路径);表题写在表格上一行(如「表 1 …」),图注写在图片下一行。实验报告/论文建议用 ## 一、… 分章,meta 填作者/课程以生成封面。path 支持绝对路径,自动建目录。",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "目标相对路径,如 reports/a.docx" },
-                    "title": { "type": "string" },
-                    "body": { "type": "string" }
+                    "path": { "type": "string", "description": "目标路径,如 D:\\报告\\a.docx" },
+                    "title": { "type": "string", "description": "文档标题" },
+                    "body": { "type": "string", "description": "正文,按 Markdown 解析;表格用管道语法,表题紧邻表格上一行" },
+                    "profile": {
+                        "type": "string",
+                        "enum": ["experiment", "paper", "practice", "general"],
+                        "description": "用途模板:experiment 实验报告 / paper 论文 / practice 实践报告 / general 通用文档;省略则自动识别"
+                    },
+                    "toc": { "type": "boolean", "description": "是否生成自动目录;省略时学术类默认开启" },
+                    "meta": {
+                        "type": "object",
+                        "description": "封面信息;任一项非空即生成封面",
+                        "properties": {
+                            "author": { "type": "string", "description": "作者/姓名" },
+                            "org": { "type": "string", "description": "单位/学院" },
+                            "course": { "type": "string", "description": "课程/项目名称" },
+                            "date": { "type": "string", "description": "日期" }
+                        }
+                    }
                 },
                 "required": ["path", "body"]
             }),
         ),
         tool(
             "fs_export_xlsx",
-            "导出 .xlsx 到工作区(支持多工作表)。",
+            "导出 .xlsx(支持多工作表);path 支持绝对路径,自动建目录。",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "目标相对路径,如 tables/a.xlsx" },
+                    "path": { "type": "string", "description": "目标路径,如 D:\\表格\\a.xlsx" },
                     "sheets": {
                         "type": "array",
                         "items": {
@@ -184,7 +295,7 @@ pub fn builtin_tool_defs() -> Vec<ToolDef> {
         ),
         tool(
             "fs_restore",
-            "按备份 id 恢复工作区文件(恢复前再备份,可撤销)。",
+            "按备份 id 恢复文件(恢复前再备份,可撤销)。",
             json!({
                 "type": "object",
                 "properties": { "id": { "type": "string", "description": "备份 id" } },
@@ -192,31 +303,13 @@ pub fn builtin_tool_defs() -> Vec<ToolDef> {
             }),
         ),
         tool(
-            "file_extract",
-            "提取工作区文件正文:docx/xlsx/pdf/pptx/epub/html/文本。",
-            json!({
-                "type": "object",
-                "properties": { "path": { "type": "string", "description": "工作区相对路径" } },
-                "required": ["path"]
-            }),
-        ),
-        tool(
-            "zip_list",
-            "列出工作区 zip 压缩包内文件。",
-            json!({
-                "type": "object",
-                "properties": { "path": { "type": "string" } },
-                "required": ["path"]
-            }),
-        ),
-        tool(
             "zip_extract",
-            "把工作区 zip 解包到工作区目录(自动跳过越界条目与符号链接)。",
+            "把 zip 解包到目标目录(自动跳过越界条目与符号链接);path / dest 支持绝对路径。",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "zip 相对路径" },
-                    "dest": { "type": "string", "description": "目标目录相对路径" }
+                    "path": { "type": "string", "description": "zip 文件路径,支持绝对路径" },
+                    "dest": { "type": "string", "description": "目标目录,支持绝对路径" }
                 },
                 "required": ["path", "dest"]
             }),

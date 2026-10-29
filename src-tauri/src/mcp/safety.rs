@@ -40,8 +40,9 @@ pub fn resolve_safe_path(allowed_dirs: &[PathBuf], input: &str) -> Result<PathBu
         .canonicalize()
         .map_err(|e| format!("path 无法规范化 `{}`: {e}", input_path.display()))?;
 
+    // 未配置允许目录 = 不做文件夹授权限制(全盘放行)
     if allowed_dirs.is_empty() {
-        return Err("该 MCP server 未配置 allowed_dirs,已拒绝".into());
+        return Ok(canonical);
     }
 
     // Layer 4:starts_with 校验 —— 允许列表中的任一目录
@@ -61,63 +62,6 @@ pub fn resolve_safe_path(allowed_dirs: &[PathBuf], input: &str) -> Result<PathBu
     Ok(canonical)
 }
 
-/// 判断路径是否命中敏感文件黑名单 —— `@modelcontextprotocol/server-filesystem` 默认也屏蔽。
-/// 命中则 read_file 允许读取但给出警告;write/delete 直接拒绝。
-#[allow(dead_code)] // Phase 5e ChatStream write/delete 操作前检查
-pub const SENSITIVE_PATTERNS: &[&str] = &[
-    ".env",
-    ".env.local",
-    ".env.production",
-    "*.pem",
-    "*.key",
-    "*id_rsa*",
-    "*id_ed25519*",
-    "*credentials*.json",
-    "*secrets*",
-    "*.pgpass",
-];
-
-#[allow(dead_code)] // Phase 5e ChatStream 检查 write/delete 前调
-pub fn is_sensitive(path: &Path) -> bool {
-    let name = match path.file_name().and_then(|n| n.to_str()) {
-        Some(n) => n,
-        None => return false,
-    };
-    let lower = name.to_lowercase();
-    for pat in SENSITIVE_PATTERNS {
-        let p = pat.to_lowercase();
-        let starts_star = p.starts_with('*');
-        let ends_star = p.ends_with('*');
-        match (starts_star, ends_star) {
-            (true, true) => {
-                // *xxx* → contains
-                let core = p.trim_matches('*');
-                if lower.contains(core) {
-                    return true;
-                }
-            }
-            (true, false) => {
-                // *xxx → ends_with
-                if lower.ends_with(p.trim_start_matches('*')) {
-                    return true;
-                }
-            }
-            (false, true) => {
-                // xxx* → starts_with
-                if lower.starts_with(p.trim_end_matches('*')) {
-                    return true;
-                }
-            }
-            (false, false) => {
-                if lower == p || lower.contains(&p) {
-                    return true;
-                }
-            }
-        }
-    }
-    false
-}
-
 /// MCP 工具参数里视为路径的键(只校验这些键,避免误伤普通字符串参数)。
 const PATH_KEYS: &[&str] = &[
     "path",
@@ -130,13 +74,11 @@ const PATH_KEYS: &[&str] = &[
     "target_path",
 ];
 
-/// 统一预检 MCP 工具参数中的路径(M-2:让 allowed_dirs / deny_patterns 真正生效)。
-/// - 命中敏感文件名 → 直接拒绝(无论是否配置目录);
-/// - 配置了 allowed_dirs 时,路径必须落在其中某个目录内(相对路径按首个目录解析)。
+/// 统一预检 MCP 工具参数中的路径:配置了 allowed_dirs 时,路径必须落在其中某个目录内
+/// (相对路径按首个目录解析);未配置则不限制位置。
 pub fn validate_tool_paths(
     args: &serde_json::Value,
     allowed_dirs: &[PathBuf],
-    deny_patterns: &[String],
 ) -> Result<(), String> {
     let mut paths: Vec<String> = Vec::new();
     if let Some(obj) = args.as_object() {
@@ -151,15 +93,8 @@ pub fn validate_tool_paths(
         }
     }
     for p in paths {
-        let name = Path::new(&p)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&p);
-        if is_sensitive(Path::new(&p)) || deny_patterns.iter().any(|pat| glob_match(name, pat)) {
-            return Err(format!("路径 `{p}` 命中敏感文件黑名单,已拒绝"));
-        }
         if allowed_dirs.is_empty() {
-            continue; // 未配置目录:交给 MCP server 自身策略
+            continue; // 未配置目录:不限制位置
         }
         let candidate = if Path::new(&p).is_absolute() {
             PathBuf::from(&p)
@@ -194,18 +129,6 @@ fn canonical_or_parent(path: &Path) -> Result<PathBuf, String> {
         .canonicalize()
         .map_err(|e| format!("路径 `{}` 的父目录不可访问: {e}", path.display()))?;
     Ok(pc.join(name))
-}
-
-/// 文件名 glob 匹配(与 `is_sensitive` 同一套语义:* 前缀=后缀匹配,* 后缀=前缀匹配,*a*=包含)。
-fn glob_match(name: &str, pattern: &str) -> bool {
-    let n = name.to_lowercase();
-    let p = pattern.to_lowercase();
-    match (p.starts_with('*'), p.ends_with('*')) {
-        (true, true) => n.contains(p.trim_matches('*')),
-        (true, false) => n.ends_with(p.trim_start_matches('*')),
-        (false, true) => n.starts_with(p.trim_end_matches('*')),
-        (false, false) => n == p || n.contains(&p),
-    }
 }
 
 /// 按字符(而非字节)截断,避免在 UTF-8 多字节字符中间切片导致 panic。
@@ -409,12 +332,6 @@ mod tests {
         let bad = validate_command(&["ls".into()], "rm -rf /");
         assert!(bad.is_err());
     }
-    #[test]
-    fn is_sensitive_env_file() {
-        assert!(is_sensitive(Path::new(".env")));
-        assert!(is_sensitive(Path::new("id_rsa")));
-        assert!(!is_sensitive(Path::new("readme.md")));
-    }
 
     /// 回归:中文长输出按字符截断,不得 panic(H-4)。
     #[test]
@@ -456,13 +373,11 @@ mod tests {
     }
 
     #[test]
-    fn tool_paths_enforce_scope_and_sensitivity() {
+    fn tool_paths_enforce_scope_only_when_configured() {
         use serde_json::json;
-        // 敏感文件:无论目录配置如何都拒绝
-        assert!(validate_tool_paths(&json!({ "path": ".env" }), &[], &[]).is_err());
-        // 命中 deny_patterns
-        let deny = vec!["*.pem".to_string()];
-        assert!(validate_tool_paths(&json!({ "path": "a.key.pem" }), &[], &deny).is_err());
+        // 未配置允许目录:不限制位置,`.env` 等文件名也不再拦截
+        assert!(validate_tool_paths(&json!({ "path": ".env" }), &[]).is_ok());
+        assert!(validate_tool_paths(&json!({ "path": "a.key.pem" }), &[]).is_ok());
         // 越界绝对路径(允许目录取系统临时目录,越界目标取系统自带文件)
         let allowed = std::env::temp_dir();
         let outside = if cfg!(windows) {
@@ -471,18 +386,12 @@ mod tests {
             "/etc/hosts"
         };
         assert!(
-            validate_tool_paths(
-                &json!({ "path": outside }),
-                std::slice::from_ref(&allowed),
-                &[]
-            )
-            .is_err()
+            validate_tool_paths(&json!({ "path": outside }), std::slice::from_ref(&allowed))
+                .is_err()
         );
         // 允许目录内的相对路径
         let cwd = std::env::current_dir().unwrap();
-        assert!(
-            validate_tool_paths(&json!({ "path": "." }), std::slice::from_ref(&cwd), &[]).is_ok()
-        );
+        assert!(validate_tool_paths(&json!({ "path": "." }), std::slice::from_ref(&cwd)).is_ok());
     }
 
     /// HTTP 端点:https 放行;明文 http 只允许回环;其它协议与非回环明文一律拒绝。

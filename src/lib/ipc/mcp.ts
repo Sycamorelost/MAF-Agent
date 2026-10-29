@@ -22,7 +22,6 @@ export interface McpServerConfig {
   /** http:附加请求头,如 { Authorization: "Bearer …" } */
   headers?: Record<string, string>;
   allowed_dirs: string[];
-  deny_patterns: string[];
 }
 
 export interface McpConfig {
@@ -79,24 +78,22 @@ export interface ApprovalPolicy {
   allow: string[];
 }
 
-export interface NowResult {
-  iso: string;
-  unix_ms: number;
-  tz: string;
-  date: string;
-  time: string;
-  weekday: string;
-}
-
 // ------- IPC 函数 -------
 
 export const mcpLoadConfig = () => invoke<McpConfig>("mcp_load_config");
 export const mcpSaveConfig = (cfg: McpConfig) => invoke<void>("mcp_save_config", { cfg });
+
+/** 清除「长期记忆」全局数据(data/mcp-memory.jsonl);先停 server 再删文件,返回删除的字节数。 */
+export const mcpClearMemory = () => invoke<number>("mcp_clear_memory");
 export const mcpAddServer = (server: McpServerConfig) => invoke<void>("mcp_add_server", { server });
 export const mcpRemoveServer = (name: string) => invoke<void>("mcp_remove_server", { name });
 
 /** 启动 server —— 参数取自已保存配置,stdio 与 http 共用。 */
 export const mcpStartServer = (name: string) => invoke<void>("mcp_start_server", { name });
+
+/** 一键启动所有 enabled 的 MCP server。返回 [成功数, 失败数, 错误信息列表]。 */
+export const mcpStartAllEnabled = () =>
+  invoke<[number, number, string[]]>("mcp_start_all_enabled");
 
 export const mcpListTools = (name: string) =>
   invoke<McpToolInfo[]>("mcp_list_tools", { name });
@@ -116,5 +113,3 @@ export const mcpSetApprovalPolicy = (policy: ApprovalPolicy) =>
 
 /** Phase 5e:汇总所有已启用 server 的工具定义(OpenAI function-calling)。 */
 export const mcpCollectTools = () => invoke<ToolDef[]>("mcp_collect_tools");
-
-export const getNow = () => invoke<NowResult>("get_now");

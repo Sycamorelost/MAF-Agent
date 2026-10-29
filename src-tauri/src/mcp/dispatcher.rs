@@ -165,14 +165,13 @@ pub async fn dispatch_tool_calls(
             }
         };
 
-        // 3.5 安全预检(M-2):让 allowed_dirs / deny_patterns 真正生效;
-        // 与启动参数共用 effective_allowed_dirs —— 未配置目录时两侧都回落沙箱,边界一致
+        // 3.5 安全预检(M-2):让 allowed_dirs 真正生效;
+        // 预检与启动参数同源;未配置目录时预检不限制位置(不做文件夹授权)
         let cfg = crate::mcp::load_or_init(&data_dir);
         if let Some(sc) = cfg.servers.iter().find(|s| s.name == server)
             && let Err(e) = crate::mcp::safety::validate_tool_paths(
                 &exec_args,
-                &crate::mcp::config::effective_allowed_dirs(sc, &data_dir),
-                &sc.deny_patterns,
+                &crate::mcp::config::effective_allowed_dirs(sc),
             )
         {
             all_ok = false;

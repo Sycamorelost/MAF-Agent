@@ -1,4 +1,4 @@
-//! V16–V17 迁移 SQL。
+//! V16–V22 迁移 SQL。
 
 /// V16(学习规划板块 P1):自学单元 / 测验 / 测验作答 / 复习队列四表。
 /// study_units 每个知识点一份自学材料(UNIQUE 幂等);quizzes 每次生成一行(保留作答历史);
@@ -82,4 +82,55 @@ pub(super) const MIGRATION_V20_INDEX: &str = r#"
 CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_attachments ON messages(id DESC)
   WHERE attachments IS NOT NULL AND attachments <> '[]';
+"#;
+
+/// V21(去 AI 味 · AI 生成概率分析,R3 B2):报告与改写记录两表。
+///   - aiflavor_reports:每次检测一行;dims/marks/stats 冗余存 JSON 供列表与局部读取,
+///     report_json 存完整快照(回看时整份还原);
+///   - aiflavor_rewrites:改写留档,随报告级联删除。
+pub(super) const MIGRATION_V21_AIFLAVOR: &str = r#"
+CREATE TABLE IF NOT EXISTS aiflavor_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created TEXT NOT NULL,
+  source_kind TEXT NOT NULL DEFAULT 'paste',
+  text_hash TEXT NOT NULL,
+  char_count INTEGER NOT NULL,
+  score INTEGER NOT NULL,
+  level TEXT NOT NULL,
+  dims_json TEXT NOT NULL,
+  marks_json TEXT NOT NULL,
+  stats_json TEXT NOT NULL DEFAULT '{}',
+  report_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_aiflavor_reports_time ON aiflavor_reports(created);
+
+CREATE TABLE IF NOT EXISTS aiflavor_rewrites (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  report_id INTEGER NOT NULL REFERENCES aiflavor_reports(id) ON DELETE CASCADE,
+  level TEXT NOT NULL,
+  diff_json TEXT NOT NULL,
+  accepted INTEGER NOT NULL DEFAULT 0,
+  created TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_aiflavor_rewrites_report ON aiflavor_rewrites(report_id);
+"#;
+
+/// V22(文档驻留层,R3 C1):附件提取正文按块入库,支持会话内检索与回看。
+///   - 随会话级联删除(隐私:驻留文本不跨越会话生命周期,也不上传远端);
+///   - page 为 PDF 等分页来源的页码,null 表示无分页信息;
+///   - ord 为文档内块序号(0 起),配合 (session_id, doc_id) 唯一定位一块。
+pub(super) const MIGRATION_V22_DOC_CHUNKS: &str = r#"
+CREATE TABLE IF NOT EXISTS doc_chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  doc_id   TEXT NOT NULL,
+  doc_name TEXT NOT NULL DEFAULT '',
+  kind     TEXT NOT NULL DEFAULT 'text',
+  page     INTEGER,
+  section  TEXT NOT NULL DEFAULT '',
+  ord      INTEGER NOT NULL,
+  content  TEXT NOT NULL,
+  created  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_doc_chunks_session ON doc_chunks(session_id, doc_id, ord);
 "#;

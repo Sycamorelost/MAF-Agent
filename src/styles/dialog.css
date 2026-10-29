@@ -1,0 +1,48 @@
+/* ============ ModelSwitchDialog ============ */
+
+.dialog-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 20, 30, .38);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.dialog {
+  background: var(--bg-main);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-card-h);
+  width: 560px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dialog-head {
+  padding: var(--space-4) var(--pad-x);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-h2);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.dialog-body {
+  padding: var(--space-3) var(--pad-x);
+  overflow-y: auto;
+  /* flex 列内允许收缩,否则长内容会把底部按钮顶出卡片 */
+  flex: 1;
+  min-height: 0;
+}
+/* 底部按钮条:与 .dialog-head 同水平内边距,上下留 12px(4 的倍数网格) */
+.dialog-foot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--pad-x);
+  border-top: 1px solid var(--border);
+  background: var(--bg-side);
+}
+.dialog-foot .sp { flex: 1; }
+

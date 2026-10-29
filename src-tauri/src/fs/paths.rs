@@ -1,27 +1,36 @@
-//! 工作区路径解析 —— 文件工具只接受工作区内的相对路径。
+//! 文件路径解析 —— 不设沙箱:绝对路径直达任意位置,相对路径以工作区为基准。
 //!
 //! 规则:
-//! 1. 拒绝绝对路径 / 盘符 / UNC,避免"指向任意位置";
-//! 2. 拒绝 `..`,保证 join 后仍在工作区内;
-//! 3. 读取时 canonicalize 并二次校验(防符号链接逃逸);
-//! 4. 命中敏感文件名(`.env` / `id_rsa` / `*.pem` …)一律拒绝。
+//! 1. 绝对路径(含盘符 / UNC)直接使用,可访问整台电脑上的文件;
+//! 2. 相对路径 join 到工作区根,允许 `..` 自由跳转;
+//! 3. 读取时 canonicalize(解析符号链接与 `..`)。
+//!
+//! 不设任何文件名黑名单,位置与文件类型均不受限。
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
-use crate::mcp::safety::is_sensitive;
-
-/// 工作区根目录:环境变量 `MAF_WORKSPACE` 优先,否则 `<数据目录>/workspace`。
+/// 工作区根目录:环境变量 `MAF_WORKSPACE` 优先,其次用户在设置里配的 `workspace_root`,
+/// 否则 `<数据目录>/workspace`。这是「相对路径」的默认基准目录(绝对路径不受其限制)。
 pub fn workspace_root() -> Result<PathBuf, String> {
     let root = match std::env::var("MAF_WORKSPACE") {
-        Ok(v) if !v.trim().is_empty() => PathBuf::from(v),
-        _ => crate::paths::data_dir().join("workspace"),
+        Ok(v) if !v.trim().is_empty() => PathBuf::from(v.trim()),
+        _ => {
+            let s = crate::settings::load();
+            match s.workspace_root.as_deref() {
+                Some(v) if !v.trim().is_empty() => PathBuf::from(v.trim()),
+                _ => crate::paths::data_dir().join("workspace"),
+            }
+        }
     };
     std::fs::create_dir_all(&root).map_err(|e| format!("创建工作区失败: {e}"))?;
     root.canonicalize()
         .map_err(|e| format!("工作区不可访问 `{}`: {e}", root.display()))
 }
 
-/// 把相对路径解析为工作区内的绝对路径。
+/// 把路径解析为绝对路径:
+/// - 绝对路径(盘符 / UNC / 前导 `\`)直接使用,可指向本机任意位置;
+/// - 相对路径 join 到工作区根,`..` 不做限制。
+///
 /// `must_exist=true` 时要求目标已存在(读取);false 用于写入(父目录可稍后创建)。
 pub fn resolve(root: &Path, rel: &str, must_exist: bool) -> Result<PathBuf, String> {
     let rel = rel.trim();
@@ -32,34 +41,37 @@ pub fn resolve(root: &Path, rel: &str, must_exist: bool) -> Result<PathBuf, Stri
         return Err("路径包含非法字符(NUL/CR/LF)".into());
     }
     let raw = Path::new(rel);
-    if raw.is_absolute() || rel.starts_with('\\') || rel.chars().nth(1) == Some(':') {
-        return Err("只允许工作区内的相对路径,不能使用绝对路径".into());
-    }
-    for c in raw.components() {
-        match c {
-            Component::Normal(_) | Component::CurDir => {}
-            _ => return Err("路径不能包含 `..` 或根前缀".into()),
-        }
-    }
-    if is_sensitive(raw) {
-        return Err(format!("`{rel}` 命中敏感文件黑名单,已拒绝"));
-    }
-    // Windows 上 canonicalize 会带 `\\?\` 前缀,统一用规范化后的根拼接与比较
-    let root_canon = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    let joined = root_canon.join(raw);
+    let absolute = raw.is_absolute() || rel.starts_with('\\') || rel.chars().nth(1) == Some(':');
+    let target = if absolute {
+        raw.to_path_buf()
+    } else {
+        // Windows 上 canonicalize 会带 `\\?\` 前缀,统一用规范化后的根拼接
+        let root_canon = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        root_canon.join(raw)
+    };
     if must_exist {
-        let canonical = joined
+        let canonical = target
             .canonicalize()
             .map_err(|e| format!("路径不存在或无法访问 `{rel}`: {e}"))?;
-        if !canonical.starts_with(&root_canon) {
-            return Err(format!("`{rel}` 超出工作区,已拒绝"));
-        }
-        if is_sensitive(&canonical) {
-            return Err(format!("`{rel}` 命中敏感文件黑名单,已拒绝"));
-        }
         return Ok(canonical);
     }
-    Ok(joined)
+    Ok(canonical_or_parent(&target))
+}
+
+/// 规范化路径;目标尚不存在(写新文件)时规范化其父目录再拼接文件名。
+fn canonical_or_parent(path: &Path) -> PathBuf {
+    if let Ok(c) = path.canonicalize() {
+        return c;
+    }
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => {
+            let pc = parent
+                .canonicalize()
+                .unwrap_or_else(|_| parent.to_path_buf());
+            pc.join(name)
+        }
+        _ => path.to_path_buf(),
+    }
 }
 
 /// 绝对路径 → 工作区相对路径(正斜杠),用于备份与展示。
@@ -82,19 +94,20 @@ mod tests {
     }
 
     #[test]
-    fn rejects_absolute_and_parent_paths() {
+    fn accepts_absolute_and_parent_paths() {
         let r = root();
-        assert!(resolve(&r, "C:\\Windows\\win.ini", true).is_err());
-        assert!(resolve(&r, "../secret.txt", false).is_err());
-        assert!(resolve(&r, "/etc/passwd", true).is_err());
+        // 绝对路径:全盘可访问(用临时文件验证,不依赖系统自带文件是否存在)
+        let outside = std::env::temp_dir().join("maf-paths-abs.txt");
+        std::fs::write(&outside, "x").unwrap();
+        let p = resolve(&r, outside.to_str().unwrap(), true).expect("绝对路径必须可读");
+        assert!(p.ends_with("maf-paths-abs.txt"), "实际:{}", p.display());
+        // 写入尚不存在的绝对路径同样放行
+        let new_file = std::env::temp_dir().join("maf-paths-new.txt");
+        assert!(resolve(&r, new_file.to_str().unwrap(), false).is_ok());
+        // 相对路径 `..` 不再拦截;空路径仍拒绝
+        assert!(resolve(&r, "../whatever.txt", false).is_ok());
         assert!(resolve(&r, "", false).is_err());
-    }
-
-    #[test]
-    fn rejects_sensitive_names() {
-        let r = root();
-        assert!(resolve(&r, ".env", false).is_err());
-        assert!(resolve(&r, "keys/id_rsa", false).is_err());
+        std::fs::remove_file(&outside).ok();
     }
 
     #[test]

@@ -1,12 +1,14 @@
-//! 报告导出:Markdown / 自包含 HTML 与另存为路径令牌。
+//! 报告导出:Markdown / 自包含 HTML / Word(docx) 与另存为路径令牌。
+//!
+//! Word 走 `fs::docgen` 学术版式;HTML/打印 PDF 的样式由前端 `docStyle` 提供,
+//! 三者字号、行距、缩进、三线表一致。
 
+use tauri::Manager;
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 
 use crate::memory;
 use crate::research::store;
-
-// ---------- 报告导出(v1.9.0:仅 Markdown 与自包含 HTML,不做 PDF/DOCX/PPTX) ----------
 
 /// 目标已存在但未获覆盖确认时返回的错误码;前端据此弹二次确认后带 overwrite=true 重试。
 pub const EXPORT_TARGET_EXISTS: &str = "TARGET_EXISTS";
@@ -203,6 +205,88 @@ fn export_html_inner(
     Ok(target.to_string_lossy().into_owned())
 }
 
+/// 导出报告为 Word(.docx):复用 `fs/docgen` 的学术版式。
+///
+/// 与工作站「文档生成」走同一套模板(实验/论文/实践/通用),因此研究报告的
+/// Word、自包含 HTML、打印 PDF 三种产物在字号、行距、缩进、三线表上保持一致。
+/// 相对图片路径以研究目录为基准,报告里的 `figures/xxx` 可直接嵌入。
+#[tauri::command]
+pub fn research_export_docx(
+    id: String,
+    token: String,
+    overwrite: bool,
+    profile: Option<String>,
+    tokens: State<'_, ExportPathTokens>,
+) -> Result<String, String> {
+    export_docx_inner(id, token, overwrite, profile.as_deref(), &tokens)
+}
+
+fn export_docx_inner(
+    id: String,
+    token: String,
+    overwrite: bool,
+    profile: Option<&str>,
+    tokens: &ExportPathTokens,
+) -> Result<String, String> {
+    memory::validate_id(&id)?;
+    let target = ensure_export_path(&tokens.resolve(&token)?.to_string_lossy(), "docx")?;
+    let report = store::read_report(&id)?.ok_or("报告不存在或尚未生成")?;
+    ensure_writable(&target, overwrite)?;
+    let title = report_title(&report);
+    let req = crate::fs::docgen::DocRequest {
+        body: strip_leading_h1(&report, &title),
+        title,
+        profile: profile.and_then(crate::fs::docgen::Profile::parse),
+        base_dir: store::research_dir(&id),
+        ..Default::default()
+    };
+    let bytes = crate::fs::docgen::render(&req)?;
+    std::fs::write(&target, &bytes).map_err(|e| format!("写入 Word 失败: {e}"))?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
+/// 从报告 Markdown 的首个一级标题提取文档标题;缺省回退「研究报告」。
+fn report_title(report: &str) -> String {
+    report
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("# "))
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| "研究报告".to_string())
+}
+
+/// 正文首个一级标题与文档标题相同时剥离该行:
+/// 否则页眉标题与正文 H1 重复出现,且这条 H1 会作为章级条目混进自动目录
+/// (真正章节是 ##,会被压在它下一级)。
+fn strip_leading_h1(report: &str, title: &str) -> String {
+    let trimmed = report.trim_start();
+    let Some(rest) = trimmed.strip_prefix("# ") else {
+        return report.to_string();
+    };
+    let line_end = rest.find('\n').map(|i| i + 1).unwrap_or(rest.len());
+    if rest[..line_end].trim() == title {
+        rest[line_end..].trim_start().to_string()
+    } else {
+        report.to_string()
+    }
+}
+
+// ---------- D4:PDF(打印对话框) ----------
+
+/// 触发主窗口的原生打印对话框(用户可选「另存为 PDF」)。
+///
+/// Tauri 2.12 的 WebView 未暴露 `print_to_pdf` 字节流接口,因此采用原生打印对话框:
+/// 渲染层先把「待导出内容」以全屏白底覆盖层铺到主窗口,再调用本命令,
+/// 系统打印对话框弹出后用户选择「Microsoft Print to PDF / 另存为 PDF」即可。
+/// 这是跨平台(Windows/macOS/Linux)最稳定的 PDF 产出路径,且不依赖额外二进制依赖。
+#[tauri::command]
+pub fn export_pdf(app: tauri::AppHandle) -> Result<(), String> {
+    let webview = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口不存在,无法打印".to_string())?;
+    webview.print().map_err(|e| format!("唤起打印失败: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,6 +299,7 @@ mod tests {
         assert!(
             export_html_inner("../x".into(), "<html/>".into(), "t".into(), false, &tokens).is_err()
         );
+        assert!(export_docx_inner("../x".into(), "t".into(), false, None, &tokens).is_err());
         assert!(super::super::figure::research_figure_data("../x".into(), "a.png".into()).is_err());
     }
 
@@ -224,5 +309,35 @@ mod tests {
         let tokens = ExportPathTokens::default();
         let r = export_markdown_inner("valid_id".into(), "no_such_token".into(), false, &tokens);
         assert!(r.is_err());
+        assert!(
+            export_docx_inner(
+                "valid_id".into(),
+                "no_such_token".into(),
+                false,
+                None,
+                &tokens
+            )
+            .is_err()
+        );
+    }
+
+    /// 正文首个 H1 与标题相同时剥离,避免页眉/正文/目录三处重复;
+    /// 不同标题、非首行 H1、无 H1 一律原样保留。
+    #[test]
+    fn strip_leading_h1_only_removes_matching_first() {
+        let md = "# 《X》研究报告\n## TL;DR\n正文";
+        assert_eq!(strip_leading_h1(md, "《X》研究报告"), "## TL;DR\n正文");
+        // 标题不同:不剥
+        let md2 = "# 别的标题\n## TL;DR";
+        assert_eq!(strip_leading_h1(md2, "《X》研究报告"), md2);
+        // H1 不在首行:不剥
+        let md3 = "前言\n# 《X》研究报告\n## TL;DR";
+        assert_eq!(strip_leading_h1(md3, "《X》研究报告"), md3);
+        // 无 H1:原样
+        let md4 = "## TL;DR\n正文";
+        assert_eq!(strip_leading_h1(md4, "研究报告"), md4);
+        // 前导空白容忍
+        let md5 = "\n\n# 《X》研究报告\n\n## TL;DR";
+        assert_eq!(strip_leading_h1(md5, "《X》研究报告"), "## TL;DR");
     }
 }

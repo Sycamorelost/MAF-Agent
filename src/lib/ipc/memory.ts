@@ -77,8 +77,22 @@ export interface AppSettings {
   minimize_to_tray: boolean;
   /** 导航菜单中隐藏的功能项(对话/设置始终显示) */
   hidden_nav_items: string[];
+  /** 导航菜单的显示顺序(存功能项 key;未列出的项按内置顺序补在末尾) */
+  nav_order: string[];
   /** 对话上下文窗口:每轮携带的历史消息条数(0 = 全部;默认 24) */
   context_window_messages: number;
+  /** 自由人格模式:true = system 不追加身份锚,仅保留 Base 物理契约(R3 A1) */
+  bare_mode: boolean;
+  /** 首次启动引导是否已完成(R3 首次安装向导) */
+  first_run_completed: boolean;
+  /** 用户自定义底层 Prompt(空 = 使用内置默认) */
+  custom_base_prompt: string | null;
+  /** 用户自定义应用名称(空 = 使用 "MAF Agent",仅影响窗口标题/托盘/快捷方式) */
+  custom_app_name: string | null;
+  /** 用户自定义应用图标路径(空 = 使用内置图标,仅影响窗口/托盘/快捷方式) */
+  custom_app_icon: string | null;
+  /** 默认工作区根目录(空 = <数据目录>/workspace;环境变量 MAF_WORKSPACE 仍优先) */
+  workspace_root: string | null;
 }
 
 export const getSettings = () => invoke<AppSettings>('get_settings');

@@ -45,7 +45,11 @@ pub(crate) fn snapshot_in(base: &Path, root: &Path, path: &Path) -> Result<Optio
     if !path.exists() {
         return Ok(None);
     }
-    let rel = crate::fs::paths::rel_of(root, path)?;
+    // 工作区内的文件存相对路径;绝对路径(工作区外)直接落绝对路径,恢复时原样解析
+    let rel = crate::fs::paths::rel_of(root, path).unwrap_or_else(|_| {
+        let s = path.display().to_string();
+        s.strip_prefix(r"\\?\").unwrap_or(&s).to_string()
+    });
     let created = chrono::Local::now().to_rfc3339();
     let short = uuid::Uuid::new_v4().simple().to_string();
     let id = format!(

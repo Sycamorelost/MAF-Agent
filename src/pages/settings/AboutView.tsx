@@ -18,7 +18,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">MAF Agent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.16.3'} · 桌面端 · Windows
+            版本 {appVersion || '1.17.1'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
@@ -29,20 +29,18 @@ export function AboutView({ appVersion }: AboutViewProps) {
 
       {/* 版本更新摘要:只列用户可感知的改动 */}
       <div className="set-card">
-        <div className="set-card-h">本次更新 · v1.16.3</div>
+        <div className="set-card-h">本次更新 · v1.17.1</div>
         <div className="set-card-b">
           <p>
-            性能：长会话首字延迟大幅下降。新增「上下文窗口」设置（默认 24 条，0=全部）；
-            记忆提炼改为增量水位线，不再每轮重复触发；后端上下文硬上限收紧到 40 条 / 48k 字符，
-            超限时自动摘要压缩早期轮次而非丢弃；工具结果截断到 1000 字符，单条请求 token 显著下降。
+            输出：全局文档输出统一到同一套学术版式。新增版式单一数据源，研究报告的
+            Word / 自包含 HTML / 打印 PDF 三通道一致（宋体小四、1.5 倍行距、首行缩进、
+            三线表、A4 页边距）；研究导出新增「Word 文档(.docx)」，复用 docgen 模板；
+            修复打印导出不支持管道表格与有序列表的问题。
           </p>
           <p>
-            功能：彻底移除壁纸模块，改为 6 套主题色 + 字号缩放；新增对话工具调用总开关（默认关闭，需用时在 MCP 设置里打开）；
-            内置工具描述精简，思考默认关闭；新会话记忆注入策略默认 hybrid。
-          </p>
-          <p>
-            修复：上下文压缩器尾部保留预算与新上限不一致导致压缩失效；旧库新建会话仍沿用 full 策略；
-            切换模型页组件间距适配；玻璃面板与代码块对比度优化。
+            修复：研究报告导出 Word 时剥离与文档标题重复的正文首个一级标题，避免标题
+            在页眉与正文重复出现、并在自动目录中多出一条章级条目；移除从未被前端调用
+            的 export_bytes 二进制导出通道，收敛为唯一的 docx 产出路径（docgen）。
           </p>
         </div>
       </div>

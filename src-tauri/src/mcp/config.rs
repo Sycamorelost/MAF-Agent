@@ -32,12 +32,9 @@ pub struct McpServerConfig {
     /// http 传输的附加请求头(如 Authorization / X-API-Key),明文存放在配置文件
     #[serde(default)]
     pub headers: HashMap<String, String>,
-    /// 文件系统类工具:显式允许的目录列表
+    /// 文件系统类工具:显式允许的目录列表(空 = 不做文件夹授权限制)
     #[serde(default)]
     pub allowed_dirs: Vec<PathBuf>,
-    /// 路径/参数中命中以下模式时直接拒绝
-    #[serde(default)]
-    pub deny_patterns: Vec<String>,
 }
 
 impl McpServerConfig {
@@ -79,7 +76,7 @@ fn default_true() -> bool {
 pub const PRESETS_VERSION: u32 = 3;
 
 /// 预置服务清单(官方 npm 包,stdio,无需 API Key)。
-/// 全部 `enabled: true` —— 开箱即用(v2);安全边界由审批弹窗、目录白名单、敏感黑名单与审计兜底。
+/// 全部 `enabled: true` —— 开箱即用(v2);安全边界由审批弹窗、目录白名单与审计兜底。
 pub fn preset_servers() -> Vec<McpServerConfig> {
     vec![
         McpServerConfig {
@@ -93,15 +90,9 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             ],
             url: String::new(),
             headers: HashMap::new(),
-            // 允许目录为空时回落到沙箱目录 <data_dir>/mcp-sandbox(见 effective_allowed_dirs);
-            // 用户可在 UI 里指定任意目录,全盘读写能力由审批弹窗 + 敏感文件黑名单兜底
+            // 允许目录为空时不做文件夹授权限制:启动时传入本机全部磁盘根(见 launch_dirs);
+            // 用户也可在 UI 里指定目录主动收窄范围
             allowed_dirs: vec![],
-            deny_patterns: vec![
-                ".env".into(),
-                "*.pem".into(),
-                "*id_rsa*".into(),
-                "*credentials*.json".into(),
-            ],
         },
         McpServerConfig {
             name: "长期记忆".into(),
@@ -112,7 +103,6 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             url: String::new(),
             headers: HashMap::new(),
             allowed_dirs: vec![],
-            deny_patterns: vec![],
         },
         McpServerConfig {
             name: "顺序思考".into(),
@@ -126,7 +116,6 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             url: String::new(),
             headers: HashMap::new(),
             allowed_dirs: vec![],
-            deny_patterns: vec![],
         },
     ]
 }
@@ -156,15 +145,42 @@ pub fn is_filesystem_server(cfg: &McpServerConfig) -> bool {
     cfg.args.iter().any(|a| a.contains("server-filesystem"))
 }
 
-/// 文件系统 server 的有效允许目录。
-/// 用户未指定时回落到沙箱目录 `<data_dir>/mcp-sandbox`(默认仅可读写沙箱);
-/// 用户可指定任意目录(可读写全盘),越权风险由审批弹窗与敏感文件黑名单兜底。
-/// 启动参数与安全预检必须共用此函数,保证两侧边界一致。
-pub fn effective_allowed_dirs(cfg: &McpServerConfig, data_dir: &Path) -> Vec<PathBuf> {
-    if is_filesystem_server(cfg) && cfg.allowed_dirs.is_empty() {
-        vec![data_dir.join("mcp-sandbox")]
+/// 用户显式配置的允许目录;空 = 不做文件夹授权限制(安全预检放行全部位置)。
+pub fn effective_allowed_dirs(cfg: &McpServerConfig) -> Vec<PathBuf> {
+    cfg.allowed_dirs.clone()
+}
+
+/// 启动文件系统 server 时传入的目录参数:
+/// 未配置 → 本机全部磁盘根(不设沙箱);已配置 → 只传这些目录,主动收窄范围。
+pub fn launch_dirs(cfg: &McpServerConfig) -> Vec<PathBuf> {
+    if !is_filesystem_server(cfg) {
+        return cfg.allowed_dirs.clone();
+    }
+    if cfg.allowed_dirs.is_empty() {
+        disk_roots()
     } else {
         cfg.allowed_dirs.clone()
+    }
+}
+
+/// 本机全部磁盘根(Windows 逐盘符探测,Unix 用 `/`)。
+/// 盘符根用正斜杠形式(`C:/`):结尾的 `\` 在经 cmd.exe 转义时会吃掉后面的引号,
+/// 导致多个盘符参数粘连成一个(`C:\"; D:\`),server 会判定目录不可访问。
+fn disk_roots() -> Vec<PathBuf> {
+    #[cfg(windows)]
+    {
+        let mut out: Vec<PathBuf> = ('A'..='Z')
+            .map(|c| PathBuf::from(format!("{c}:/")))
+            .filter(|p| p.exists())
+            .collect();
+        if out.is_empty() {
+            out.push(PathBuf::from("C:/"));
+        }
+        out
+    }
+    #[cfg(not(windows))]
+    {
+        vec![PathBuf::from("/")]
     }
 }
 
@@ -222,34 +238,49 @@ mod tests {
             url: String::new(),
             headers: HashMap::new(),
             allowed_dirs: dirs,
-            deny_patterns: vec![],
         }
     }
 
     #[test]
-    fn filesystem_empty_dirs_falls_back_to_sandbox() {
-        let data = Path::new("C:\\data");
-        let dirs = effective_allowed_dirs(&fs_server(vec![]), data);
-        assert_eq!(dirs, vec![data.join("mcp-sandbox")]);
+    fn filesystem_default_launch_covers_all_drives() {
+        let dirs = launch_dirs(&fs_server(vec![]));
+        assert!(!dirs.is_empty(), "无沙箱:未配置时必须给出磁盘根");
+        #[cfg(windows)]
+        assert!(
+            dirs.iter().any(|d| d.to_string_lossy().starts_with("C:/")),
+            "实际:{dirs:?}"
+        );
+        // 盘符根不得以 `\` 结尾(arg 经 cmd.exe 转义会把后续引号吃掉)
+        assert!(
+            dirs.iter().all(|d| !d.to_string_lossy().ends_with('\\')),
+            "实际:{dirs:?}"
+        );
     }
 
     #[test]
     fn filesystem_user_dirs_take_precedence() {
-        let data = Path::new("C:\\data");
         let mine = vec![
             PathBuf::from("D:\\work"),
             PathBuf::from("C:\\Users\\me\\docs"),
         ];
-        let dirs = effective_allowed_dirs(&fs_server(mine.clone()), data);
-        assert_eq!(dirs, mine);
+        assert_eq!(effective_allowed_dirs(&fs_server(mine.clone())), mine);
+        assert_eq!(launch_dirs(&fs_server(mine.clone())), mine);
     }
 
     #[test]
-    fn non_filesystem_server_never_gets_sandbox() {
-        let data = Path::new("C:\\data");
+    fn filesystem_without_dirs_has_no_precheck_scope() {
+        assert!(
+            effective_allowed_dirs(&fs_server(vec![])).is_empty(),
+            "未配置目录时预检不应限制位置"
+        );
+    }
+
+    #[test]
+    fn non_filesystem_server_never_gets_dirs() {
         let mut mem = fs_server(vec![]);
         mem.args = vec!["-y".into(), "@modelcontextprotocol/server-memory".into()];
-        assert!(effective_allowed_dirs(&mem, data).is_empty());
+        assert!(launch_dirs(&mem).is_empty());
+        assert!(effective_allowed_dirs(&mem).is_empty());
     }
 
     #[test]

@@ -16,11 +16,12 @@ import { useSessionsStore } from '../../stores/sessions';
 import { useProvidersStore } from '../../stores/providers';
 import { useMemoryStore } from '../../stores/memory';
 import { useAgentsStore } from '../../stores/agents';
-import { useThinkingStore, DEFAULT_THINKING_LEVEL } from '../../stores/thinking';
+import { useThinkingStore, DEFAULT_THINKING_LEVEL, agentThinking } from '../../stores/thinking';
 import type { AttachmentMeta, MessageRow } from '../../lib/ipc';
 import * as ipc from '../../lib/ipc';
 import { MessageList } from './MessageList';
-import { ChatHeader, useModelHandoff } from './ChatHeader';
+import { ChatHeader } from './ChatHeader';
+import { useModelHandoff } from './useModelHandoff';
 import { ChatTodos } from './ChatTodos';
 import { useChatSend } from './useChatSend';
 import { useDraftHandoff } from './useDraftHandoff';
@@ -156,14 +157,18 @@ export default function ChatPage() {
     loadModelConfig().catch(() => {});
   }, [loadModelConfig]);
 
-  // 会话思考选择初始化:单模型默认档(default_reasoning)> 全局默认 medium;同会话切模型不覆盖已选
+  // 会话思考选择初始化:智能体偏好 > 单模型默认档(default_reasoning)> 全局默认 medium;
+  // 同会话切模型不覆盖已选(store 内 init 幂等)
   useEffect(() => {
     if (!sessionId || !current) return;
+    // 等智能体模板加载完再初始化,避免模型默认档抢先占位
+    if (session?.agent_id && agentTemplates.length === 0) return;
     const def = modelConfig[current.providerId]?.[current.model]?.default_reasoning;
     const lv = (['light', 'medium', 'high', 'ultra'] as const).find((x) => x === def);
-    initThinking(sessionId, lv);
+    const pref = agentThinking(agent?.thinking_level);
+    initThinking(sessionId, pref?.level ?? lv, pref?.on);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, current?.providerId, current?.model, modelConfig]);
+  }, [sessionId, current?.providerId, current?.model, modelConfig, agent?.thinking_level, agentTemplates.length, session?.agent_id]);
 
   // F7 附件插入队列 / 划词预填 / 首页草稿接续 / 附件增删
   const { handlePickFiles, handleRemoveAttachment } = useDraftHandoff({
@@ -261,7 +266,21 @@ export default function ChatPage() {
                   <div style={{ color: 'var(--text-4)' }}>
                     <IconChat size={48} strokeWidth={1} />
                   </div>
-                  <div>开始你的第一段对话吧</div>
+                  <div>{agent?.opening_message?.trim() || '开始你的第一段对话吧'}</div>
+                  {!!agent?.suggestions?.length && (
+                    <div className="main-empty-sugs">
+                      {agent.suggestions.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          className="main-empty-sug"
+                          onClick={() => setComposerText(s)}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {hasMore && messages.length > 0 && (

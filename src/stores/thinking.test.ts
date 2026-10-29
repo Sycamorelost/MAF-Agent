@@ -6,14 +6,19 @@ const reset = () => useThinkingStore.setState({ bySession: {} });
 describe('thinking store', () => {
   beforeEach(reset);
 
-  it('init 缺省档位为全局默认 medium,开关为 on', () => {
+  it('init 缺省档位为全局默认 medium,开关为 off(需手动开启)', () => {
     useThinkingStore.getState().init('s1');
-    expect(useThinkingStore.getState().bySession['s1']).toEqual({ on: true, level: 'medium' });
+    expect(useThinkingStore.getState().bySession['s1']).toEqual({ on: false, level: 'medium' });
     expect(DEFAULT_THINKING_LEVEL).toBe('medium');
   });
 
   it('init 可指定默认档位', () => {
     useThinkingStore.getState().init('s1', 'high');
+    expect(useThinkingStore.getState().bySession['s1']).toEqual({ on: false, level: 'high' });
+  });
+
+  it('init 可指定默认开启(智能体偏好)', () => {
+    useThinkingStore.getState().init('s1', 'high', true);
     expect(useThinkingStore.getState().bySession['s1']).toEqual({ on: true, level: 'high' });
   });
 
@@ -36,6 +41,6 @@ describe('thinking store', () => {
     useThinkingStore.getState().set('s1', { on: false, level: 'high' });
     const st = useThinkingStore.getState().bySession;
     expect(st['s1']).toEqual({ on: false, level: 'high' });
-    expect(st['s2']).toEqual({ on: true, level: 'ultra' });
+    expect(st['s2']).toEqual({ on: false, level: 'ultra' });
   });
 });

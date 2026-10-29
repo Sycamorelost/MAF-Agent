@@ -269,7 +269,8 @@ pub(crate) const REPORT_SYSTEM: &str = r#"你是研究报告撰写器。基于�
 规则:
 1. 正文中的论断用 [n] 引用编号标注来源,编号对应资料列表中的 [n]。
 2. 不得虚构资料列表之外的事实与引用编号。
-3. 只输出 Markdown 正文,不要用代码块包裹,不要输出解释性前言。"#;
+3. 只输出 Markdown 正文,不要用代码块包裹,不要输出解释性前言。
+4. 对比数据用 Markdown 管道表格,表题写在表格上一行(如「表 1 …」);标题层级用 ## / ###,不跳级。"#;
 
 /// 英文报告模板(输出语言 = English 时使用)。
 pub(crate) const REPORT_SYSTEM_EN: &str = r#"You are a research report writer. Based on the given source list, output a Markdown research report in English.
@@ -290,4 +291,5 @@ Required structure (strict order):
 Rules:
 1. Cite claims with [n] matching the source list.
 2. Never fabricate facts or citation numbers outside the source list.
-3. Output Markdown body only; no code fences, no preamble."#;
+3. Output Markdown body only; no code fences, no preamble.
+4. Use Markdown pipe tables for comparisons, with the caption on the line above (e.g. "Table 1 ..."); use ## / ### headings without skipping levels."#;

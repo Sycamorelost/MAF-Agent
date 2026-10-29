@@ -41,6 +41,10 @@ export function readFileAsDataURL(f: File): Promise<string> {
 export const saveAttachment = (sessionId: string, fileName: string, dataBase64: string) =>
   invoke<AttachmentMeta>('save_attachment', { sessionId, fileName, dataBase64 });
 
+/** 只提取文本、不落盘:工作台拖入/选择文件后直接填入输入区。 */
+export const extractTextPreview = (fileName: string, dataBase64: string) =>
+  invoke<string>('extract_text_preview', { fileName, dataBase64 });
+
 /** 读取附件字节返回 data URL(渲染历史图片附件用)。 */
 export const readAttachmentData = (path: string) =>
   invoke<string>('read_attachment_data', { path });

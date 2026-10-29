@@ -43,6 +43,21 @@ export interface AgentTemplate {
   base_agent: string | null;
   /** 内置模板不可删除/覆盖 */
   builtin: boolean;
+  // —— v2 字段(R3,全部可选,旧数据兼容) ——
+  /** 开场白:空会话首条展示(空 = 不展示) */
+  opening_message?: string;
+  /** 输入框追问建议(chips) */
+  suggestions?: string[];
+  /** 工具策略:null=继承全局;[]=禁用工具;[名单]=仅允许名单内工具 */
+  tool_policy?: string[] | null;
+  /** 思考档位偏好:'' = 跟随用户设置;off / low / medium / high */
+  thinking_level?: string;
+  /** 采样温度偏好(null = 跟随模型默认) */
+  temperature?: number | null;
+  /** 附件文档管线:inline / resident / off(空 = inline) */
+  doc_pipeline?: string;
+  /** 触发词(Skill 层,Phase A 仅存储) */
+  triggers?: string[];
 }
 
 /** 记忆注入策略(与后端 INJECTION_STRATEGIES 对齐)。 */
@@ -86,10 +101,18 @@ export interface BranchInfo {
 export interface AttachmentMeta {
   name: string;
   path: string;
-  kind: 'docx' | 'xlsx' | 'pdf' | 'text' | 'image' | 'other';
+  kind: 'docx' | 'xlsx' | 'pdf' | 'pptx' | 'epub' | 'html' | 'text' | 'image' | 'other';
   size: number;
-  /** 文本类附件的提取文本(已截断 8000 字符) */
+  /** 文本类附件的提取文本(已截断) */
   extracted_text: string | null;
+  /** 文档指纹(路径 sha256 前 12 位),doc_search / doc_read 定位用(R3 C1) */
+  doc_id?: string | null;
+  /** 已驻留的块数(缺省 = 未驻留,回退全文注入) */
+  chunk_count?: number | null;
+  /** 200 字摘要(「文档卡」注入用) */
+  summary?: string | null;
+  /** 提取失败/无文本的原因(F7 失败显性化) */
+  extract_note?: string | null;
 }
 
 export interface Frontmatter {

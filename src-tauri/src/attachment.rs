@@ -15,6 +15,12 @@ pub enum AttachmentKind {
     Docx,
     Xlsx,
     Pdf,
+    /// PPTX 演示文稿
+    Pptx,
+    /// EPUB 电子书
+    Epub,
+    /// HTML / HTM 网页
+    Html,
     /// 纯文本 / Markdown / CSV / TSV / 配置等按文本读取的格式
     Text,
     Image,
@@ -27,6 +33,9 @@ impl AttachmentKind {
             Self::Docx => "docx",
             Self::Xlsx => "xlsx",
             Self::Pdf => "pdf",
+            Self::Pptx => "pptx",
+            Self::Epub => "epub",
+            Self::Html => "html",
             Self::Text => "text",
             Self::Image => "image",
             Self::Other => "other",
@@ -45,6 +54,9 @@ pub fn classify(file_name: &str) -> AttachmentKind {
         "docx" => AttachmentKind::Docx,
         "xlsx" | "xlsm" | "xls" | "xla" | "xlsb" | "ods" => AttachmentKind::Xlsx,
         "pdf" => AttachmentKind::Pdf,
+        "pptx" => AttachmentKind::Pptx,
+        "epub" => AttachmentKind::Epub,
+        "html" | "htm" => AttachmentKind::Html,
         "txt" | "md" | "markdown" | "text" | "log" | "csv" | "tsv" | "json" | "yaml" | "yml"
         | "toml" | "ini" | "conf" => AttachmentKind::Text,
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" => AttachmentKind::Image,
@@ -87,6 +99,21 @@ pub fn extract_text(path: &Path, kind: AttachmentKind) -> Result<Option<String>,
         AttachmentKind::Docx => extract_docx(path).map(Some),
         AttachmentKind::Xlsx => extract_xlsx(path).map(Some),
         AttachmentKind::Pdf => extract_pdf(path).map(Some),
+        // R4:PPTX / EPUB / HTML 复用工作区 file_extract 的同一套解析器,
+        // 不再出现「工作区能读、聊天附件读不了」的格式断层。
+        AttachmentKind::Pptx => {
+            let text = crate::fs::formats::pptx_text(path)?;
+            Ok(Some(clamp_text(&text, EXTRACT_BUDGET_CHARS)))
+        }
+        AttachmentKind::Epub => {
+            let text = crate::fs::formats::epub_text(path)?;
+            Ok(Some(clamp_text(&text, EXTRACT_BUDGET_CHARS)))
+        }
+        AttachmentKind::Html => {
+            let raw = crate::fs::formats::read_lossy(path)?;
+            let text = crate::fs::formats::strip_tags(&raw);
+            Ok(Some(clamp_text(text.trim(), EXTRACT_BUDGET_CHARS)))
+        }
         AttachmentKind::Text => extract_plain_text(path).map(Some),
         AttachmentKind::Image | AttachmentKind::Other => Ok(None),
     }
@@ -174,7 +201,13 @@ fn extract_xlsx(path: &Path) -> Result<String, String> {
     let mut capped = false;
     'sheets: for name in wb.sheet_names().to_vec() {
         if let Ok(range) = wb.worksheet_range(&name) {
-            push_line_capped(&mut out, &format!("# Sheet: {name}"), &mut capped);
+            // C3/F5:逐 sheet 输出并标注规模,前端与模型都能保留「哪个表、多少行」的语义
+            let (rows, cols) = range.get_size();
+            push_line_capped(
+                &mut out,
+                &format!("# Sheet: {name} ({rows} 行 × {cols} 列)"),
+                &mut capped,
+            );
             for row in range.rows() {
                 let line: Vec<String> = row.iter().map(|c| c.to_string()).collect();
                 push_line_capped(&mut out, &line.join("\t"), &mut capped);
@@ -187,12 +220,25 @@ fn extract_xlsx(path: &Path) -> Result<String, String> {
     Ok(out.trim().to_string())
 }
 
-/// pdf:pdf-extract 提取全文。
+/// pdf:逐页提取(C3/F4),每页前置 `【第 N 页】` 标记,供分块保留页码。
+/// 无文本层的扫描版 PDF 返回空串(上层据此提示需 OCR / 视觉模型)。
 /// 库不提供流式接口,解析阶段无法中途限预算;输入文件已受 20MB 上限约束,
 /// 提取后立即按字符预算截断,控制落库/注入规模。
 fn extract_pdf(path: &Path) -> Result<String, String> {
-    let text = pdf_extract::extract_text(path).map_err(|e| format!("解析 pdf 失败: {e}"))?;
-    Ok(clamp_text(&text, EXTRACT_BUDGET_CHARS))
+    let pages =
+        pdf_extract::extract_text_by_pages(path).map_err(|e| format!("解析 pdf 失败: {e}"))?;
+    let mut out = String::new();
+    for (i, p) in pages.iter().enumerate() {
+        let t = p.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&format!("【第 {} 页】\n{}\n", i + 1, t));
+    }
+    Ok(clamp_text(out.trim_end(), EXTRACT_BUDGET_CHARS))
 }
 
 /// 截断提取文本(注入与落库共用护栏):最多 max 字符,超出部分截断并追加标记。
@@ -233,6 +279,10 @@ mod tests {
         assert_eq!(classify("readme.md"), AttachmentKind::Text);
         assert_eq!(classify("README.MD"), AttachmentKind::Text);
         assert_eq!(classify("config.yaml"), AttachmentKind::Text);
+        assert_eq!(classify("deck.pptx"), AttachmentKind::Pptx);
+        assert_eq!(classify("book.epub"), AttachmentKind::Epub);
+        assert_eq!(classify("page.HTML"), AttachmentKind::Html);
+        assert_eq!(classify("page.htm"), AttachmentKind::Html);
         assert_eq!(classify("noext"), AttachmentKind::Other);
     }
 
@@ -398,6 +448,23 @@ mod tests {
 
         let text = extract_text(&path, AttachmentKind::Pdf).unwrap().unwrap();
         assert!(text.contains("Hello PDF"), "got: {text}");
+    }
+
+    #[test]
+    fn html_extract_strips_tags() {
+        let dir = tmp_dir("html");
+        let path = dir.join("page.html");
+        std::fs::write(
+            &path,
+            "<html><head><title>标题</title></head><body><h1>主标题</h1><p>正文段落</p></body></html>",
+        )
+        .unwrap();
+        let text = extract_text(&path, AttachmentKind::Html).unwrap().unwrap();
+        assert!(text.contains("标题"), "got: {text}");
+        assert!(text.contains("主标题"), "got: {text}");
+        assert!(text.contains("正文段落"), "got: {text}");
+        assert!(!text.contains("<html>"), "got: {text}");
+        assert!(!text.contains("<script>"), "got: {text}");
     }
 
     #[test]

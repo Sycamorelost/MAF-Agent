@@ -44,6 +44,15 @@ export default function StreamingBubble({
             />
           )}
           <div className="md">
+            {/* 即时响应:正文与思考都还没到时,先给「正在思考」动态提示(准备阶段/模型首字延迟) */}
+            {!text && !reasoningText && (
+              <div className="thinking-hint" aria-live="polite">
+                <span className="th-dot" />
+                <span className="th-dot" />
+                <span className="th-dot" />
+                <span className="th-label">正在思考…</span>
+              </div>
+            )}
             <MemoMarkdown content={text} withCodeBlock streaming />
             <span className="stream-cursor" aria-hidden="true" />
           </div>

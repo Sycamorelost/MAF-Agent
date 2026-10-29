@@ -185,7 +185,8 @@ const SUMMARIZE_SYSTEM: &str = r#"你是 MAF Agent 的记忆提炼器。根据�
 3. 现有正文中的用户自定义章节必须原样保留,不得删除或改写。
 4. 「会话摘要」3-6 句滚动更新;「关键事实与结论」用列表;「待办 / 未决问题」用 - [ ] 复选框。
 5. 只记录长期有价值的信息(事实、结论、偏好、约束、待办);寒暄、闲聊、一次性细节不记录。
-6. 总长度控制在 2000 tokens 以内;逼近上限时优先压缩低价值细节,保留事实与待办。"#;
+6. 总长度控制在 2000 tokens 以内;逼近上限时优先压缩低价值细节,保留事实与待办。
+7. 「文档摘要」节只依据输入中给出的文档骨架与对话结论来写:每份文档 1-2 行(讲什么、关键结论、后续去哪查)。没有正文依据时不要编造数字、页码或原文。"#;
 
 #[derive(Debug, Deserialize)]
 pub struct SummarizeMemoryInput {
@@ -216,12 +217,18 @@ pub async fn summarize_memory(input: SummarizeMemoryInput) -> Result<String, Str
     let mut picked: Vec<String> = Vec::new();
     let mut used = 0usize;
     for m in recent.iter().rev() {
-        let text = if m.content.chars().count() > PER_MSG_CHARS {
+        let mut text = if m.content.chars().count() > PER_MSG_CHARS {
             let cut: String = m.content.chars().take(PER_MSG_CHARS).collect();
             format!("{cut}…(已截断)")
         } else {
             m.content.clone()
         };
+        // R4:把附件摘要带进提炼输入,否则「文档摘要」节只能靠模型猜
+        let digest = attachment_digest(&m.attachments);
+        if !digest.is_empty() {
+            text.push('\n');
+            text.push_str(&digest);
+        }
         let line = format!("{}: {}", m.role, text);
         if used + line.len() > TOTAL_CHARS && !picked.is_empty() {
             break;
@@ -232,11 +239,13 @@ pub async fn summarize_memory(input: SummarizeMemoryInput) -> Result<String, Str
     picked.reverse();
     let history_text = picked.join("\n\n");
 
-    // 3. 组请求
+    // 3. 组请求(附带文档骨架:文件名 / 规模 / 章节,不含正文)
+    let docs = documents_block(&input.session_id);
     let user = format!(
-        "【现有 memory.md 正文】\n{}\n\n【新增对话消息】\n{}",
+        "【现有 memory.md 正文】\n{}\n\n【新增对话消息】\n{}\n{}",
         body.trim(),
-        history_text
+        history_text,
+        docs
     );
     let provider = crate::commands::provider::build_provider(
         &input.provider_id,
@@ -317,4 +326,44 @@ fn clean_summarized_body(raw: &str) -> String {
     }
 
     text.trim().to_string()
+}
+
+/// 附件摘要(每份文档一行):提炼器据此知道"这份文档是什么",不读正文也能写文档摘要。
+fn attachment_digest(raw: &Option<String>) -> String {
+    let Some(raw) = raw else {
+        return String::new();
+    };
+    let Ok(list) = serde_json::from_str::<Vec<serde_json::Value>>(raw) else {
+        return String::new();
+    };
+    let mut out: Vec<String> = Vec::new();
+    for m in list {
+        let Some(name) = m.get("name").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let sum = m.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+        let line = if sum.is_empty() {
+            format!("[文档:{name}]")
+        } else {
+            format!("[文档:{name}] {sum}")
+        };
+        out.push(line.chars().take(360).collect());
+    }
+    out.join("\n")
+}
+
+/// 本会话文档骨架(名称 / 规模 / 章节);无文档时返回空串。
+fn documents_block(session_id: &str) -> String {
+    let conn = match crate::db::conn().lock() {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+    let outline = crate::doc::outline(&conn, session_id).unwrap_or_default();
+    if outline.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n\n【本会话已上传文档(仅骨架,正文未在本次输入中)】{outline}\n\
+         「文档摘要」节请基于上面的骨架与对话结论写,不要编造具体数据。"
+    )
 }

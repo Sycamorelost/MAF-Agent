@@ -34,16 +34,24 @@ export default function TranslatePage() {
   const [sessions, setSessions] = useState<ipc.SessionRow[] | null>(null);
 
   const activeTemplate = readyTemplates.find((t) => t.id === providerId);
-  /** 无对话模型的专用翻译 Provider(DeepL):隐藏模型选择。 */
-  const noModel = !!activeTemplate && activeTemplate.models.length === 0;
+  /** 模型下拉候选:优先「已启用」列表;全部停用时回退全量列表,
+      避免把「模型被停用」误判成「无模型服务商」而把 provider_id 当模型名发出去。 */
+  const modelOptions = activeTemplate
+    ? activeTemplate.models.length > 0
+      ? activeTemplate.models
+      : activeTemplate.all_models
+    : [];
+  /** 无对话模型的专用翻译引擎(DeepL):按服务商判定,与模型列表是否为空无关。 */
+  const noModel = activeTemplate?.id === 'deepl';
 
-  // 默认沿用全局当前 Provider + 模型(跳过无模型的专用 Provider)
+  // 默认沿用全局当前 Provider + 模型(专用引擎不需要模型)
   useEffect(() => {
     if (!providerId && current) {
       const t = readyTemplates.find((x) => x.id === current.providerId);
       if (t) {
         setProviderId(current.providerId);
-        setModel(t.models.includes(current.model) ? current.model : (t.models[0] ?? ''));
+        const list = t.models.length > 0 ? t.models : t.all_models;
+        setModel(list.includes(current.model) ? current.model : (list[0] ?? ''));
       }
     }
   }, [current, providerId, readyTemplates]);
@@ -75,6 +83,9 @@ export default function TranslatePage() {
     dstLang,
     text,
     running,
+    // 自定义(OpenAI 兼容)服务商的 base_url 不在内置模板里,必须由前端带入(与研究/学习同口径)
+    customBaseUrl: providerId === 'custom' ? (activeTemplate?.base_url ?? null) : null,
+    customDisplayName: providerId === 'custom' ? (activeTemplate?.display_name ?? null) : null,
     setResult,
     setRunning,
     setCopied,
@@ -85,7 +96,8 @@ export default function TranslatePage() {
   const pickProvider = (id: string) => {
     setProviderId(id);
     const t = readyTemplates.find((x) => x.id === id);
-    setModel(t?.models[0] ?? '');
+    const list = t ? (t.models.length > 0 ? t.models : t.all_models) : [];
+    setModel(list[0] ?? '');
   };
 
   const swap = () => {
@@ -191,7 +203,7 @@ export default function TranslatePage() {
         providerId={providerId}
         model={model}
         noModel={noModel}
-        activeTemplate={activeTemplate}
+        modelOptions={modelOptions}
         onPickProvider={pickProvider}
         onModelChange={setModel}
         running={running}

@@ -1,8 +1,9 @@
 //! 附件相关 Tauri commands(迭代 D1.1)。
 //!
 //! 落盘约定:`data/attachments/{session_id}/{时间戳}_{安全文件名}`。
-//! 文本类附件(docx/xlsx/pdf/txt/md/csv 等)保存时立即提取纯文本(截断 8000 字符)随元数据返回,
-//! 前端把元数据 JSON 存入 messages.attachments 列,注入上下文时直接引用,无需重复解析。
+//! 文本类附件(docx/xlsx/pdf/txt/md/csv 等)保存时立即提取纯文本并分块入库;
+//! 消息 JSON 只存元数据 + 摘要 + 最多 20,000 字符的正文摘录(全文在 `doc_chunks`),
+//! 避免 200 页 PDF 把消息表撑大。
 
 use serde::Serialize;
 use std::path::PathBuf;
@@ -23,6 +24,77 @@ pub struct AttachmentMeta {
     pub size: u64,
     /// 文本类附件的提取文本(已截断);图片/其他为 None
     pub extracted_text: Option<String>,
+    /// 文档指纹(落盘路径 sha256 前 12 位),doc_search / doc_read 定位用(R3 C1)
+    #[serde(default)]
+    pub doc_id: Option<String>,
+    /// 驻留块数(缺省 = 未驻留,前端回退为全文注入)
+    #[serde(default)]
+    pub chunk_count: Option<usize>,
+    /// 200 字摘要(「文档卡」注入用)
+    #[serde(default)]
+    pub summary: Option<String>,
+    /// 提取失败 / 无文本的原因(F7 失败显性化,前端标 ⚠ 提示)
+    #[serde(default)]
+    pub extract_note: Option<String>,
+}
+
+/// 提取正文 → 分块驻留(会话级)→ 返回消息层数据。
+/// 返回 (消息用正文摘录, 失败原因, 块数, 摘要, doc_id)。图片/其他格式不提取文本。
+/// catch_unwind 防止 pdf-extract / calamine 等解析 panic 导致进程 abort。
+type ExtractResult = (
+    Option<String>,
+    Option<String>,
+    Option<usize>,
+    Option<String>,
+    Option<String>,
+);
+
+fn extract_and_index(
+    session_id: &str,
+    name: &str,
+    kind: AttachmentKind,
+    path: &str,
+) -> ExtractResult {
+    let raw = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        attachment::extract_text(std::path::Path::new(path), kind)
+    }))
+    .ok()
+    .and_then(|r| r.ok())
+    .flatten();
+    let (text, note) = match raw {
+        Some(t) if !t.trim().is_empty() => (
+            Some(attachment::clamp_text(&t, attachment::EXTRACT_BUDGET_CHARS)),
+            None,
+        ),
+        Some(_) => (
+            None,
+            Some(if kind == AttachmentKind::Pdf {
+                "未提取到文本:可能是扫描版 PDF(需 OCR / 视觉模型)".to_string()
+            } else {
+                "未提取到文本".to_string()
+            }),
+        ),
+        None if matches!(kind, AttachmentKind::Image | AttachmentKind::Other) => (
+            None,
+            Some("该格式不做文本提取(图片随消息走视觉通道)".to_string()),
+        ),
+        None => (None, Some("文本提取失败或该格式无文本层".to_string())),
+    };
+    let Some(text) = text else {
+        return (None, note, None, None, None);
+    };
+    // 摘要 / 分块入库 / 消息摘录全部交给统一的文档服务(见 doc::service)。
+    let ingested = crate::db::conn()
+        .lock()
+        .map(|conn| crate::doc::service::ingest(&conn, session_id, name, kind.as_str(), &text))
+        .unwrap_or_default();
+    (
+        ingested.excerpt,
+        None,
+        ingested.chunks,
+        ingested.summary,
+        ingested.doc_id,
+    )
 }
 
 /// 附件单文件大小上限:20MB(保存与复用入口共用,前端另有同值预检)。
@@ -101,23 +173,67 @@ pub async fn save_attachment(
     let path = dir.join(format!("{ts}_{safe}"));
     std::fs::write(&path, &bytes).map_err(|e| format!("写入附件失败: {e}"))?;
 
-    // 文本类立即提取(失败不阻塞附件保存,仅无 extracted_text);
+    // 文本类立即提取并分块驻留(失败不阻塞附件保存,仅无 extracted_text);
     // catch_unwind 防止 pdf-extract/calamine 等解析 panic 导致进程 abort
-    let extracted_text = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        attachment::extract_text(&path, kind)
-    }))
-    .ok()
-    .and_then(|r| r.ok())
-    .flatten()
-    .map(|t| attachment::clamp_text(&t, attachment::EXTRACT_BUDGET_CHARS));
+    let path_str = path.to_string_lossy().to_string();
+    let (extracted_text, extract_note, chunk_count, summary, doc_id) =
+        extract_and_index(&session_id, &file_name, kind, &path_str);
 
     Ok(AttachmentMeta {
         name: file_name,
-        path: path.to_string_lossy().to_string(),
+        doc_id,
+        path: path_str,
         kind: kind.as_str().to_string(),
         size: bytes.len() as u64,
         extracted_text,
+        chunk_count,
+        summary,
+        extract_note,
     })
+}
+
+/// 只提取文本、不落盘:供「去 AI 味」工作台等页面把拖入的文件直接填进输入区。
+/// 写临时文件后复用统一提取管线(编码/格式处理一致),用完即删。
+#[tauri::command]
+pub fn extract_text_preview(file_name: String, data_base64: String) -> Result<String, String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&data_base64)
+        .map_err(|e| format!("base64 解码失败: {e}"))?;
+    if bytes.is_empty() {
+        return Err("文件内容为空".into());
+    }
+    if bytes.len() as u64 > MAX_ATTACHMENT_BYTES {
+        return Err("文件超过 20MB 上限".into());
+    }
+    let kind = attachment::classify(&file_name);
+    if matches!(kind, AttachmentKind::Image | AttachmentKind::Other) {
+        return Err("该格式不支持文本提取(请直接粘贴文本)".into());
+    }
+    let tmp = std::env::temp_dir().join(format!(
+        "maf-preview-{}-{}",
+        std::process::id(),
+        sanitize_name(&file_name)
+    ));
+    std::fs::write(&tmp, &bytes).map_err(|e| format!("写入临时文件失败: {e}"))?;
+    let raw = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        attachment::extract_text(&tmp, kind)
+    }))
+    .ok()
+    .and_then(|r| r.ok())
+    .flatten();
+    let _ = std::fs::remove_file(&tmp);
+    match raw {
+        Some(t) if !t.trim().is_empty() => {
+            Ok(attachment::clamp_text(&t, attachment::EXTRACT_BUDGET_CHARS)
+                .trim()
+                .to_string())
+        }
+        _ => Err(if kind == AttachmentKind::Pdf {
+            "未提取到文本:可能是扫描版 PDF(需 OCR / 视觉模型)".into()
+        } else {
+            "文本提取失败或该格式无文本层".into()
+        }),
+    }
 }
 
 /// 读取附件字节并返回 data URL(前端渲染历史图片附件用)。
@@ -248,28 +364,28 @@ pub fn insert_attachment_to_session(
     }
     let name = display_name_from_path(p);
     let kind = attachment::classify(&name);
-    let extracted_text = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        attachment::extract_text(p, kind)
-    }))
-    .ok()
-    .and_then(|r| r.ok())
-    .flatten()
-    .map(|t| attachment::clamp_text(&t, attachment::EXTRACT_BUDGET_CHARS));
+    let path_str = p.to_string_lossy().to_string();
+    let (extracted_text, extract_note, chunk_count, summary, doc_id) =
+        extract_and_index(&session_id, &name, kind, &path_str);
     Ok(AttachmentMeta {
+        doc_id,
         name,
-        path: p.to_string_lossy().to_string(),
+        path: path_str,
         kind: kind.as_str().to_string(),
         size: fs_meta.len(),
         extracted_text,
+        chunk_count,
+        summary,
+        extract_note,
     })
 }
 
-/// 从指定消息的 attachments JSON 中移除 path 条目。可测试核心。
+/// 从指定消息的 attachments JSON 中移除 path 条目,返回被移除的元数据。可测试核心。
 fn remove_from_message_on(
     conn: &rusqlite::Connection,
     message_id: i64,
     path: &str,
-) -> Result<(), String> {
+) -> Result<Vec<AttachmentMeta>, String> {
     let raw: Option<String> = conn
         .query_row(
             "SELECT attachments FROM messages WHERE id=?1",
@@ -281,9 +397,16 @@ fn remove_from_message_on(
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or_default();
-    let before = metas.len();
-    metas.retain(|m| m.path != path);
-    if metas.len() == before {
+    let mut removed = Vec::new();
+    metas.retain(|m| {
+        if m.path == path {
+            removed.push(m.clone());
+            false
+        } else {
+            true
+        }
+    });
+    if removed.is_empty() {
         return Err("该消息中未找到此附件".into());
     }
     let new_json: Option<String> = if metas.is_empty() {
@@ -296,6 +419,70 @@ fn remove_from_message_on(
         rusqlite::params![new_json, message_id],
     )
     .map_err(|e| format!("更新消息附件失败: {e}"))?;
+    Ok(removed)
+}
+
+/// 同会话内仍在引用该 doc_id 的附件数(内容相同的重复上传会共享 doc_id)。
+fn count_doc_id_refs_on(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    doc_id: &str,
+) -> Result<usize, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT attachments FROM messages
+             WHERE session_id=?1 AND attachments IS NOT NULL AND attachments <> '[]'",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(rusqlite::params![session_id], |r| r.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    let mut n = 0;
+    for row in rows {
+        let raw: String = row.map_err(|e| e.to_string())?;
+        if let Ok(list) = serde_json::from_str::<Vec<AttachmentMeta>>(&raw) {
+            n += list
+                .iter()
+                .filter(|m| m.doc_id.as_deref() == Some(doc_id))
+                .count();
+        }
+    }
+    Ok(n)
+}
+
+/// 删除附件:从来源消息 JSON 移除条目;全库无其他引用时一并删除磁盘文件,
+/// 并级联清理该文档的检索块(R13:删附件后 doc_search 不应再返回旧内容)。
+#[tauri::command]
+pub fn delete_attachment(message_id: i64, path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    ensure_in_attachments_dir(p)?;
+    let refs = {
+        let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
+        let removed = remove_from_message_on(&conn, message_id, &path)?;
+        let session_id: String = conn
+            .query_row(
+                "SELECT session_id FROM messages WHERE id=?1",
+                rusqlite::params![message_id],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        let refs = count_references_on(&conn, &path)?;
+        if refs == 0 {
+            for meta in &removed {
+                let Some(doc_id) = meta.doc_id.as_deref() else {
+                    continue;
+                };
+                if count_doc_id_refs_on(&conn, &session_id, doc_id)? == 0 {
+                    crate::doc::service::purge(&conn, &session_id, doc_id)?;
+                }
+            }
+        }
+        refs
+    };
+    // 无引用则清理磁盘(文件已不存在则忽略)
+    if refs == 0 && p.exists() {
+        std::fs::remove_file(p).map_err(|e| format!("删除磁盘文件失败: {e}"))?;
+    }
     Ok(())
 }
 
@@ -315,23 +502,6 @@ fn count_references_on(conn: &rusqlite::Connection, path: &str) -> Result<usize,
         }
     }
     Ok(n)
-}
-
-/// 删除附件:从来源消息 JSON 移除条目;全库无其他引用时一并删除磁盘文件。
-#[tauri::command]
-pub fn delete_attachment(message_id: i64, path: String) -> Result<(), String> {
-    let p = std::path::Path::new(&path);
-    ensure_in_attachments_dir(p)?;
-    let refs = {
-        let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
-        remove_from_message_on(&conn, message_id, &path)?;
-        count_references_on(&conn, &path)?
-    };
-    // 无引用则清理磁盘(文件已不存在则忽略)
-    if refs == 0 && p.exists() {
-        std::fs::remove_file(p).map_err(|e| format!("删除磁盘文件失败: {e}"))?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -383,6 +553,10 @@ mod tests {
             kind: kind.into(),
             size: 42,
             extracted_text: None,
+            doc_id: None,
+            chunk_count: None,
+            summary: None,
+            extract_note: None,
         }
     }
 
@@ -495,6 +669,38 @@ mod tests {
             count_references_on(&conn, r"D:\att\shared\none.png").unwrap(),
             0
         );
+    }
+
+    #[test]
+    fn remove_from_message_returns_removed_meta() {
+        let conn = setup_db();
+        let mut m = fake_meta("a.png", r"D:\att\s1\a.png", "image");
+        m.doc_id = Some("abc123".into());
+        let m1 = add_msg(&conn, "s1", Some(&meta_json(&[m])));
+
+        let removed = remove_from_message_on(&conn, m1, r"D:\att\s1\a.png").unwrap();
+        assert_eq!(removed.len(), 1);
+        assert_eq!(removed[0].doc_id.as_deref(), Some("abc123"));
+    }
+
+    /// R13:同一内容(doc_id 相同)在多条消息中引用时,删除一条不应误清块。
+    #[test]
+    fn count_doc_id_refs_detects_shared_content() {
+        let conn = setup_db();
+        let mut a = fake_meta("a.pdf", r"D:\att\s1\a.pdf", "pdf");
+        a.doc_id = Some("dup".into());
+        let mut b = fake_meta("b.pdf", r"D:\att\s1\b.pdf", "pdf");
+        b.doc_id = Some("dup".into());
+        add_msg(&conn, "s1", Some(&meta_json(&[a])));
+        add_msg(&conn, "s1", Some(&meta_json(&[b])));
+        add_msg(
+            &conn,
+            "s2",
+            Some(&meta_json(&[fake_meta("c.pdf", r"D:\att\s2\c.pdf", "pdf")])),
+        );
+
+        assert_eq!(count_doc_id_refs_on(&conn, "s1", "dup").unwrap(), 2);
+        assert_eq!(count_doc_id_refs_on(&conn, "s2", "dup").unwrap(), 0);
     }
 
     #[test]

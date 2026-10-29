@@ -1,10 +1,10 @@
 //! SQLite schema 定义与迁移。
 //!
 //! 对应 plan/01-phase1-mvp.md §3.1。
-//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION(20)。
+//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION(22)。
 //!
 //! 拆分(§10.2.1):`migrate_v1` 收敛 V1–V15 的迁移 SQL 与自愈式加列助手,
-//! `v16` 收敛 V16–V17 的迁移 SQL;版本执行顺序仍由本文件统一编排。
+//! `v16` 收敛 V16–V22 的迁移 SQL;版本执行顺序仍由本文件统一编排。
 
 mod migrate_v1;
 mod v16;
@@ -20,11 +20,11 @@ use migrate_v1::{
 };
 use v16::{
     MIGRATION_STUDY_P1, MIGRATION_V17_INDEX, MIGRATION_V18_INDEX, MIGRATION_V19_TODOS,
-    MIGRATION_V20_INDEX,
+    MIGRATION_V20_INDEX, MIGRATION_V21_AIFLAVOR, MIGRATION_V22_DOC_CHUNKS,
 };
 
 /// 当前 schema 版本。每次结构变更 +1 并追加迁移 SQL。
-pub const SCHEMA_VERSION: i32 = 20;
+pub const SCHEMA_VERSION: i32 = 22;
 
 /// 快路径判定(PERF-2):`user_version` 已是最新且核心表齐全时,可跳过全量 DDL 与回填。
 ///
@@ -53,6 +53,7 @@ fn is_schema_ready(conn: &Connection) -> rusqlite::Result<bool> {
         "quiz_attempts",
         "reviews",
         "todos",
+        "doc_chunks",
     ];
     let placeholders = vec!["?"; CORE.len()].join(",");
     let sql = format!("SELECT COUNT(*) FROM sqlite_master WHERE name IN ({placeholders})");
@@ -225,6 +226,10 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     tx.execute_batch(MIGRATION_V19_TODOS)?;
     // V20(PERF-3):会话列表 / 附件列表的支撑索引。
     tx.execute_batch(MIGRATION_V20_INDEX)?;
+    // V21(R3 B2):去 AI 味报告与改写记录。
+    tx.execute_batch(MIGRATION_V21_AIFLAVOR)?;
+    // V22(R3 C1):文档驻留层(doc_chunks)。
+    tx.execute_batch(MIGRATION_V22_DOC_CHUNKS)?;
     // 旧数据回填:main 分支内按 id 顺序形成线性链。
     // 仅回填 main:其他分支首条消息的 parent_id 可能合法为 NULL(从会话开头分叉),
     // 且 fork 消息的 parent 在写入时已显式设置,不在此 touched。

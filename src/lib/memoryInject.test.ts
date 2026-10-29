@@ -14,6 +14,8 @@ const BODY = [
   '事实一。',
   '# 待办 / 未决问题',
   '待办一。',
+  '# 文档摘要',
+  '文档一:讲多智能体协作。',
   '# 其他',
   '无关内容。',
 ].join('\n');
@@ -78,12 +80,18 @@ describe('injectByStrategy', () => {
     expect(out).not.toContain('待办一。');
   });
 
-  it('hybrid 策略取摘要 + 关键事实 + 待办', () => {
+  it('hybrid 策略取摘要 + 关键事实 + 待办 + 文档摘要', () => {
     const out = injectByStrategy(BODY, 'hybrid');
     expect(out).toContain('这是摘要内容。');
     expect(out).toContain('事实一。');
     expect(out).toContain('待办一。');
+    expect(out).toContain('文档一:讲多智能体协作。');
     expect(out).not.toContain('无关内容。');
+  });
+
+  it('summary 策略不注入文档摘要', () => {
+    const out = injectByStrategy(BODY, 'summary');
+    expect(out).not.toContain('文档一:讲多智能体协作。');
   });
 
   it('摘要类策略提取不到任何章节时回退全文', () => {

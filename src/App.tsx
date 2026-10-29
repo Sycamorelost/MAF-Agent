@@ -5,12 +5,22 @@ import { listen } from '@tauri-apps/api/event';
 import Titlebar from './components/Titlebar';
 import Sidebar from './components/Sidebar';
 import DataDirSetupDialog from './components/DataDirSetupDialog';
+import OnboardingDialog from './components/OnboardingDialog';
 import * as ipc from './lib/ipc';
 import McpApprovalDialog from './components/McpApprovalDialog';
 import { useSessionsStore } from './stores/sessions';
 import { useProvidersStore } from './stores/providers';
 import { useThemeStore } from './stores/theme';
-import './styles/app.css';
+import './styles/base.css';
+import './styles/dialog.css';
+import './styles/home.css';
+import './styles/chat.css';
+import './styles/phase.css';
+import './styles/research.css';
+import './styles/tools.css';
+import './styles/memory.css';
+import './styles/settings.css';
+import './styles/aiflavor.css';
 import 'katex/dist/katex.min.css';
 
 // PERF-4:页面按路由懒加载,首屏只加载布局与当前页,避免 8 MB+ 单包一次性解析。
@@ -23,12 +33,13 @@ const TranslatePage = lazy(() => import('./pages/TranslatePage'));
 const MemoryPage = lazy(() => import('./pages/MemoryPage'));
 const NotesPage = lazy(() => import('./pages/NotesPage'));
 const AttachmentsPage = lazy(() => import('./pages/AttachmentsPage'));
+const AiFlavorPage = lazy(() => import('./pages/aiflavor/AiFlavorPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 /** 深度研究/绘画/翻译/记忆/设置页自带布局,隐藏会话侧栏(条件挂载,抽屉 body class 随卸载清理)。 */
 function MaybeSidebar() {
   const loc = useLocation();
-  const bare = ['/research', '/plan', '/draw', '/translate', '/memory', '/notes', '/attachments', '/settings'];
+  const bare = ['/research', '/plan', '/draw', '/translate', '/memory', '/notes', '/attachments', '/aiflavor', '/settings'];
   const hidden = bare.some((p) => loc.pathname.startsWith(p));
   if (hidden) return null;
   return <Sidebar />;
@@ -45,6 +56,19 @@ function DataDirGate() {
   }, []);
   if (!need) return null;
   return <DataDirSetupDialog onDone={() => setNeed(false)} />;
+}
+
+/** 首次启动向导门:未完成首次引导时显示底层 Prompt 确认向导。 */
+function OnboardingGate() {
+  const [need, setNeed] = useState(false);
+  useEffect(() => {
+    ipc
+      .getSettings()
+      .then((s) => setNeed(!s.first_run_completed))
+      .catch(() => {});
+  }, []);
+  if (!need) return null;
+  return <OnboardingDialog onDone={() => setNeed(false)} />;
 }
 
 /** 主窗口内容:监听「跳转会话」/「打开设置页」/「划词提问」事件并导航。 */
@@ -122,6 +146,7 @@ function MainApp() {
               <Route path="/memory" element={<MemoryPage />} />
               <Route path="/notes" element={<NotesPage />} />
               <Route path="/attachments" element={<AttachmentsPage />} />
+              <Route path="/aiflavor" element={<AiFlavorPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
@@ -139,12 +164,30 @@ export default function App() {
 
   useEffect(() => {
     // 每个窗口独立 document.title:避免任务栏/Alt-Tab 显示 dev server 地址(localhost:1420)
-    document.title = 'MAF Agent';
+    // 读取用户自定义应用名称(空 = "MAF Agent")
+    ipc.getSettings()
+      .then((s) => {
+        const name = s.custom_app_name?.trim() || 'MAF Agent';
+        document.title = name;
+        // document.title 不会同步到原生标题栏,需显式 setTitle(改名后即时生效)
+        void getCurrentWindow().setTitle(name);
+      })
+      .catch(() => {
+        document.title = 'MAF Agent';
+      });
+    // 监听设置变化,实时更新窗口标题
+    const unTitle = listen('settings_changed', (e) => {
+      const s = e.payload as ipc.AppSettings;
+      const name = s.custom_app_name?.trim() || 'MAF Agent';
+      document.title = name;
+      void getCurrentWindow().setTitle(name);
+    });
 
     // 主窗口启动时清掉遗留空会话(5 分钟宽限,避免误删刚创建还没发消息的会话)
     if (label === 'main') void useSessionsStore.getState().pruneEmpty(300);
     refreshSessions();
-    loadProviders();
+    // 启动即加载 Provider 模板与 Key 状态:漏掉这步会让全部模型选择器显示「未配置」
+    void loadProviders();
 
     // H-1:保存/删除 Key、增删模板、拉取模型、改单模型配置后,
     // 后端广播 providers_changed,前端同步刷新全局 store。
@@ -155,12 +198,16 @@ export default function App() {
     }).then((un) => {
       unlisten = un;
     });
-    return () => unlisten?.();
+    return () => {
+      void unTitle.then((f) => f());
+      unlisten?.();
+    };
   }, [refreshSessions, loadProviders, label]);
 
   return (
     <HashRouter>
       <DataDirGate />
+      <OnboardingGate />
       <MainApp />
       <McpApprovalDialog />
     </HashRouter>

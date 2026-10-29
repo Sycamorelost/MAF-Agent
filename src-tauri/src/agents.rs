@@ -1,4 +1,4 @@
-//! Agent 模板(迭代 B2):24 个内置骨架模板 + 用户变体/自定义模板。
+//! Agent 模板(迭代 B2 → R3 A3/B4 → R4 收口):22 个内置模板 + 用户变体/自定义模板。
 //!
 //! 对应 idea/07-agent-templates.md(已按 2026-10-13 决策舍弃 mcp_tools 字段)。
 //! 内置模板硬编码;用户创建的变体/自定义模板落盘 `data/agents.json`。
@@ -39,12 +39,63 @@ pub struct AgentTemplate {
     /// 是否内置(内置不可删除/覆盖);JSON 中缺省 false
     #[serde(default)]
     pub builtin: bool,
+    // —— v2 字段(R3,val.md §4.3):全部有默认,旧 agents.json 兼容 ——
+    /// 开场白:空会话首条展示(None = 不展示)
+    #[serde(default)]
+    pub opening_message: String,
+    /// 输入框追问建议(chips)
+    #[serde(default)]
+    pub suggestions: Vec<String>,
+    /// 工具策略:None=继承全局;Some(空)=禁用工具;Some(列表)=仅允许名单内工具
+    #[serde(default)]
+    pub tool_policy: Option<Vec<String>>,
+    /// 思考档位偏好:空 = 跟随用户设置;off / low / medium / high
+    #[serde(default)]
+    pub thinking_level: String,
+    /// 采样温度偏好(None = 跟随模型默认)
+    #[serde(default)]
+    pub temperature: Option<f32>,
+    /// 附件文档管线:inline(直接注入,现行为)/ resident(驻留+检索,待 Phase C)/ off
+    #[serde(default)]
+    pub doc_pipeline: String,
+    /// 触发词(Skill 层,命中时提示切换智能体;Phase A 仅存储)
+    #[serde(default)]
+    pub triggers: Vec<String>,
 }
 
-/// 合法分类。
-pub const CATEGORIES: [&str; 6] = ["chat", "doc", "dev", "create", "ops", "meta"];
+/// 合法分类(R3 A3 扩展:生活/学习/工作/学术四大方向)。
+pub const CATEGORIES: [&str; 10] = [
+    "chat", "doc", "dev", "create", "ops", "meta", "life", "study", "work", "academic",
+];
 
-/// 24 个内置模板(idea/07 一~六章;每类 4 个)。
+/// v2 新增字段的空默认:保持 t() 原签名,内置模板仅显式覆盖需要的字段。
+fn v2_defaults() -> AgentTemplate {
+    AgentTemplate {
+        agent_id: String::new(),
+        name: String::new(),
+        icon: String::new(),
+        description: String::new(),
+        category: String::new(),
+        recommended_model: String::new(),
+        memory_strategy: "full".into(),
+        system_prompt: String::new(),
+        input_hints: Vec::new(),
+        memory_write: false,
+        memory_sections: Vec::new(),
+        base_agent: None,
+        builtin: false,
+        opening_message: String::new(),
+        suggestions: Vec::new(),
+        tool_policy: None,
+        thinking_level: String::new(),
+        temperature: None,
+        doc_pipeline: String::new(),
+        triggers: Vec::new(),
+    }
+}
+
+/// 22 个内置模板(R4 决策:正式收缩为 22 个,未注册的提示词分支已删除)。
+/// 分类:chat 3 + doc 4 + dev 2 + create 2 + ops 1 + meta 2 + study 2 + work 2 + academic 4 = 22。
 pub fn builtin_templates() -> Vec<AgentTemplate> {
     let t = |agent_id: &str,
              name: &str,
@@ -70,9 +121,10 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
         memory_sections: memory_sections.iter().map(|s| s.to_string()).collect(),
         base_agent: None,
         builtin: true,
+        ..v2_defaults()
     };
     vec![
-        // 一、Chat 类
+        // 一、Chat 类（3 个核心）
         t(
             "product-assistant",
             "产品助手",
@@ -112,7 +164,7 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             true,
             &["待办", "关键事实与结论"],
         ),
-        // 二、Doc 类
+        // 二、Doc 类（3 个核心 + 2 个去 AI 味）
         t(
             "doc-analyst",
             "文档分析师",
@@ -127,19 +179,19 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             &["文档摘要"],
         ),
         t(
-            "diff-reader",
-            "对比阅读器",
-            "git-compare",
+            "report-writer",
+            "报告撰写助手",
+            "note",
             "doc",
-            "两篇文档并排对比 → 输出差异矩阵 → 总结结论",
+            "素材 → 结构化报告(背景/方法/结论/建议)",
             "gpt-5.2",
-            "none",
-            prompt_for("diff-reader"),
-            &["对比这两份竞品文档", "比较 v2 和 v3 版本"],
-            false,
-            &[],
+            "full",
+            prompt_for("report-writer"),
+            &["根据这些素材写周报", "整理成调研报告"],
+            true,
+            &["文档摘要", "关键事实与结论"],
         ),
-        // 三、Dev 类
+        // 三、Dev 类（2 个核心）
         t(
             "code-reviewer",
             "代码审查员",
@@ -150,19 +202,6 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             "none",
             prompt_for("code-reviewer"),
             &["审查当前分支", "对比 main 改动", "检查这段代码"],
-            false,
-            &[],
-        ),
-        t(
-            "refactor",
-            "重构助手",
-            "refresh-cw",
-            "dev",
-            "输入代码片段 → 输出重构前后 diff + 解释",
-            "deepseek-v3",
-            "none",
-            prompt_for("refactor"),
-            &["帮我重构这个函数", "提取组件", "消除重复"],
             false,
             &[],
         ),
@@ -179,7 +218,7 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             false,
             &[],
         ),
-        // 四、Create 类
+        // 四、Create 类（2 个核心）
         t(
             "deep-researcher",
             "深度研究员",
@@ -194,19 +233,6 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             &["资料", "待办"],
         ),
         t(
-            "prompt-engineer",
-            "生图描述师",
-            "wand-sparkles",
-            "create",
-            "把模糊想法 → 结构化 Stable Diffusion / DALL-E prompt",
-            "gpt-5.2",
-            "none",
-            prompt_for("prompt-engineer"),
-            &["赛博朋克城市夜晚", "水彩风格的猫"],
-            false,
-            &[],
-        ),
-        t(
             "translator",
             "翻译专家",
             "languages",
@@ -219,7 +245,7 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             false,
             &[],
         ),
-        // 五、Ops 类
+        // 五、Ops 类（1 个核心）
         t(
             "compliance-check",
             "合规检查员",
@@ -233,163 +259,229 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             false,
             &[],
         ),
+        // 六、Meta 类（1 个核心：裸助手 = 默认预制）
         t(
-            "memory-steward",
-            "记忆管家",
-            "archive",
-            "ops",
-            "跨会话搜索记忆、合并、整理偏好标签",
-            "qwen-max",
-            "none",
-            prompt_for("memory-steward"),
-            &["搜索\"API\"", "整理偏好", "对比版本"],
-            false,
-            &[],
-        ),
-        // 六、Meta 类
-        t(
-            "prompt-optimizer",
-            "Prompt 优化器",
-            "sparkles",
+            "bare-assistant",
+            "默认助手",
+            "bot",
             "meta",
-            "用户给一段 prompt → 输出优化版 + 多风格变体",
-            "claude-sonnet-4-5",
-            "none",
-            prompt_for("prompt-optimizer"),
-            &["帮我写个 prompt 让 AI 写周报"],
-            false,
-            &[],
-        ),
-        t(
-            "study-tutor",
-            "学习辅导老师",
-            "chat",
-            "chat",
-            "概念讲解 → 举例 → 出题检验,循序渐进",
-            "qwen-max",
+            "无人格预设，仅物理契约，跟随用户指令",
+            "",
             "full",
-            prompt_for("study-tutor"),
-            &["讲解这个概念", "出几道练习题", "帮我制定学习计划"],
+            prompt_for("bare-assistant"),
+            &["直接开始任务", "回答我的问题", "帮我处理这段文本"],
             true,
-            &["会话摘要", "关键事实与结论", "待办"],
-        ),
-        t(
-            "contract-reviewer",
-            "合同审阅员",
-            "file-text",
-            "doc",
-            "逐条审阅合同 → 标出风险条款 → 给出修改建议",
-            "claude-sonnet-4-5",
-            "none",
-            prompt_for("contract-reviewer"),
-            &["审阅这份合同", "找出不利条款", "帮我改这条"],
-            false,
             &[],
         ),
+        // 七、学习类（2 个核心）
         t(
-            "report-writer",
-            "报告撰写助手",
-            "note",
-            "doc",
-            "素材 → 结构化报告(背景/方法/结论/建议)",
-            "gpt-5.2",
-            "full",
-            prompt_for("report-writer"),
-            &["根据这些素材写周报", "整理成调研报告"],
-            true,
-            &["文档摘要", "关键事实与结论"],
-        ),
-        t(
-            "test-writer",
-            "单元测试生成器",
-            "check",
-            "dev",
-            "给定函数/模块 → 生成边界用例 + 断言",
-            "deepseek-v3",
-            "none",
-            prompt_for("test-writer"),
-            &["为这个函数写测试", "补边界用例"],
-            false,
-            &[],
-        ),
-        t(
-            "copywriter",
-            "营销文案师",
+            "feynman-coach",
+            "费曼讲解",
             "edit",
-            "create",
-            "卖点 → 多平台文案(标题 + 正文 + 话题标签)",
-            "gpt-5.2",
+            "study",
+            "让用户先讲，纠偏+类比",
+            "",
+            "full",
+            prompt_for("feynman-coach"),
+            &["我用三句话讲讲这个概念", "帮我检查哪里讲错了", "再给个类比"],
+            true,
+            &["会话摘要", "待办"],
+        ),
+        t(
+            "paper-reader",
+            "文献精读",
+            "file-text",
+            "study",
+            "逐节解读+批判性问题清单，引用定位",
+            "",
+            "summary",
+            prompt_for("paper-reader"),
+            &["精读这篇论文", "这个方法的局限是什么", "帮我列批判性问题"],
+            true,
+            &[],
+        ),
+        // 八、工作类（2 个核心）
+        t(
+            "email-drafter",
+            "邮件起草",
+            "edit",
+            "work",
+            "分语气版本，收件人视角检查",
+            "",
             "none",
-            prompt_for("copywriter"),
-            &["给这款产品写文案", "写个小红书笔记"],
+            prompt_for("email-drafter"),
+            &[
+                "给客户写一封催款邮件",
+                "委婉拒绝这个请求",
+                "把这封邮件改正式",
+            ],
             false,
             &[],
         ),
         t(
-            "security-auditor",
-            "安全审计员",
-            "shield-check",
-            "ops",
-            "静态排查注入/越权/密钥泄露等风险,只报告可证实项",
-            "gpt-5.2",
-            "none",
-            prompt_for("security-auditor"),
-            &["审计这段代码的安全性", "有没有注入风险"],
-            false,
-            &[],
-        ),
-        t(
-            "log-analyst",
-            "日志分析师",
-            "search",
-            "ops",
-            "日志 → 异常聚类 → 时间线 → 根因假设",
-            "gpt-5.2",
-            "none",
-            prompt_for("log-analyst"),
-            &["分析这份日志", "为什么报这个错"],
-            false,
-            &[],
-        ),
-        t(
-            "agent-designer",
-            "智能体设计师",
-            "brain",
-            "meta",
-            "把需求 → 完整智能体定义(角色/约束/示例/记忆策略)",
-            "claude-sonnet-4-5",
-            "none",
-            prompt_for("agent-designer"),
-            &["帮我设计一个简历优化助手"],
-            false,
-            &[],
-        ),
-        t(
-            "workflow-planner",
-            "流程规划师",
+            "weekly-report",
+            "周报助手",
             "clipboard-list",
-            "meta",
-            "目标 → 分阶段执行计划 + 依赖 + 验收标准",
-            "gpt-5.2",
-            "none",
-            prompt_for("workflow-planner"),
-            &["把这个项目拆成计划", "梳理上线流程"],
-            false,
-            &[],
+            "work",
+            "STAR 结构，量化留白「待补充」",
+            "",
+            "summary",
+            prompt_for("weekly-report"),
+            &["把这些流水整理成周报", "补充风险与求助", "下周计划怎么写"],
+            true,
+            &["会话摘要", "待办"],
+        ),
+        // 九、学术类（3 个核心）
+        t(
+            "exp-designer",
+            "实验设计",
+            "research",
+            "academic",
+            "变量/对照/样本量框架，提醒伦理审查",
+            "",
+            "full",
+            prompt_for("exp-designer"),
+            &["帮我设计对照组", "样本量怎么估", "这个实验有哪些混杂因素"],
+            true,
+            &["实验记录", "关键事实与结论"],
         ),
         t(
-            "requirement-analyst",
-            "需求分析师",
-            "doc",
-            "meta",
-            "零散想法 → 结构化需求(背景/目标/范围/验收)",
-            "claude-sonnet-4-5",
-            "none",
-            prompt_for("requirement-analyst"),
-            &["整理这个需求", "把想法写成需求文档"],
-            false,
-            &[],
+            "data-analyst",
+            "数据处理",
+            "git-compare",
+            "academic",
+            "统计方法选择+代码步骤，不编造数值",
+            "",
+            "summary",
+            prompt_for("data-analyst"),
+            &["这组数据用什么检验", "帮我写清洗脚本", "结果应该怎么解读"],
+            true,
+            &["实验记录", "关键事实与结论"],
         ),
+        t(
+            "lab-report-writer",
+            "实验报告撰写",
+            "doc",
+            "academic",
+            "背景-方法-结果-讨论四段成文",
+            "",
+            "full",
+            prompt_for("lab-report-writer"),
+            &["把实验记录整理成报告", "方法节要写多细", "讨论部分怎么写"],
+            true,
+            &["实验记录", "关键事实与结论"],
+        ),
+        // —— R3 B4：去 AI 味 · AI 生成概率分析 专用智能体（4 个，val.md §5.4）——
+        // tool_policy/doc_pipeline 按 §5.4 表：detector/rewriter/voice 走 inline，anchor 全离线。
+        AgentTemplate {
+            tool_policy: Some(vec!["fs_read".into()]),
+            doc_pipeline: "inline".into(),
+            opening_message:
+                "把要判定的文本发我，我会基于本地统计结果逐句说明「哪里像 AI、为什么」。".into(),
+            suggestions: vec![
+                "解读这份检测报告".into(),
+                "哪些句子最像 AI".into(),
+                "改写优先级怎么排".into(),
+            ],
+            ..t(
+                "ai-flavor-detector",
+                "AI 味检测官",
+                "search",
+                "doc",
+                "解读本地统计结果，输出证据化的句子级研判报告",
+                "",
+                "none",
+                prompt_for("ai-flavor-detector"),
+                &["解读这份检测报告", "哪些句子最像 AI", "改写优先级怎么排"],
+                false,
+                &[],
+            )
+        },
+        AgentTemplate {
+            tool_policy: Some(vec!["fs_read".into(), "fs_write".into()]),
+            doc_pipeline: "inline".into(),
+            opening_message:
+                "发我一段文本，我按轻度/中度/深度三档改成人味表达，事实与观点一律不动。".into(),
+            suggestions: vec![
+                "轻度改写这段文字".into(),
+                "按我的风格锚点深度重写".into(),
+                "只去套话别动结构".into(),
+            ],
+            ..t(
+                "ai-flavor-rewriter",
+                "去 AI 味改写师",
+                "edit",
+                "doc",
+                "三档人味化改写：轻度去套话 / 中度调节奏 / 深度按锚点重写",
+                "",
+                "none",
+                prompt_for("ai-flavor-rewriter"),
+                &[
+                    "轻度改写这段文字",
+                    "按我的风格锚点深度重写",
+                    "只去套话别动结构",
+                ],
+                false,
+                &[],
+            )
+        },
+        AgentTemplate {
+            tool_policy: Some(vec!["fs_read".into()]),
+            doc_pipeline: "resident".into(),
+            opening_message:
+                "粘贴论文片段，我帮你提升学术语体，并生成可直接放进 Methods 的 AI 使用披露声明。"
+                    .into(),
+            suggestions: vec![
+                "润色这段方法学描述".into(),
+                "生成 AI 使用披露声明".into(),
+                "这句表述合规吗".into(),
+            ],
+            ..t(
+                "academic-voice",
+                "学术合规润色",
+                "file-text",
+                "academic",
+                "学术语体与术语统一 + AI 使用披露声明（对照 Nature/Science 政策）",
+                "",
+                "none",
+                prompt_for("academic-voice"),
+                &[
+                    "润色这段方法学描述",
+                    "生成 AI 使用披露声明",
+                    "这句表述合规吗",
+                ],
+                false,
+                &[],
+            )
+        },
+        AgentTemplate {
+            tool_policy: Some(vec![]),
+            doc_pipeline: "off".into(),
+            opening_message: "贴上 1-3 段你自己写过的旧文，我会提炼成一张可复用的风格锚点卡。"
+                .into(),
+            suggestions: vec![
+                "分析这段文字的风格特征".into(),
+                "提炼我的写作指纹".into(),
+                "生成风格锚点卡".into(),
+            ],
+            ..t(
+                "style-anchor",
+                "风格档案员",
+                "shield-check",
+                "meta",
+                "从你的旧作提炼个人写作指纹，作为改写锚点",
+                "",
+                "none",
+                prompt_for("style-anchor"),
+                &[
+                    "分析这段文字的风格特征",
+                    "提炼我的写作指纹",
+                    "生成风格锚点卡",
+                ],
+                false,
+                &[],
+            )
+        },
     ]
 }
 
@@ -501,13 +593,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builtin_has_24_unique_agents() {
+    fn builtin_has_22_unique_agents() {
         let list = builtin_templates();
-        assert_eq!(list.len(), 24);
+        assert_eq!(list.len(), 22);
         let mut ids: Vec<&str> = list.iter().map(|t| t.agent_id.as_str()).collect();
         ids.sort();
         ids.dedup();
-        assert_eq!(ids.len(), 24, "agent_id 必须唯一");
+        assert_eq!(ids.len(), 22, "agent_id 必须唯一");
         for t in &list {
             assert!(
                 CATEGORIES.contains(&t.category.as_str()),
@@ -523,10 +615,74 @@ mod tests {
             );
             assert!(!t.input_hints.is_empty(), "{} 缺 input_hints", t.agent_id);
         }
-        // 每个分类至少 4 个内置模板
-        for c in CATEGORIES {
+        // R4:内置模板收缩为 22 个后,不再要求每个分类至少 4 个;
+        // 只校验分类分布与设计一致,防止后续增删时悄悄漂移。
+        let expect = [
+            ("chat", 3),
+            ("doc", 4),
+            ("dev", 2),
+            ("create", 2),
+            ("ops", 1),
+            ("meta", 2),
+            ("study", 2),
+            ("work", 2),
+            ("academic", 4),
+        ];
+        for (c, want) in expect {
             let n = list.iter().filter(|t| t.category == c).count();
-            assert!(n >= 4, "分类 {c} 只有 {n} 个内置模板");
+            assert_eq!(n, want, "分类 {c} 应有 {want} 个内置模板");
+        }
+        let bare = list
+            .iter()
+            .find(|t| t.agent_id == "bare-assistant")
+            .expect("缺少 bare-assistant");
+        assert_eq!(bare.category, "meta");
+        assert_eq!(bare.memory_strategy, "full");
+    }
+
+    /// R4:每个内置 id 都必须有对应提示词,且提示词表不再有多余分支。
+    #[test]
+    fn builtin_prompts_match_templates() {
+        for t in builtin_templates() {
+            assert!(
+                !crate::agents_prompts::prompt_for(&t.agent_id).is_empty(),
+                "{} 缺少提示词",
+                t.agent_id
+            );
+        }
+        assert!(
+            crate::agents_prompts::prompt_for("diff-reader").is_empty(),
+            "未注册的 diff-reader 不应再有提示词"
+        );
+    }
+
+    /// R3 B4:去 AI 味 4 专用智能体,tool_policy/doc_pipeline 按 val.md §5.4 表。
+    #[test]
+    fn builtin_aiflavor_agents_policy() {
+        let list = builtin_templates();
+        let expect = [
+            ("ai-flavor-detector", vec!["fs_read"], "inline"),
+            ("ai-flavor-rewriter", vec!["fs_read", "fs_write"], "inline"),
+            ("academic-voice", vec!["fs_read"], "resident"),
+            ("style-anchor", vec![], "off"),
+        ];
+        for (id, tools, pipeline) in expect {
+            let t = list
+                .iter()
+                .find(|t| t.agent_id == id)
+                .unwrap_or_else(|| panic!("缺少 {id}"));
+            let want: Vec<String> = tools.iter().map(|s| s.to_string()).collect();
+            assert_eq!(
+                t.tool_policy.as_deref(),
+                Some(want.as_slice()),
+                "{id} tool_policy 不符"
+            );
+            assert_eq!(t.doc_pipeline, pipeline, "{id} doc_pipeline 不符");
+            assert_eq!(t.memory_strategy, "none");
+            assert!(!t.memory_write, "{id} 不应写记忆");
+            // v2 字段消费收口(R3-D):四个入口智能体必须有开场白与追问建议
+            assert!(!t.opening_message.trim().is_empty(), "{id} 缺少开场白");
+            assert!(!t.suggestions.is_empty(), "{id} 缺少追问建议");
         }
     }
 
@@ -562,6 +718,7 @@ mod tests {
             memory_sections: vec!["会话摘要".into()],
             base_agent: Some("product-assistant".into()),
             builtin: false,
+            ..v2_defaults()
         };
         let text = serde_json::to_string(&[v]).unwrap();
         let back: Vec<AgentTemplate> = serde_json::from_str(&text).unwrap();

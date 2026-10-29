@@ -35,7 +35,7 @@ export function extractSections(body: string, wanted: string[]): string {
  * 按策略计算实际注入的记忆正文:
  *   full    — 全文
  *   summary — 仅「会话摘要」节
- *   hybrid  — 「会话摘要」+「关键事实与结论」+「待办」
+ *   hybrid  — 「会话摘要」+「关键事实与结论」+「待办」+「文档摘要」
  *   none    — 不注入
  * 摘要类策略提取不到任何章节时回退全文,避免模型完全丢失上下文。
  */
@@ -45,7 +45,7 @@ export function injectByStrategy(body: string, strategy: MemoryStrategy): string
   const wanted =
     strategy === 'summary'
       ? ['会话摘要']
-      : ['会话摘要', '关键事实与结论', '待办'];
+      : ['会话摘要', '关键事实与结论', '待办', '文档摘要'];
   const picked = extractSections(body, wanted);
   return picked || body;
 }

@@ -1,0 +1,218 @@
+/* ============ Phase 3: 纲要面板 ============ */
+.outline-panel {
+  width: 240px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-side);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.outline-head {
+  padding: var(--space-3) var(--pad-x-narrow);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.outline-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px; min-height: 0; }
+.outline-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 8px;
+  border-radius: var(--radius-s);
+  text-align: left;
+  font-size: var(--font-caption);
+  color: var(--text-2);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-family: var(--font);
+  transition: background 0.12s;
+}
+.outline-item:hover { background: var(--bg-hover); }
+.outline-item.active {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 500;
+}
+.outline-role {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+.outline-role.user { background: var(--brand); color: #fff; }
+.outline-role.assistant { background: var(--bg-hover); color: var(--text-3); }
+.outline-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.outline-index {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-micro);
+  color: var(--text-4);
+}
+/* 会话统计块(原消息 meta 的 token 信息聚合展示处) */
+.outline-stats {
+  padding: var(--space-2) var(--pad-x-narrow);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-micro);
+  color: var(--text-3);
+}
+.outline-stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.outline-stats-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.outline-stats-models { color: var(--text-4); }
+
+/* ============ Phase 5d:HITL 审批对话框 ============ */
+
+.mcp-approval-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  animation: fadeIn 0.15s ease-out;
+}
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+.mcp-approval {
+  width: 460px;
+  max-width: 92vw;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-card-h);
+  animation: slideUp 0.2s ease-out;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+
+.mcp-approval-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.mcp-approval-title {
+  font-weight: 600;
+  font-size: var(--font-body);
+  color: var(--text-1);
+}
+.mcp-approval-risk {
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: #fff;
+}
+
+.mcp-approval-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-sub);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+}
+.mcp-approval-chip {
+  padding: 4px 8px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-s);
+  font-size: var(--font-micro);
+}
+.mcp-approval-chip.bold { font-weight: 700; }
+
+.mcp-approval-reason {
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  margin-bottom: var(--space-3);
+  line-height: 1.5;
+}
+
+.mcp-approval-args {
+  margin-bottom: var(--space-3);
+}
+.mcp-approval-args summary {
+  cursor: pointer;
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  padding: 4px 0;
+  user-select: none;
+}
+.mcp-approval-args pre {
+  max-height: 200px;
+  overflow: auto;
+  background: var(--ink, #1f2937);
+  border-radius: var(--radius-s);
+  padding: var(--space-2);
+  font-size: var(--font-micro);
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+}
+
+.mcp-approval-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+}
+.mcp-approval-actions .btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-caption);
+  border: none;
+  cursor: pointer;
+}
+.mcp-approval-actions .btn-ghost {
+  background: transparent;
+  color: var(--text-2);
+}
+.mcp-approval-actions .btn-ghost:hover { background: var(--bg-hover); }
+.mcp-approval-actions .btn-primary {
+  background: var(--brand);
+  color: #fff;
+}
+.mcp-approval-actions .btn-primary:hover { filter: brightness(1.05); }
+
+

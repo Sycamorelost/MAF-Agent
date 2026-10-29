@@ -24,10 +24,7 @@ pub use capability::{Capability, CapabilityStore, Scope};
 pub use config::{McpConfig, McpServerConfig, Transport, default_servers};
 pub use runtime::{McpRuntime, McpToolCall, McpToolInfo, McpToolResult};
 #[allow(unused_imports)]
-pub use safety::{
-    SENSITIVE_PATTERNS, is_sensitive, resolve_safe_path, truncate_chars, validate_command,
-    validate_server_command,
-};
+pub use safety::{resolve_safe_path, truncate_chars, validate_command, validate_server_command};
 
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, RwLock};
@@ -43,6 +40,7 @@ pub fn config_path(data_dir: &Path) -> PathBuf {
 
 /// 从磁盘加载配置(文件不存在则写入 default 并返回)。
 /// 旧配置会按 `presets_version` 补齐新增的预置 server 一次(已存在同名则跳过)。
+/// D8:加载后解密各 server 的 custom headers(明文旧值自动兼容,不加密的直接透传)。
 pub fn load_or_init(data_dir: &Path) -> McpConfig {
     let path = config_path(data_dir);
     if path.exists() {
@@ -50,10 +48,14 @@ pub fn load_or_init(data_dir: &Path) -> McpConfig {
             .ok()
             .and_then(|s| serde_json::from_str::<McpConfig>(&s).ok())
             .unwrap_or_else(default_servers);
+        decrypt_headers(&mut cfg);
         if merge_presets(&mut cfg) {
+            // merge_presets 可能改写配置,落盘前重新加密
+            let mut to_save = cfg.clone();
+            encrypt_headers(&mut to_save);
             let _ = std::fs::write(
                 &path,
-                serde_json::to_string_pretty(&cfg).unwrap_or_default(),
+                serde_json::to_string_pretty(&to_save).unwrap_or_default(),
             );
         }
         cfg
@@ -64,6 +66,35 @@ pub fn load_or_init(data_dir: &Path) -> McpConfig {
             serde_json::to_string_pretty(&def).unwrap_or_default(),
         );
         def
+    }
+}
+
+/// 加密所有 server 的 header 值(DPAPI/AES-GCM),带 `enc:` 前缀。
+/// 仅加密非空值;空串保持不变。
+fn encrypt_headers(cfg: &mut McpConfig) {
+    for s in &mut cfg.servers {
+        for v in s.headers.values_mut() {
+            if v.is_empty() || v.starts_with("enc:") {
+                continue;
+            }
+            if let Ok(enc) = crate::provider::keychain::encrypt_value(v) {
+                *v = enc;
+            }
+        }
+    }
+}
+
+/// 解密所有 server 的 header 值。`enc:` 前缀的解密,其余(明文旧值)原样保留。
+fn decrypt_headers(cfg: &mut McpConfig) {
+    for s in &mut cfg.servers {
+        for v in s.headers.values_mut() {
+            if !v.starts_with("enc:") {
+                continue;
+            }
+            if let Ok(plain) = crate::provider::keychain::decrypt_value(v) {
+                *v = plain;
+            }
+        }
     }
 }
 
@@ -94,9 +125,12 @@ fn merge_presets(cfg: &mut McpConfig) -> bool {
 }
 
 /// 保存配置到磁盘 + 更新全局缓存。
+/// D8:落盘前加密所有 server 的 custom headers(DPAPI/AES-GCM),内存中保持明文便于运行时使用。
 pub fn save(data_dir: &Path, cfg: &McpConfig) -> Result<(), String> {
     let path = config_path(data_dir);
-    let json = serde_json::to_string_pretty(cfg).map_err(|e| format!("序列化失败: {e}"))?;
+    let mut to_save = cfg.clone();
+    encrypt_headers(&mut to_save);
+    let json = serde_json::to_string_pretty(&to_save).map_err(|e| format!("序列化失败: {e}"))?;
     std::fs::write(&path, json).map_err(|e| format!("写入失败: {e}"))?;
     if let Ok(mut g) = GLOBAL_CONFIG.write() {
         *g = cfg.clone();
@@ -203,7 +237,9 @@ fn sanitize_detail(detail: &str) -> String {
         .expect("audit kv regex")
     });
     kv_re
-        .replace_all(&s, |caps: &regex::Captures| format!("{}{}***", &caps[1], &caps[2]))
+        .replace_all(&s, |caps: &regex::Captures| {
+            format!("{}{}***", &caps[1], &caps[2])
+        })
         .to_string()
 }
 
@@ -281,10 +317,7 @@ mod tests {
 
         rotate_audit_if_needed(&file);
         assert!(!file.exists(), "超限文件应被轮转走");
-        assert!(
-            audit_backup_path(&file, 1).exists(),
-            "轮转后应存在 .1 分卷"
-        );
+        assert!(audit_backup_path(&file, 1).exists(), "轮转后应存在 .1 分卷");
 
         // 新文件可正常写入
         audit(&dir, "call_tool", "srv", "tool", "ok");

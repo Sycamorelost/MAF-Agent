@@ -3,18 +3,18 @@
 //! 安全模型(逐层):
 //! 1. 命令必须在只读白名单内,解释器 / 脚本宿主一律拒绝;
 //! 2. 命令名与参数禁止 shell 元字符(NUL/CR/LF/&/|/>/</^/%/!);
-//! 3. 路径类命令的路径参数必须落在工作区根目录内,且不命中敏感文件黑名单;
+//! 3. 只读命令的参数不限目录、不设文件名黑名单(无沙箱);
 //! 4. 执行带真实超时,超时直接终止子进程;
 //! 5. 输出按字符安全截断(避免 UTF-8 边界 panic)并写审计。
 //!
 //! 注意:以上 1-3 层仅约束 `run()`(非完全信任模式)。审批策略为「完全信任」时
 //! 由 `shell_whitelist_exec` / dispatcher 改走 `run_unrestricted`,只保留空命令拒绝、
-//! 300s 超时、输出截断与审计 —— 白名单 / 解释器硬拒 / 元字符 / 路径沙箱全部不生效。
+//! 300s 超时、输出截断与审计 —— 白名单 / 解释器硬拒 / 元字符限制全部不生效。
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::mcp::safety::{is_sensitive, truncate_head_tail};
+use crate::mcp::safety::truncate_head_tail;
 
 /// 不需要路径参数的只读命令。
 pub const READ_ONLY_CMDS: &[&str] = &[
@@ -23,7 +23,7 @@ pub const READ_ONLY_CMDS: &[&str] = &[
     "chcp", "vol", "ver", "set",
 ];
 
-/// 接受路径参数的只读命令 —— 路径必须落在工作区内。
+/// 接受路径参数的只读命令 —— 路径不限目录、不设文件名黑名单。
 pub const PATH_CMDS: &[&str] = &[
     "ls",
     "dir",
@@ -86,19 +86,26 @@ pub const FORBIDDEN_CMDS: &[&str] = &[
 /// 命令名 / 参数中的 shell 元字符。
 const METACHARS: &[char] = &['&', '|', '>', '<', '^', '%', '!', '\n', '\r'];
 
-/// 需要吞掉下一个参数的开关(其值是正则 / 名称而非路径)。
-const VALUE_FLAGS: &[&str] = &[
-    "-n",
-    "-name",
-    "-iname",
-    "-path",
-    "-type",
-    "-maxdepth",
-    "-e",
-    "-A",
-    "-B",
-    "-C",
-    "-m",
+/// 高风险命令模式(完全信任模式下也需二次确认):系统破坏 / 数据丢失 / 不可逆操作。
+/// 匹配命令名(忽略大小写)或整行命令中的关键片段。
+const DANGEROUS_PATTERNS: &[&str] = &[
+    "format ",  // 格式化磁盘
+    "rm -rf /", // Linux 删根
+    "rm -rf /*",
+    "rm -rf ~", // 删家目录
+    "rm -rf $",
+    "del /q /s", // Windows 批量静默删除
+    "del /f /s /q",
+    "rmdir /s /q",     // Windows 递归删目录
+    "shutdown",        // 关机/重启
+    "reg delete",      // 删注册表
+    "reg add",         // 写注册表(同样危险)
+    "diskpart",        // 磁盘分区
+    "cipher /w",       // 安全擦除空闲空间
+    "chkdsk /f",       // 强制检查并修复(可能丢数据)
+    "fsutil",          // 文件系统底层操作
+    "bcdedit",         // 启动配置
+    "taskkill /f /im", // 强制杀进程(批量)
 ];
 
 /// 执行超时。
@@ -166,12 +173,11 @@ pub fn parse_shell_args(v: Option<&serde_json::Value>) -> (Vec<String>, Option<S
 }
 
 /// 校验 + 执行白名单命令。
-/// 工作区根与文件工具(`fs_*`)保持一致:`fs::paths::workspace_root()`(默认 `<数据目录>/workspace`)。
-/// `cwd` 可指定子目录,但必须落在该工作区内。
+/// 不限目录:`cwd` 可为任意已存在目录(缺省为工作区根),路径参数不限目录、不设文件黑名单。
 pub async fn run(cmd: &str, args: &[String], cwd: Option<&str>) -> Result<ShellOutcome, String> {
     let root = crate::fs::paths::workspace_root()?;
     validate(cmd, args, &root)?;
-    let dir = resolve_cwd(cwd, &root, false)?;
+    let dir = resolve_cwd(cwd, &root)?;
     execute(cmd, args, EXEC_TIMEOUT, false, Some(&dir)).await
 }
 
@@ -182,7 +188,7 @@ pub async fn run(cmd: &str, args: &[String], cwd: Option<&str>) -> Result<ShellO
 /// 命令含空白或 shell 操作符时按「整行命令」走 `cmd /c`(仅 Windows):
 /// 与 shell 心智一致,支持管道/重定向/内建命令(del/copy/mkdir/set…);
 /// 纯程序名(无空白)仍走 argv 直 exec,保持精确语义。
-/// `cwd` 缺省为工作区根;完全信任下允许任意已存在目录(仍写审计)。
+/// `cwd` 缺省为工作区根;任意已存在目录均可使用(仍写审计)。
 pub async fn run_unrestricted(
     cmd: &str,
     args: &[String],
@@ -193,13 +199,13 @@ pub async fn run_unrestricted(
         return Err("命令不能为空".into());
     }
     let root = crate::fs::paths::workspace_root()?;
-    let dir = resolve_cwd(cwd, &root, true)?;
+    let dir = resolve_cwd(cwd, &root)?;
     let line_mode = needs_line_mode(cmd_trimmed);
     execute(cmd_trimmed, args, TRUST_EXEC_TIMEOUT, line_mode, Some(&dir)).await
 }
 
-/// 解析工作目录:缺省用工作区根;受限模式要求落在工作区内,完全信任只要求目录存在。
-fn resolve_cwd(cwd: Option<&str>, root: &Path, allow_any: bool) -> Result<PathBuf, String> {
+/// 解析工作目录:缺省用工作区根,其余只要求绝对/相对路径指向已存在目录(不限位置)。
+fn resolve_cwd(cwd: Option<&str>, root: &Path) -> Result<PathBuf, String> {
     let target = match cwd.map(str::trim).filter(|s| !s.is_empty()) {
         Some(p) if Path::new(p).is_absolute() => PathBuf::from(p),
         Some(p) => root.join(p),
@@ -213,18 +219,6 @@ fn resolve_cwd(cwd: Option<&str>, root: &Path, allow_any: bool) -> Result<PathBu
     })?;
     if !canonical.is_dir() {
         return Err(format!("cwd `{}` 不是目录", display_path(&target)));
-    }
-    if !allow_any {
-        let root_canon = root
-            .canonicalize()
-            .map_err(|e| format!("工作区目录无效: {e}"))?;
-        if !canonical.starts_with(&root_canon) {
-            return Err(format!(
-                "cwd `{}` 超出工作区,已拒绝\n[提示] 受限模式的工作区为 `{}`",
-                display_path(&target),
-                display_path(&root_canon)
-            ));
-        }
     }
     Ok(canonical)
 }
@@ -253,8 +247,23 @@ fn needs_line_mode(cmd: &str) -> bool {
         .any(|c| c.is_whitespace() || matches!(c, '|' | '>' | '<' | '&' | '^' | '%' | '!'))
 }
 
-/// 纯校验(不执行),便于单测与防御性复核。
-pub fn validate(cmd: &str, args: &[String], root: &Path) -> Result<(), String> {
+/// 危险命令检测(完全信任模式下也需二次确认)。
+/// 把 cmd + args 拼成整行(空格分隔),忽略大小写匹配 DANGEROUS_PATTERNS。
+/// 返回命中的危险模式描述,供前端展示确认理由。
+pub fn dangerous_pattern(cmd: &str, args: &[String]) -> Option<&'static str> {
+    let line = if args.is_empty() {
+        cmd.trim().to_lowercase()
+    } else {
+        format!("{} {}", cmd.trim(), args.join(" ")).to_lowercase()
+    };
+    DANGEROUS_PATTERNS
+        .iter()
+        .copied()
+        .find(|p| line.contains(p))
+}
+
+/// 纯校验(不执行),便于单测与防御性复核。`_root` 仅为兼容调用方保留,不再用于限制路径。
+pub fn validate(cmd: &str, args: &[String], _root: &Path) -> Result<(), String> {
     let cmd_lower = cmd.trim().to_lowercase();
     if cmd_lower.is_empty() {
         return Err("命令不能为空".into());
@@ -298,86 +307,13 @@ pub fn validate(cmd: &str, args: &[String], root: &Path) -> Result<(), String> {
         return Ok(());
     }
     if PATH_CMDS.contains(&cmd_lower.as_str()) {
-        return validate_path_args(&cmd_lower, args, root);
+        return Ok(());
     }
     Err(format!(
         "命令 `{cmd}` 不在白名单内\n\
          [提示] 受限模式仅允许只读命令(git status/log/diff、dir、ls、type、where、grep 等),且 command 只能写程序名、参数必须放进 args;\
          如需执行该命令或使用整行命令(管道/重定向/内建命令),请在 设置 → 授权 → 审批模式 切换为「完全信任」"
     ))
-}
-
-/// 路径类命令:所有"像路径"的参数都必须位于工作区内且非敏感文件。
-fn validate_path_args(cmd: &str, args: &[String], root: &Path) -> Result<(), String> {
-    for arg in path_candidates(cmd, args) {
-        if !looks_like_path(arg) && !Path::new(arg).is_absolute() {
-            continue;
-        }
-        resolve_within_root(root, arg)?;
-    }
-    Ok(())
-}
-
-/// 提取需要当作路径校验的参数(跳过开关、开关值、grep/rg 的正则、纯数字)。
-fn path_candidates<'a>(cmd: &str, args: &'a [String]) -> Vec<&'a str> {
-    let mut out = Vec::new();
-    let mut skip_value = false;
-    let mut pattern_seen = false;
-    for arg in args {
-        if skip_value {
-            skip_value = false;
-            continue;
-        }
-        if arg.starts_with('-') {
-            if VALUE_FLAGS.contains(&arg.as_str()) {
-                skip_value = true;
-            }
-            continue;
-        }
-        if matches!(cmd, "grep" | "rg") && !pattern_seen {
-            pattern_seen = true; // 首个非开关参数是正则,不是路径
-            continue;
-        }
-        if arg.chars().all(|c| c.is_ascii_digit()) {
-            continue; // head -n 20 / find -maxdepth 2
-        }
-        out.push(arg.as_str());
-    }
-    out
-}
-
-/// 是否像文件路径(含分隔符 / 盘符 / 相对跳转 / 隐藏文件)。
-fn looks_like_path(arg: &str) -> bool {
-    arg.starts_with('.')
-        || arg.contains(['/', '\\'])
-        || arg.chars().nth(1) == Some(':')
-        || arg.contains(":\\")
-}
-
-/// 规范化并校验路径:必须存在、必须在工作区内、不得命中敏感文件。
-pub fn resolve_within_root(root: &Path, arg: &str) -> Result<PathBuf, String> {
-    if arg.contains('\0') || arg.contains('\r') || arg.contains('\n') {
-        return Err("路径包含非法字符(NUL/CR/LF)".into());
-    }
-    let raw = Path::new(arg);
-    let joined = if raw.is_absolute() {
-        raw.to_path_buf()
-    } else {
-        root.join(raw)
-    };
-    let canonical = joined
-        .canonicalize()
-        .map_err(|e| format!("路径不存在或无法访问 `{arg}`: {e}"))?;
-    let root_canon = root
-        .canonicalize()
-        .map_err(|e| format!("工作区目录无效: {e}"))?;
-    if !canonical.starts_with(&root_canon) {
-        return Err(format!("路径 `{arg}` 超出工作区,已拒绝"));
-    }
-    if is_sensitive(&canonical) {
-        return Err(format!("路径 `{arg}` 命中敏感文件黑名单,已拒绝读取"));
-    }
-    Ok(canonical)
 }
 
 /// 执行(已通过校验或为信任模式)。
@@ -602,29 +538,25 @@ mod tests {
     }
 
     #[test]
-    fn cwd_defaults_to_workspace_and_respects_scope() {
+    fn cwd_defaults_to_workspace_and_allows_any_existing_dir() {
         let root = crate::fs::paths::workspace_root().expect("工作区根可用");
         // 缺省 → 工作区根(与 fs_* 对齐)
-        let dir = resolve_cwd(None, &root, false).expect("默认 cwd 必须是工作区根");
+        let dir = resolve_cwd(None, &root).expect("默认 cwd 必须是工作区根");
         assert_eq!(dir, root);
 
-        // 工作区内子目录:受限模式允许
+        // 工作区内子目录
         let sub = root.join("cwd-test");
         std::fs::create_dir_all(&sub).expect("创建测试子目录");
-        let dir = resolve_cwd(Some("cwd-test"), &root, false).expect("工作区内子目录应允许");
+        let dir = resolve_cwd(Some("cwd-test"), &root).expect("工作区内子目录应允许");
         assert!(dir.ends_with("cwd-test"));
         std::fs::remove_dir_all(&sub).ok();
 
-        // 工作区外:受限模式拒绝,完全信任允许
+        // 工作区外:不再设沙箱,任意已存在目录都允许
         let outside = std::env::temp_dir();
         let outside = outside.to_str().expect("临时目录可转字符串");
         assert!(
-            resolve_cwd(Some(outside), &root, false).is_err(),
-            "受限模式必须拒绝工作区外 cwd"
-        );
-        assert!(
-            resolve_cwd(Some(outside), &root, true).is_ok(),
-            "完全信任模式允许已存在目录"
+            resolve_cwd(Some(outside), &root).is_ok(),
+            "无沙箱后工作区外 cwd 应允许"
         );
     }
 
@@ -663,26 +595,22 @@ mod tests {
     }
 
     #[test]
-    fn rejects_path_outside_root() {
+    fn allows_path_outside_root() {
         let root = std::env::current_dir().unwrap();
         let outside = if cfg!(windows) {
             "C:\\Windows\\win.ini"
         } else {
             "/etc/passwd"
         };
-        let err = validate("type", &args(&[outside]), &root).expect_err("越界路径必须拒绝");
-        assert!(err.contains("工作区"), "实际错误:{err}");
+        // 无沙箱:工作区外的路径参数不再被拒绝
+        assert!(validate("type", &args(&[outside]), &root).is_ok());
     }
 
     #[test]
-    fn rejects_sensitive_file_inside_root() {
+    fn allows_dotenv_and_any_path_inside_root() {
         let root = std::env::current_dir().unwrap();
-        // 用仓库内真实存在的敏感文件名做校验,不依赖文件内容
-        let err = validate("type", &args(&[".env"]), &root).expect_err("敏感文件必须拒绝");
-        assert!(
-            err.contains("敏感") || err.contains("不存在"),
-            "实际错误:{err}"
-        );
+        // 已取消敏感文件黑名单:`.env` 等文件名不再被拦截
+        assert!(validate("type", &args(&[".env"]), &root).is_ok());
     }
 
     #[test]
@@ -690,21 +618,5 @@ mod tests {
         let root = std::env::current_dir().unwrap();
         assert!(validate("ls", &args(&["."]), &root).is_ok());
         assert!(validate("grep", &args(&["TODO", "."]), &root).is_ok());
-    }
-
-    #[test]
-    fn path_candidates_skip_grep_pattern_and_numbers() {
-        assert_eq!(
-            path_candidates("grep", &args(&["TODO", "src"])),
-            vec!["src"]
-        );
-        assert_eq!(
-            path_candidates("head", &args(&["-n", "20", "."])),
-            vec!["."]
-        );
-        assert_eq!(
-            path_candidates("find", &args(&[".", "-name", "*.rs"])),
-            vec!["."]
-        );
     }
 }

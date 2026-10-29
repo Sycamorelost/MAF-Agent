@@ -1,6 +1,6 @@
 //! 工作区文件命令 —— 供设置页 / Agent 内置工具调用。
 //!
-//! 所有路径均为工作区内相对路径;写/删前自动备份,可用 `fs_restore` 回滚。
+//! 路径支持绝对路径(无沙箱),相对路径按工作区解析;写/删前自动备份,可用 `fs_restore` 回滚。
 
 use crate::fs::{backup, formats, text};
 
@@ -20,10 +20,14 @@ pub fn fs_list(rel: Option<String>) -> Result<Vec<text::FileEntry>, String> {
     text::list(rel.as_deref().unwrap_or(""))
 }
 
-/// 读取文本文件(默认上限 20 万字符)。
+/// 读取文本文件(默认上限 20 万字符;offset 用于分页续读)。
 #[tauri::command]
-pub fn fs_read_text(path: String, max_chars: Option<usize>) -> Result<String, String> {
-    text::read_text(&path, max_chars)
+pub fn fs_read_text(
+    path: String,
+    offset: Option<usize>,
+    max_chars: Option<usize>,
+) -> Result<String, String> {
+    text::read_text(&path, offset, max_chars)
 }
 
 /// 写入文本文件(自动创建父目录;覆盖前备份)。
@@ -51,14 +55,24 @@ pub fn fs_restore(id: String) -> Result<String, String> {
     backup::restore(&root, &id)
 }
 
-/// 导出 docx(标题 + 纯文本正文,按行分段)。
+/// 导出 docx(正文支持 Markdown;可指定用途模板、目录与封面元信息)。
 #[tauri::command]
 pub fn fs_export_docx(
     path: String,
     title: String,
     body: String,
+    profile: Option<String>,
+    toc: Option<bool>,
+    meta: Option<crate::fs::docgen::DocMeta>,
 ) -> Result<text::WriteResult, String> {
-    text::export_docx(&path, &title, &body)
+    let req = crate::fs::docgen::DocRequest::from_parts(
+        &title,
+        &body,
+        profile.as_deref(),
+        toc,
+        meta.unwrap_or_default(),
+    );
+    text::export_docx_ext(&path, &req)
 }
 
 /// 导出 xlsx(多工作表,每行字符串数组)。
@@ -92,6 +106,22 @@ pub fn fs_zip_extract(path: String, dest: String) -> Result<usize, String> {
 #[tauri::command]
 pub fn fs_open_workspace() -> Result<(), String> {
     open_dir(&text::root()?)
+}
+
+/// 弹出系统文件夹选择器,返回用户选中的目录(用于设置默认工作区)。
+#[tauri::command]
+pub async fn fs_pick_workspace_dir(app: tauri::AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .blocking_pick_folder()
+            .and_then(|p| p.into_path().ok())
+            .map(|p| p.display().to_string())
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 /// 在资源管理器中打开备份目录。

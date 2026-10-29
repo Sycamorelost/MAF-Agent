@@ -267,7 +267,10 @@ mod tests {
         assert!(s.contains("\"file_name\":\"20261026-000000000.json\""));
 
         // 保存入参 file_name 为空时不写出,落盘文件干净
-        let empty = TranslationRecord { file_name: String::new(), ..with_name };
+        let empty = TranslationRecord {
+            file_name: String::new(),
+            ..with_name
+        };
         let s2 = serde_json::to_string(&empty).unwrap();
         assert!(!s2.contains("file_name"));
     }

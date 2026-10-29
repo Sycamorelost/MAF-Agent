@@ -217,8 +217,8 @@ fn spawn_chat_with_failover(
         let started = Instant::now();
         let mut stream_options = cfg.supports_stream_options;
         let mut last_error: Option<String> = None;
-        // 工具调用轮次(模型每次要求调工具算一轮;上限 50 轮,支持长任务连续执行)
-        const MAX_TOOL_ROUNDS: usize = 50;
+        // 工具调用轮次(模型每次要求调工具算一轮;上限 200 轮,支持长任务连续执行)
+        const MAX_TOOL_ROUNDS: usize = 200;
         let mut round: usize = 0;
         let data_dir = crate::paths::data_dir();
         // harness 子调用通道(上下文压缩 / delegate 委派):取最小槽位 Key 构造一次,全程复用;
@@ -226,7 +226,7 @@ fn spawn_chat_with_failover(
         let sub_llm = super::keys::build_sub_llm(&spec);
 
         'rounds: loop {
-            // 50 轮工具调用的前提:每轮都会往 req.messages 追加 assistant + tool 结果。
+            // 200 轮工具调用的前提:每轮都会往 req.messages 追加 assistant + tool 结果。
             // 超预算时先用 LLM 摘要压缩早期轮次(保住需求与结论);压缩失败/不可用回落硬裁剪。
             if context_over_budget(&req.messages)
                 && let Some(llm) = sub_llm.as_ref()
@@ -541,7 +541,7 @@ fn spawn_chat_with_failover(
     tauri::async_runtime::spawn(run_cancellable(cancel_state, cancel_id, cancel_rx, work));
 }
 
-/// 单次请求最多携带的消息条数(50 轮工具调用时防止上下文无限膨胀)。
+/// 单次请求最多携带的消息条数(200 轮工具调用时防止上下文无限膨胀)。
 const MAX_CONTEXT_MESSAGES: usize = 40;
 /// 单次请求上下文的最大字符数(约 24k tokens;超出先按预算裁最早的轮次)。
 const MAX_CONTEXT_CHARS: usize = 48_000;
@@ -595,6 +595,40 @@ fn prune_context(messages: &mut Vec<ChatMessage>) {
     messages.extend(tail);
 }
 
+/// 在后台任务中跑流并推到 channel,避免阻塞 IPC 主调用(translate_stream 共用)。
+pub(crate) fn spawn_chat_to_channel(
+    provider: Box<dyn Provider>,
+    req: ChatRequest,
+    channel: Channel<StreamChunk>,
+    cancel_state: StreamCancelState,
+    cancel_id: String,
+    cancel_rx: futures::channel::oneshot::Receiver<()>,
+) {
+    let work = async move {
+        match provider.chat_stream(req).await {
+            Ok(mut stream) => {
+                use futures::StreamExt;
+                while let Some(chunk) = stream.next().await {
+                    // Usage chunk 仅用于用量归因,不转发前端
+                    if matches!(chunk, StreamChunk::Usage { .. }) {
+                        continue;
+                    }
+                    if channel.send(chunk).is_err() {
+                        // 前端已关闭 channel,直接退出
+                        break;
+                    }
+                }
+            }
+            Err(e) => {
+                let _ = channel.send(StreamChunk::Error {
+                    message: e.to_string(),
+                });
+            }
+        }
+    };
+    tauri::async_runtime::spawn(run_cancellable(cancel_state, cancel_id, cancel_rx, work));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -629,38 +663,4 @@ mod tests {
         assert_ne!(m[1].role, "tool", "裁剪后开头不应是孤立 tool 消息");
         assert_eq!(m.last().unwrap().content, "r119", "必须保留最新一轮结果");
     }
-}
-
-/// 在后台任务中跑流并推到 channel,避免阻塞 IPC 主调用(translate_stream 共用)。
-pub(crate) fn spawn_chat_to_channel(
-    provider: Box<dyn Provider>,
-    req: ChatRequest,
-    channel: Channel<StreamChunk>,
-    cancel_state: StreamCancelState,
-    cancel_id: String,
-    cancel_rx: futures::channel::oneshot::Receiver<()>,
-) {
-    let work = async move {
-        match provider.chat_stream(req).await {
-            Ok(mut stream) => {
-                use futures::StreamExt;
-                while let Some(chunk) = stream.next().await {
-                    // Usage chunk 仅用于用量归因,不转发前端
-                    if matches!(chunk, StreamChunk::Usage { .. }) {
-                        continue;
-                    }
-                    if channel.send(chunk).is_err() {
-                        // 前端已关闭 channel,直接退出
-                        break;
-                    }
-                }
-            }
-            Err(e) => {
-                let _ = channel.send(StreamChunk::Error {
-                    message: e.to_string(),
-                });
-            }
-        }
-    };
-    tauri::async_runtime::spawn(run_cancellable(cancel_state, cancel_id, cancel_rx, work));
 }

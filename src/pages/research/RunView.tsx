@@ -7,10 +7,21 @@ import { ReportFigureImg } from './ReportFigureImg';
 import { WriteMemoryDialog } from './WriteMemoryDialog';
 import { StageTrail } from './StageTrail';
 import * as ipc from '../../lib/ipc';
+import { exportToPdf } from '../../lib/export/ExportService';
 import { IconArrowLeft, IconBrain, IconChevronDown, IconDoc, IconDownload, IconGlobe, IconPause, IconPlay, IconStop } from '../../components/icons';
 import { useCardResize } from '../../lib/usePanelWidth';
 import { STATUS_LABEL } from './constants';
 import { buildTimeline, activeCheckpoint, safeExportName, buildExportHtml, hostOf } from './helpers';
+
+/** 导出格式(令牌写盘的三种文档格式 + 打印 PDF)。 */
+type ExportKind = 'md' | 'html' | 'docx' | 'pdf';
+
+/** 各格式的另存为对话框规格。 */
+const EXPORT_SPEC = {
+  md: { title: '导出研究报告(Markdown)', ext: 'md', filter: 'Markdown 文档' },
+  html: { title: '导出研究报告(自包含 HTML)', ext: 'html', filter: 'HTML 文档' },
+  docx: { title: '导出研究报告(Word)', ext: 'docx', filter: 'Word 文档' },
+} as const;
 
 export function RunView({ active }: { active: ActiveResearch }) {
   const { cancel, pause, resume, closeDetail } = useResearchStore();
@@ -113,36 +124,48 @@ export function RunView({ active }: { active: ActiveResearch }) {
     if (el && stickBottom.current) el.scrollTo({ top: el.scrollHeight });
   }, [nodes]);
 
-  /** 通用导出流程:保存对话框(后端原生弹窗)→ 命令调用 → 结果提示。 */
-  const runExport = async (kind: 'md' | 'html') => {
+  /** 通用导出流程:Markdown / HTML / Word 走令牌写盘;PDF 走原生打印对话框。 */
+  const runExport = async (kind: ExportKind) => {
     setExportOpen(false);
     if (exporting) return;
     setExporting(true);
     setExportHint(null);
     try {
+      if (kind === 'pdf') {
+        if (!active.report.trim()) {
+          setExportHint('报告为空,无法导出 PDF');
+          return;
+        }
+        await exportToPdf(active.report, active.topic);
+        setExportHint('已唤起打印对话框,请选择「另存为 PDF」');
+        return;
+      }
       const base = safeExportName(active.topic);
+      const spec = EXPORT_SPEC[kind];
       const pick = await ipc.pickSavePath(
-        kind === 'md' ? '导出研究报告(Markdown)' : '导出研究报告(自包含 HTML)',
-        kind === 'md' ? `${base}.md` : `${base}.html`,
-        kind === 'md' ? 'Markdown 文档' : 'HTML 文档',
-        kind === 'md' ? 'md' : 'html',
+        spec.title,
+        `${base}.${spec.ext}`,
+        spec.filter,
+        spec.ext,
       );
       if (!pick) return;
-      const doExport = (overwrite: boolean) =>
-        kind === 'md'
-          ? ipc.researchExportMarkdown(active.id, pick.token, overwrite)
-          : (async () => {
-              const el = reportRef.current?.querySelector('.report-md');
-              const html = buildExportHtml(active.topic, el?.innerHTML ?? '');
-              return ipc.researchExportHtml(active.id, html, pick.token, overwrite);
-            })();
+      const doExport = (overwrite: boolean) => {
+        if (kind === 'docx') {
+          // 研究报告归入「实践/调研报告」模板:宋体小四、1.5 倍行距、三线表。
+          return ipc.researchExportDocx(active.id, pick.token, overwrite, 'practice');
+        }
+        if (kind === 'md') {
+          return ipc.researchExportMarkdown(active.id, pick.token, overwrite);
+        }
+        const el = reportRef.current?.querySelector('.report-md');
+        const html = buildExportHtml(active.topic, el?.innerHTML ?? '');
+        return ipc.researchExportHtml(active.id, html, pick.token, overwrite);
+      };
       let saved: string;
       try {
-        // pick.existed:系统另存为对话框已就覆盖征得用户同意,直接透传
         saved = await doExport(pick.existed);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        // H-2 兜底:对话框返回后文件才被创建(竞态)时,应用内再确认一次
         if (msg === ipc.EXPORT_TARGET_EXISTS) {
           if (!window.confirm(`目标文件已存在:\n${pick.path}\n\n确认覆盖?`)) return;
           saved = await doExport(true);
@@ -234,8 +257,17 @@ export function RunView({ active }: { active: ActiveResearch }) {
                     <IconGlobe size={14} />
                     自包含 HTML(.html)
                   </button>
+                  <button onClick={() => void runExport('docx')}>
+                    <IconDoc size={14} />
+                    Word 文档(.docx)
+                  </button>
+                  <button onClick={() => void runExport('pdf')}>
+                    <IconDownload size={14} />
+                    PDF(打印另存)
+                  </button>
                   <div className="rp-export-note">
-                    报告导出支持 Markdown 与自包含 HTML 两种稳定格式,不提供 PPTX/DOCX/PDF 导出。
+                    Word / HTML / PDF 统一学术版式(宋体小四、1.5 倍行距、三线表);
+                    PDF 走系统打印对话框选「另存为 PDF」。
                   </div>
                 </div>
               </>

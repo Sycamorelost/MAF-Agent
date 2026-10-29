@@ -25,13 +25,73 @@ pub fn mcp_load_config(state: State<'_, McpState>) -> Result<McpConfig, String> 
 }
 
 #[tauri::command]
-pub fn mcp_save_config(cfg: McpConfig, state: State<'_, McpState>) -> Result<(), String> {
+pub async fn mcp_save_config(
+    cfg: McpConfig,
+    state: State<'_, McpState>,
+    runtime: State<'_, McpRuntime>,
+) -> Result<(), String> {
+    // 记录保存前「应运行」的 server 集合,用于禁用即停
+    let prev_running: std::collections::HashSet<String> = state
+        .0
+        .lock()
+        .map_err(|e| format!("lock 失败: {e}"))?
+        .servers
+        .iter()
+        .filter(|s| s.enabled)
+        .map(|s| s.name.clone())
+        .collect();
     let dir = data_dir_fn();
     mcp::save(&dir, &cfg)?;
+    let next_running: std::collections::HashSet<String> = cfg
+        .servers
+        .iter()
+        .filter(|s| s.enabled)
+        .map(|s| s.name.clone())
+        .collect();
     if let Ok(mut g) = state.0.lock() {
         *g = cfg;
     }
+    // 禁用即停:原本启用、现在被禁用或删除的 server,立刻停掉子进程
+    // (此前仅改配置,进程与数据文件句柄继续持有,用户感知为"关了但没关")
+    for name in prev_running.difference(&next_running) {
+        runtime.stop_server(name).await;
+    }
     Ok(())
+}
+
+/// 清除「长期记忆」MCP server 的全局记忆数据(data/mcp-memory.jsonl)。
+/// 先停止所有 server-memory 实例释放文件句柄,再删除文件;返回被删除的字节数(0 = 本为空)。
+#[tauri::command]
+pub async fn mcp_clear_memory(
+    state: State<'_, McpState>,
+    runtime: State<'_, McpRuntime>,
+) -> Result<u64, String> {
+    let names: Vec<String> = state
+        .0
+        .lock()
+        .map_err(|e| format!("lock 失败: {e}"))?
+        .servers
+        .iter()
+        .filter(|s| s.args.iter().any(|a| a.contains("server-memory")))
+        .map(|s| s.name.clone())
+        .collect();
+    for n in &names {
+        runtime.stop_server(n).await;
+    }
+    let path = data_dir_fn().join("mcp-memory.jsonl");
+    if !path.exists() {
+        return Ok(0);
+    }
+    let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    std::fs::remove_file(&path).map_err(|e| format!("删除记忆文件失败: {e}"))?;
+    mcp::audit(
+        &data_dir_fn(),
+        "memory_clear",
+        "长期记忆",
+        "-",
+        "user_clear",
+    );
+    Ok(size)
 }
 
 // ============ 审批模式(「解放双手」) ============
@@ -115,6 +175,37 @@ pub async fn mcp_start_server(
         .cloned()
         .ok_or_else(|| format!("server `{name}` 不存在"))?;
     runtime.start_from_config(&cfg, &data_dir_fn()).await
+}
+
+/// 一键启动所有 enabled 的 MCP server。返回 (成功数, 失败数, 错误信息列表)。
+#[tauri::command]
+pub async fn mcp_start_all_enabled(
+    state: State<'_, McpState>,
+    runtime: State<'_, McpRuntime>,
+) -> Result<(usize, usize, Vec<String>), String> {
+    let servers: Vec<McpServerConfig> = state
+        .0
+        .lock()
+        .map_err(|e| format!("lock 失败: {e}"))?
+        .servers
+        .iter()
+        .filter(|s| s.enabled)
+        .cloned()
+        .collect();
+    let dir = data_dir_fn();
+    let mut ok = 0;
+    let mut fail = 0;
+    let mut errors = Vec::new();
+    for server in servers {
+        match runtime.start_from_config(&server, &dir).await {
+            Ok(()) => ok += 1,
+            Err(e) => {
+                fail += 1;
+                errors.push(format!("{}: {e}", server.name));
+            }
+        }
+    }
+    Ok((ok, fail, errors))
 }
 
 /// 列出指定 server 的工具(需已 start)。
@@ -306,16 +397,35 @@ pub fn get_now(_tz: Option<String>) -> Result<NowResult, String> {
 
 // ============ Phase 5e:工具定义下发(前端随 chat_stream 传给模型) ============
 
-/// 汇总所有已启动 MCP server 的工具,转成 OpenAI function-calling 定义。
-/// 未启动任何 server 时返回空数组 —— 前端据此决定是否启用工具调用。
+/// 汇总内置工具与已启动 MCP server 的工具,转成 OpenAI function-calling 定义。
+/// R4/D2:只读内置工具默认下发(长文档 doc_search 不再依赖工具总开关);
+/// 写入/执行类工具与 MCP server 工具仍需打开总开关。
 #[tauri::command]
 pub async fn mcp_collect_tools(
     runtime: State<'_, McpRuntime>,
     state: State<'_, McpState>,
 ) -> Result<Vec<crate::provider::ToolDef>, String> {
-    // 总开关关闭:不下发任何工具定义(省掉每次请求数千 token 的 schema 开销)
-    if !state.0.lock().map(|c| c.tools_enabled).unwrap_or(false) {
-        return Ok(Vec::new());
+    let dir = data_dir_fn();
+    let (tools_enabled, builtin_enabled) = state
+        .0
+        .lock()
+        .map(|c| (c.tools_enabled, c.builtin_tools))
+        .unwrap_or((false, false));
+    let full_trust = mcp::approval::load_policy(&dir).mode == mcp::ApprovalMode::Full;
+
+    let mut out: Vec<crate::provider::ToolDef> = Vec::new();
+    // 只读内置工具(get_now / todo / sys / fs 读 / file_extract / doc_search / doc_read …)
+    // 默认可用:它们不改变磁盘与系统状态,且是长文档分析的前置能力。
+    if builtin_enabled {
+        out.extend(super::mcp_builtin_tools::readonly_tool_defs());
+    }
+    // 完全信任模式:GUI 自动化工具(ui_*)也下发
+    if full_trust {
+        out.extend(crate::gui::tools::tool_defs());
+    }
+    // 总开关关闭:不再下发 MCP server 工具与写入类内置工具
+    if !tools_enabled {
+        return Ok(out);
     }
     // 只收集「已启用」配置里的 server,防止用户停用后仍被调用
     let servers: Vec<McpServerConfig> = state
@@ -348,8 +458,6 @@ pub async fn mcp_collect_tools(
         })
         .unwrap_or_default();
 
-    let dir = data_dir_fn();
-    let mut out = Vec::new();
     for server in servers {
         let name = server.name.clone();
         // 懒启动:应用启动时已统一拉起过所有 enabled server,
@@ -370,7 +478,11 @@ pub async fn mcp_collect_tools(
                     Err(e) => {
                         log::warn!(
                             "{} MCP server `{name}` 失败: {e}",
-                            if was_running { "stale 重启" } else { "懒启动" }
+                            if was_running {
+                                "stale 重启"
+                            } else {
+                                "懒启动"
+                            }
                         );
                         continue;
                     }
@@ -397,15 +509,9 @@ pub async fn mcp_collect_tools(
             });
         }
     }
-    // Phase 6:内置工具(时间 + 白名单 shell)。默认不暴露 —— 由设置页开关控制,
-    // 避免向不支持 tools 字段的中转站发送请求导致 400。
-    let builtin_enabled = state.0.lock().map(|c| c.builtin_tools).unwrap_or(false);
+    // 写入/执行类内置工具(shell / fs 写 / 导出 / 解包):总开关打开时才下发
     if builtin_enabled {
-        out.extend(super::mcp_builtin_tools::builtin_tool_defs());
-    }
-    // P2:GUI 自动化工具已并入「完全信任」总开关 —— 非完全信任模式不下发,模型根本看不到 ui_* 工具
-    if mcp::approval::load_policy(&dir).mode == mcp::ApprovalMode::Full {
-        out.extend(crate::gui::tools::tool_defs());
+        out.extend(super::mcp_builtin_tools::write_tool_defs());
     }
     Ok(out)
 }
@@ -413,22 +519,36 @@ pub async fn mcp_collect_tools(
 // ============ Phase 6:白名单 Shell 命令(执行内核见 mcp::shell) ============
 
 /// 执行白名单命令;审批策略为「完全访问」时放开为任意命令(用户明示完全信任 MCP)。
-/// 非信任模式下的校验规则(解释器拒绝 / 元字符 / 路径越界 / 敏感文件)与超时控制全部在 `mcp::shell`。
+/// 非信任模式下的校验规则(解释器拒绝 / 元字符 / 只读白名单)与超时控制全部在 `mcp::shell`。
+///
+/// D8 安全收口:完全信任模式下,命中 DANGEROUS_PATTERNS 的命令(格式化/删根/注册表等)
+/// 仍需二次确认。`confirm_danger=true` 表示用户已确认;否则返回带 `DANGEROUS_CONFIRM`
+/// 前缀的错误,前端据此弹确认框后带 true 重调。
 #[tauri::command]
 pub async fn shell_whitelist_exec(
     cmd: String,
     args: Vec<String>,
     cwd: Option<String>,
+    confirm_danger: Option<bool>,
 ) -> Result<String, String> {
     let data_dir = crate::paths::data_dir();
     let cwd = cwd.as_deref();
-    let out = if crate::mcp::approval::load_policy(&data_dir).mode == crate::mcp::ApprovalMode::Full
-    {
-        crate::mcp::shell::run_unrestricted(&cmd, &args, cwd).await?
+    let full = crate::mcp::approval::load_policy(&data_dir).mode == crate::mcp::ApprovalMode::Full;
+    if full {
+        if let Some(pattern) = crate::mcp::shell::dangerous_pattern(&cmd, &args)
+            && !confirm_danger.unwrap_or(false)
+        {
+            return Err(format!(
+                "DANGEROUS_CONFIRM:检测到高风险命令 `{}`(格式化/删数据/改系统等不可逆操作),\
+请确认后再执行。",
+                pattern.trim()
+            ));
+        }
+        crate::mcp::shell::run_unrestricted(&cmd, &args, cwd).await
     } else {
-        crate::mcp::shell::run(&cmd, &args, cwd).await?
-    };
-    Ok(out.text)
+        crate::mcp::shell::run(&cmd, &args, cwd).await
+    }
+    .map(|o| o.text)
 }
 
 // ============ ApprovalStore 辅助方法 ============

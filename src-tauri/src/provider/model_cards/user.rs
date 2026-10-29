@@ -189,11 +189,11 @@ mod tests {
 
         // 清理测试条目
         let p = user_cards_path();
-        if let Ok(s) = std::fs::read_to_string(&p) {
-            if let Ok(mut list) = serde_json::from_str::<Vec<ModelCard>>(&s) {
-                list.retain(|c| c.id != "vendor-zhipu-glm-4.7");
-                let _ = std::fs::write(&p, serde_json::to_string_pretty(&list).unwrap());
-            }
+        if let Ok(s) = std::fs::read_to_string(&p)
+            && let Ok(mut list) = serde_json::from_str::<Vec<ModelCard>>(&s)
+        {
+            list.retain(|c| c.id != "vendor-zhipu-glm-4.7");
+            let _ = std::fs::write(&p, serde_json::to_string_pretty(&list).unwrap());
         }
     }
 }

@@ -12,9 +12,11 @@
 
 mod agents;
 mod agents_prompts;
+mod aiflavor;
 mod attachment;
 mod commands;
 mod db;
+mod doc;
 mod fs;
 mod gui;
 mod mcp;
@@ -43,12 +45,17 @@ fn show_main_window(app: &AppHandle) {
 
 /// 创建系统托盘:左键点击 / 菜单「显示」恢复主窗口,菜单「退出」结束应用。
 fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let show = MenuItem::with_id(app, "tray_show", "显示 MAF Agent", true, None::<&str>)?;
+    // 读取用户自定义应用名称(空 = "MAF Agent")
+    let app_name = crate::settings::load()
+        .custom_app_name
+        .unwrap_or_else(|| "MAF Agent".to_string());
+    let show_label = format!("显示 {}", app_name);
+    let show = MenuItem::with_id(app, "tray_show", &show_label, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "tray_quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
     let mut builder = TrayIconBuilder::new()
         .menu(&menu)
-        .tooltip("MAF Agent")
+        .tooltip(&app_name)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "tray_show" => show_main_window(app),
             "tray_quit" => app.exit(0),
@@ -145,6 +152,7 @@ pub fn run() {
 
             // 科研增强:解析内置技能资源目录(未命中打包资源时回退源码树,注入层静默降级)
             research::skills::init_resource(app.handle());
+            aiflavor::init_resource(app.handle());
 
             // Phase 1 §3.1:SQLite 初始化(建目录 + 打开 + 迁移)
             db::init().map_err(|e| {

@@ -277,7 +277,10 @@ export default function MemPanel({ sessionId, width, narrow, onCollapse }: Props
                 文件已被外部程序或自动提炼更新,以下为新内容(采用后将放弃你未保存的编辑):
               </p>
               <div className="mem-view mem-preview" style={{ maxHeight: 320, overflowY: 'auto' }}>
-                <MemoMarkdown content={incoming !== null ? bodyOf(incoming) : '加载中…'} />
+                {/* 统一排版:走全局 `.md` 模板,不再依赖 .mem-preview 的局部字号 */}
+                <div className="md">
+                  <MemoMarkdown content={incoming !== null ? bodyOf(incoming) : '加载中…'} />
+                </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
                 <button className="btn ghost" onClick={() => setConflictOpen(false)}>

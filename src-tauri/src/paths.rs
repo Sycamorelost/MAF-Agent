@@ -376,7 +376,33 @@ fn snapshot(dir: &Path) -> Result<BTreeMap<String, u64>, String> {
     Ok(out)
 }
 
-/// 把 `from` 的数据迁移到 `to`:复制 → 校验 → 删除旧目录。幂等,可重试。
+/// 数据目录迁移后,把 `messages.attachments` JSON 里的绝对路径前缀从旧目录改为新目录。
+/// 附件路径在库里是绝对路径;不重写的话迁移后图片/附件会全部失效(R8)。
+/// 具体改写逻辑在 `doc::service::rewrite_attachment_paths`(文档生命周期统一入口),
+/// 这里只负责打开库文件与容错:非 SQLite 文件(如测试占位)静默跳过,不阻断迁移。
+fn rewrite_attachment_prefix(db: &Path, old_root: &Path, new_root: &Path) -> Result<usize, String> {
+    if !db.is_file() {
+        return Ok(0);
+    }
+    let conn = match rusqlite::Connection::open(db) {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("skip attachment path rewrite, open db failed: {e}");
+            return Ok(0);
+        }
+    };
+    let old = old_root.to_string_lossy().to_string();
+    let new = new_root.to_string_lossy().to_string();
+    match crate::doc::service::rewrite_attachment_paths(&conn, &old, &new) {
+        Ok(n) => Ok(n),
+        Err(e) => {
+            log::warn!("skip attachment path rewrite, rewrite failed: {e}");
+            Ok(0)
+        }
+    }
+}
+
+/// 把 `from` 的数据迁移到 `to`:复制 → 校验 → 重写附件路径 → 删除旧目录。幂等,可重试。
 fn migrate_dir(from: &Path, to: &Path) -> Result<(), String> {
     if !from.exists() {
         return Ok(());
@@ -400,6 +426,12 @@ fn migrate_dir(from: &Path, to: &Path) -> Result<(), String> {
             Some(s) if s == size => {}
             _ => return Err(format!("迁移校验失败,文件缺失或大小不一致:{rel}")),
         }
+    }
+
+    // 附件是绝对路径:迁移后必须重写,否则旧目录一删附件就全部失效
+    let rewritten = rewrite_attachment_prefix(&to.join("metaagent.db"), from, to)?;
+    if rewritten > 0 {
+        log::info!("rewrote attachment paths for {rewritten} messages");
     }
 
     // 旧目录保护:绝不删除引导配置所在目录或其祖先
@@ -462,6 +494,45 @@ mod tests {
             b"# mem"
         );
         assert!(to.join("settings.json").exists());
+    }
+
+    #[test]
+    fn migrate_rewrites_attachment_paths() {
+        let base = tmp("migrate_attachments");
+        let from = base.join("old");
+        let to = base.join("new");
+        fs::create_dir_all(from.join("attachments")).unwrap();
+        let old_path = format!("{}\\attachments\\a.pdf", from.display());
+        {
+            let conn = rusqlite::Connection::open(from.join("metaagent.db")).unwrap();
+            conn.execute_batch("CREATE TABLE messages (id INTEGER PRIMARY KEY, attachments TEXT);")
+                .unwrap();
+            let json = serde_json::json!([
+                {"name": "a.pdf", "path": old_path, "kind": "pdf", "doc_id": "abc"}
+            ])
+            .to_string();
+            conn.execute(
+                "INSERT INTO messages (id, attachments) VALUES (1, ?1)",
+                [json],
+            )
+            .unwrap();
+        }
+
+        migrate_dir(&from, &to).unwrap();
+
+        let conn = rusqlite::Connection::open(to.join("metaagent.db")).unwrap();
+        let raw: String = conn
+            .query_row("SELECT attachments FROM messages WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let list: Vec<serde_json::Value> = serde_json::from_str(&raw).unwrap();
+        let p = list[0]["path"].as_str().unwrap();
+        assert!(
+            p.starts_with(&to.to_string_lossy().to_string()),
+            "附件路径未改写到新目录: {p}"
+        );
+        assert!(p.ends_with("attachments\\a.pdf"), "路径尾部被破坏: {p}");
     }
 
     #[test]

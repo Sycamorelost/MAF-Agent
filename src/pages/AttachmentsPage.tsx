@@ -40,6 +40,9 @@ const KIND_LABEL: Record<Kind, string> = {
   docx: '文档',
   xlsx: '表格',
   pdf: 'PDF',
+  pptx: '演示',
+  epub: '电子书',
+  html: '网页',
   text: '文本',
   other: '其他',
 };
@@ -50,6 +53,9 @@ const KIND_FILTERS: Array<{ key: 'all' | Kind; label: string }> = [
   { key: 'docx', label: '文档' },
   { key: 'xlsx', label: '表格' },
   { key: 'pdf', label: 'PDF' },
+  { key: 'pptx', label: '演示' },
+  { key: 'epub', label: '电子书' },
+  { key: 'html', label: '网页' },
   { key: 'text', label: '文本' },
   { key: 'other', label: '其他' },
 ];
@@ -64,6 +70,9 @@ function KindIcon({ kind }: { kind: Kind }) {
       return <IconFileText size={26} strokeWidth={1.2} />;
     case 'docx':
     case 'pdf':
+    case 'pptx':
+    case 'epub':
+    case 'html':
       return <IconDoc size={26} strokeWidth={1.2} />;
     default:
       return <IconAttach size={26} strokeWidth={1.2} />;

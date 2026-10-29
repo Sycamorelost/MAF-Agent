@@ -2,9 +2,9 @@
 //!
 //! 从 SettingsPage 抽出(§10.2.1),页面只负责展示与 props 组装。
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as ipc from '../../lib/ipc';
-import { ENGINES } from './constants';
+import { ENGINES, NAV_VISIBILITY } from './constants';
 import type { SearchDraft } from './SearchView';
 
 export function useGeneralSettings() {
@@ -202,16 +202,51 @@ export function useGeneralSettings() {
     await onSaveSettings();
   };
 
-  // ---- 导航菜单可见性(标题栏 ⋮ 菜单显示哪些功能)----
+  // ---- 导航菜单可见性 + 顺序(标题栏 ⋮ 菜单)----
+  // 两者都即时写盘:saveSettings 会广播 settings_changed,导航菜单无需刷新即可重排。
 
   const hiddenNav = settings?.hidden_nav_items ?? [];
+  const navOrder = settings?.nav_order ?? [];
 
-  const toggleNavItem = (key: string) =>
-    patchSettings({
-      hidden_nav_items: hiddenNav.includes(key)
-        ? hiddenNav.filter((k) => k !== key)
-        : [...hiddenNav, key],
-    });
+  /** 有效顺序:已保存顺序在前,未列出的按内置顺序补在末尾(稳定排序)。 */
+  const navMenuOrder = useMemo(() => {
+    const rank = new Map(navOrder.map((k, i) => [k, i]));
+    return [...NAV_VISIBILITY].sort(
+      (a, b) =>
+        (rank.get(a.key) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.key) ?? Number.MAX_SAFE_INTEGER),
+    );
+  }, [navOrder]);
+
+  /** 即时保存:先更新本地视图,再写盘广播(失败保留本地值,不阻塞交互)。 */
+  const persistSettings = async (next: ipc.AppSettings) => {
+    setSettings(next);
+    setSettingsSaved(false);
+    try {
+      await ipc.saveSettings(next);
+      setSettingsSaved(true);
+    } catch {
+      /* 写盘失败时保持本地乐观值,用户可再点一次保存 */
+    }
+  };
+
+  const toggleNavItem = (key: string) => {
+    if (!settings) return;
+    const hidden = settings.hidden_nav_items.includes(key)
+      ? settings.hidden_nav_items.filter((k) => k !== key)
+      : [...settings.hidden_nav_items, key];
+    void persistSettings({ ...settings, hidden_nav_items: hidden });
+  };
+
+  /** 拖拽排序:把 fromKey 移动到 toKey 所在的位置(前后两个方向都支持)。 */
+  const reorderNavItem = (fromKey: string, toKey: string) => {
+    if (!settings) return;
+    const keys = navMenuOrder.map((i) => i.key);
+    const from = keys.indexOf(fromKey);
+    const to = keys.indexOf(toKey);
+    if (from < 0 || to < 0 || from === to) return;
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    void persistSettings({ ...settings, nav_order: keys });
+  };
 
   return {
     settings,
@@ -234,6 +269,8 @@ export function useGeneralSettings() {
     engineLabel,
     engineReady,
     hiddenNav,
+    navOrder,
+    navMenuOrder,
     onSaveSettings,
     onChangeDataDir,
     onOpenDataDir,
@@ -246,5 +283,6 @@ export function useGeneralSettings() {
     patchSettings,
     onSaveSelection,
     toggleNavItem,
+    reorderNavItem,
   };
 }

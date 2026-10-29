@@ -13,6 +13,9 @@ interface Args {
   dstLang: string;
   text: string;
   running: boolean;
+  /** 自定义(OpenAI 兼容)服务商的 base_url / 显示名,仅 providerId='custom' 时有值 */
+  customBaseUrl: string | null;
+  customDisplayName: string | null;
   setResult: Dispatch<SetStateAction<string>>;
   setRunning: Dispatch<SetStateAction<boolean>>;
   setCopied: Dispatch<SetStateAction<boolean>>;
@@ -32,6 +35,8 @@ export function useTranslateEngine({
   dstLang,
   text,
   running,
+  customBaseUrl,
+  customDisplayName,
   setResult,
   setRunning,
   setCopied,
@@ -86,7 +91,16 @@ export function useTranslateEngine({
   };
 
   const run = async () => {
-    if (!providerId || (noModel ? false : !model) || !text.trim()) return;
+    // 缺 provider / 模型时给出明确原因,不再静默 return(否则表现为「点了没反应」)
+    if (!providerId) {
+      setError('请先在设置页配置并选中一个模型服务商');
+      return;
+    }
+    if (!noModel && !model) {
+      setError('当前服务商没有可用模型,请在设置页启用至少一个模型');
+      return;
+    }
+    if (!text.trim()) return;
     if (running) stop(); // 重新翻译:先停旧流(自动触发 / 手动重试共用)
     setError(null);
     setResult('');
@@ -103,6 +117,8 @@ export function useTranslateEngine({
         text: srcText,
         source_lang: srcLang || null,
         target_lang: dstLang,
+        custom_base_url: customBaseUrl,
+        custom_display_name: customDisplayName,
       },
       (chunk) => {
         if (chunk.type === 'delta') {

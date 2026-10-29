@@ -9,19 +9,17 @@ use super::approval::ApprovalRisk;
 use super::capability::Scope;
 
 /// 工具 → 能力作用域的映射。外部 MCP 工具按风险粗分:只读走 Net,其余走 Exec。
+///
+/// 内置工具的作用域从 schema 定义的「只读/写入」分组派生(见
+/// `commands::mcp_builtin_tools`),仅 `shell_exec`(执行)、`delegate`(网络委派)
+/// 与 `ui_*`(GUI 自动化)三个例外单独标注,避免名单重复维护。
 pub(crate) fn capability_scope(server: &str, tool: &str, risk: ApprovalRisk) -> Scope {
     if server == "builtin" {
         return match tool {
-            "fs_list" | "fs_read" | "file_extract" | "zip_list" => Scope::FsRead,
-            "fs_write" | "fs_delete" | "fs_restore" | "fs_export_docx" | "fs_export_xlsx"
-            | "zip_extract" => Scope::FsWrite,
             "shell_exec" => Scope::Exec,
-            "todo_read" => Scope::FsRead,
-            "todo_write" => Scope::FsWrite,
             "delegate" => Scope::Net,
-            // G5 系统状态快照:只读,归 FsRead
-            t if t.starts_with("sys_") => Scope::FsRead,
             t if t.starts_with("ui_") => Scope::Ui,
+            t if crate::commands::mcp_builtin_tools::WRITE_TOOL_NAMES.contains(t) => Scope::FsWrite,
             _ => Scope::FsRead,
         };
     }
@@ -32,46 +30,17 @@ pub(crate) fn capability_scope(server: &str, tool: &str, risk: ApprovalRisk) -> 
     }
 }
 
-/// 内置工具白名单(名称必须与 mcp_collect_tools 下发的定义一致)。
+/// 内置工具白名单。工具名从 schema 定义单源派生(见 `ALL_BUILTIN_TOOL_NAMES`),
+/// GUI 工具由 `gui::tools` 单独注册。
 pub(crate) fn is_builtin_tool(name: &str) -> bool {
-    matches!(
-        name,
-        "get_now"
-            | "shell_exec"
-            | "fs_list"
-            | "fs_read"
-            | "fs_write"
-            | "fs_delete"
-            | "fs_restore"
-            | "fs_export_docx"
-            | "fs_export_xlsx"
-            | "file_extract"
-            | "zip_list"
-            | "zip_extract"
-            | "todo_write"
-            | "todo_read"
-            | "delegate"
-            | "sys_overview"
-            | "sys_processes"
-            | "sys_disks"
-            | "sys_networks"
-    ) || crate::gui::tools::is_gui_tool(name)
+    crate::commands::mcp_builtin_tools::ALL_BUILTIN_TOOL_NAMES.contains(name)
+        || crate::gui::tools::is_gui_tool(name)
 }
 
-/// 内置工具是否需要人工审批(有副作用的一律审批;只读不打扰)。
-/// GUI 工具不再单独走审批:已并入「完全信任」总开关(见 gui::tools::run),
-/// 非完全信任模式在执行期直接拒绝,弹窗没有意义。
+/// 内置工具是否需要人工审批。写入/执行类工具(来自 `WRITE_TOOL_NAMES`)一律审批;
+/// 只读工具免打扰。GUI 工具不在此列(由「完全信任」总开关在执行期直接拒绝)。
 pub(crate) fn builtin_needs_approval(name: &str) -> bool {
-    matches!(
-        name,
-        "shell_exec"
-            | "fs_write"
-            | "fs_delete"
-            | "fs_restore"
-            | "fs_export_docx"
-            | "fs_export_xlsx"
-            | "zip_extract"
-    )
+    crate::commands::mcp_builtin_tools::WRITE_TOOL_NAMES.contains(name)
 }
 
 /// 执行内置工具。返回 (给模型的内容, 是否成功)。
@@ -110,6 +79,8 @@ pub(crate) async fn execute_builtin(
         },
         "todo_write" => todo_write_exec(args, session_id),
         "todo_read" => todo_read_exec(session_id),
+        "doc_search" => doc_search_exec(args, session_id),
+        "doc_read" => doc_read_exec(args, session_id),
         "delegate" => delegate_exec(args, sub_llm).await,
         // G5 系统状态快照:只读免审批;CPU 采样含约 200ms 间隔,隔离到阻塞线程池
         "sys_overview" | "sys_processes" | "sys_disks" | "sys_networks" => {
@@ -154,7 +125,24 @@ pub(crate) async fn execute_builtin(
                 .and_then(|v| v.as_str())
                 .map(str::trim)
                 .filter(|s| !s.is_empty());
-            // 信任判定在 dispatcher / IPC 层完成;非信任路径走白名单校验,信任路径直接执行
+            // D8:完全信任模式下,高风险命令(格式化/删根/注册表等)仍需模型侧二次确认。
+            // confirm=true 表示已征得用户同意;否则返回 DANGEROUS_CONFIRM 提示,模型应转述给用户。
+            if trust_shell && let Some(pattern) = crate::mcp::shell::dangerous_pattern(cmd, &argv) {
+                let confirm = args
+                    .get("confirm")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                if !confirm {
+                    return (
+                        format!(
+                            "DANGEROUS_CONFIRM:检测到高风险命令片段 `{}`(可能导致数据丢失或系统损坏)。\n\
+如需执行,请向用户确认后以 confirm=true 重试。",
+                            pattern.trim()
+                        ),
+                        false,
+                    );
+                }
+            }
             let r = if trust_shell {
                 crate::mcp::shell::run_unrestricted(cmd, &argv, cwd).await
             } else {
@@ -188,9 +176,31 @@ pub(crate) async fn execute_builtin(
                 .get("max_chars")
                 .and_then(|v| v.as_u64())
                 .map(|n| n as usize);
-            match crate::fs::text::read_text(path, max) {
+            // C3/F6:大文件分页读取
+            let offset = args
+                .get("offset")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+            match crate::fs::text::read_text(path, offset, max) {
                 Ok(text) => (text, true),
                 Err(e) => (format!("读取失败:{e}"), false),
+            }
+        }
+        "fs_grep" => {
+            let pattern = args
+                .get("pattern")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            if pattern.is_empty() {
+                return ("缺少 pattern 参数".into(), false);
+            }
+            let rel = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+            match crate::fs::text::grep(pattern, rel, limit) {
+                Ok(v) if v.is_empty() => ("未命中任何文本行".into(), true),
+                Ok(v) => (v.join("\n"), true),
+                Err(e) => (format!("检索失败:{e}"), false),
             }
         }
         "fs_write" => {
@@ -221,7 +231,14 @@ pub(crate) async fn execute_builtin(
             if path.is_empty() {
                 return ("缺少 path 参数".into(), false);
             }
-            match crate::fs::text::export_docx(path, title, body) {
+            let profile = args.get("profile").and_then(|v| v.as_str());
+            let toc = args.get("toc").and_then(|v| v.as_bool());
+            let meta: crate::fs::docgen::DocMeta = args
+                .get("meta")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+            let req = crate::fs::docgen::DocRequest::from_parts(title, body, profile, toc, meta);
+            match crate::fs::text::export_docx_ext(path, &req) {
                 Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
                 Err(e) => (format!("导出 docx 失败:{e}"), false),
             }
@@ -389,6 +406,78 @@ fn todo_read_exec(session_id: Option<&str>) -> (String, bool) {
     (out, true)
 }
 
+/// doc_search:会话内文档分块检索(C2)。
+fn doc_search_exec(args: &Value, session_id: Option<&str>) -> (String, bool) {
+    let Some(sid) = session_id else {
+        return ("文档检索需要会话上下文,当前不可用".into(), false);
+    };
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if query.is_empty() {
+        return ("缺少 query 参数".into(), false);
+    }
+    let hint = args.get("doc").and_then(|v| v.as_str());
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(6)
+        .clamp(1, 20) as usize;
+    let conn = match crate::db::conn().lock() {
+        Ok(c) => c,
+        Err(e) => return (format!("db lock 失败: {e}"), false),
+    };
+    match crate::doc::search(&conn, sid, query, hint, limit) {
+        Ok(out) if out.hits.is_empty() => (
+            format!(
+                "未命中:会话内共 {} 块,没有匹配「{query}」的内容。可换关键词,或用 doc_read 按块浏览。",
+                out.scanned
+            ),
+            true,
+        ),
+        Ok(out) => {
+            let mut s = format!("命中 {} 段(共扫描 {} 块):\n", out.hits.len(), out.scanned);
+            for h in &out.hits {
+                s.push_str(&format!("\n[{} · 第 {} 块", h.doc_name, h.ord + 1));
+                if let Some(p) = h.page {
+                    s.push_str(&format!(" · 第 {p} 页"));
+                }
+                if !h.section.is_empty() {
+                    s.push_str(&format!(" · {}", h.section));
+                }
+                s.push_str(&format!("]\n{}\n", h.snippet));
+            }
+            s.push_str("\n需要完整上下文时用 doc_read(doc=文档名, start=块序号-1)。");
+            (s, true)
+        }
+        Err(e) => (format!("文档检索失败:{e}"), false),
+    }
+}
+
+/// doc_read:按块序号回看原文(C2)。
+fn doc_read_exec(args: &Value, session_id: Option<&str>) -> (String, bool) {
+    let Some(sid) = session_id else {
+        return ("文档读取需要会话上下文,当前不可用".into(), false);
+    };
+    let hint = args.get("doc").and_then(|v| v.as_str());
+    let start = args.get("start").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    let count = args
+        .get("count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(3)
+        .clamp(1, 20) as usize;
+    let conn = match crate::db::conn().lock() {
+        Ok(c) => c,
+        Err(e) => return (format!("db lock 失败: {e}"), false),
+    };
+    match crate::doc::read_range(&conn, sid, hint, start, count) {
+        Ok(text) => (text, true),
+        Err(e) => (format!("文档读取失败:{e}"), false),
+    }
+}
+
 /// delegate:把独立子任务委派给专项智能体。子调用不带工具,天然防递归。
 async fn delegate_exec(args: &Value, sub_llm: Option<&crate::provider::SubLlm>) -> (String, bool) {
     let query = args
@@ -451,7 +540,24 @@ async fn delegate_exec(args: &Value, sub_llm: Option<&crate::provider::SubLlm>) 
 #[cfg(test)]
 mod tests {
     use super::{builtin_needs_approval, execute_builtin, is_builtin_tool};
+    use crate::commands::mcp_builtin_tools::ALL_BUILTIN_TOOL_NAMES;
     use serde_json::json;
+
+    /// R4 工具注册表单源:schema 定义的每个工具都必须有执行分支。
+    /// 新增工具时请同步更新此处清单与 `execute_builtin` 的 match。
+    #[test]
+    fn every_schema_tool_has_an_execution_handler() {
+        // `execute_builtin` 的 match 兜底返回「未知内置工具」;
+        // 逐个用空参数调用,只要不命中兜底即说明有对应分支。
+        for name in ALL_BUILTIN_TOOL_NAMES.iter() {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let (content, _ok) = rt.block_on(execute_builtin(name, &json!({}), false, None, None));
+            assert!(
+                !content.contains("未知内置工具"),
+                "工具 `{name}` 已在 schema 中定义,但 `execute_builtin` 缺少对应执行分支"
+            );
+        }
+    }
 
     #[test]
     fn builtin_names_are_recognized() {
@@ -490,29 +596,27 @@ mod tests {
         }
     }
 
-    /// 文件工具只接受工作区相对路径:绝对路径与 `..` 必须在落盘前被拒绝。
+    /// 文件工具:绝对路径可访问工作区外(全盘),相对路径 `..` 同样不再拦截(无沙箱)。
     #[tokio::test]
-    async fn fs_tools_reject_escaping_paths() {
+    async fn fs_tools_accept_absolute_paths_outside_workspace() {
+        let outside = std::env::temp_dir().join(format!("maf-abs-{}.txt", std::process::id()));
+        std::fs::write(&outside, "absolute-ok").unwrap();
         let (content, ok) = execute_builtin(
             "fs_read",
-            &json!({ "path": "C:\\Windows\\win.ini" }),
+            &json!({ "path": outside.to_str().unwrap() }),
             false,
             None,
             None,
         )
         .await;
-        assert!(!ok);
-        assert!(content.contains("相对路径"), "实际内容:{content}");
+        assert!(ok, "绝对路径应可读取,实际内容:{content}");
+        assert!(content.contains("absolute-ok"));
 
-        let (_c, ok) = execute_builtin(
-            "fs_write",
-            &json!({ "path": "../escape.txt", "content": "x" }),
-            false,
-            None,
-            None,
-        )
-        .await;
-        assert!(!ok);
+        // 相对路径 `..`:不再要求留在工作区内
+        let (content, ok) =
+            execute_builtin("fs_list", &json!({ "path": ".." }), false, None, None).await;
+        assert!(ok, "`..` 应可列出,实际内容:{content}");
+        std::fs::remove_file(&outside).ok();
     }
 
     #[tokio::test]

@@ -26,9 +26,32 @@ pub struct AppSettings {
     /// 导航菜单中隐藏的功能项(对话/设置始终显示;空 = 全部显示)
     #[serde(default)]
     pub hidden_nav_items: Vec<String>,
+    /// 导航菜单的显示顺序(存功能项 key;未列出的项按内置顺序补在末尾)
+    #[serde(default)]
+    pub nav_order: Vec<String>,
     /// 对话上下文窗口:每轮携带的历史消息条数(0 = 全部;默认 24)
     #[serde(default = "default_context_window")]
     pub context_window_messages: u32,
+    /// 全裸模式(R3 A1):true = system 不追加身份锚,仅保留 Base 物理契约;
+    /// 人格全交智能体提示或用户自带人设的中转模型
+    #[serde(default)]
+    pub bare_mode: bool,
+    /// 首次启动引导是否已完成(R3 首次安装向导)
+    #[serde(default)]
+    pub first_run_completed: bool,
+    /// 用户自定义底层 Prompt(空 = 使用内置默认 BASE_PHYSICAL_CONTRACT)
+    #[serde(default)]
+    pub custom_base_prompt: Option<String>,
+    /// 用户自定义应用名称(空 = 使用 "MAF Agent",仅影响窗口标题/托盘/快捷方式)
+    #[serde(default)]
+    pub custom_app_name: Option<String>,
+    /// 用户自定义应用图标路径(空 = 使用内置图标,仅影响窗口/托盘/快捷方式)
+    #[serde(default)]
+    pub custom_app_icon: Option<String>,
+    /// 默认工作区根目录(空 = `<数据目录>/workspace`;环境变量 `MAF_WORKSPACE` 仍优先)。
+    /// 这是「相对路径」的基准目录;绝对路径不受其限制。
+    #[serde(default)]
+    pub workspace_root: Option<String>,
 }
 
 fn default_context_window() -> u32 {
@@ -43,7 +66,14 @@ impl Default for AppSettings {
             selection_ask_enabled: true,
             minimize_to_tray: false,
             hidden_nav_items: Vec::new(),
+            nav_order: Vec::new(),
             context_window_messages: default_context_window(),
+            bare_mode: false,
+            first_run_completed: false,
+            custom_base_prompt: None,
+            custom_app_name: None,
+            custom_app_icon: None,
+            workspace_root: None,
         }
     }
 }

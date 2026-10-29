@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
 import * as ipc from '../lib/ipc';
 import {
   IconAttach,
   IconBrain,
+  IconChart,
   IconChat,
   IconGraduation,
   IconImage,
@@ -24,6 +25,7 @@ const MAIN_ITEMS = [
   { key: 'memory', Icon: IconBrain, label: '记忆', path: '/memory' },
   { key: 'notes', Icon: IconNote, label: '知识库', path: '/notes' },
   { key: 'attachments', Icon: IconAttach, label: '附件', path: '/attachments' },
+  { key: 'aiflavor', Icon: IconChart, label: 'AI 味检测', path: '/aiflavor' },
 ];
 
 const FOOT_ITEMS = [{ key: 'settings', Icon: IconSettings, label: '设置', path: '/settings' }];
@@ -41,17 +43,47 @@ export function NavMenu() {
   const [open, setOpen] = useState(false);
   /** 设置中被隐藏的功能项(对话/设置固定保留) */
   const [hidden, setHidden] = useState<string[]>([]);
+  /** 设置中自定义的显示顺序(未列出的项按内置顺序补在末尾) */
+  const [order, setOrder] = useState<string[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // 读取导航可见性设置,并随设置保存热更新
+  // 读取导航可见性与顺序设置,并随设置保存热更新(设置页改动即时生效)
   useEffect(() => {
-    const apply = (s: ipc.AppSettings) => setHidden(s.hidden_nav_items ?? []);
+    const apply = (s: ipc.AppSettings) => {
+      setHidden(s.hidden_nav_items ?? []);
+      setOrder(s.nav_order ?? []);
+    };
     void ipc.getSettings().then(apply).catch(() => {});
     const un = listen<ipc.AppSettings>('settings_changed', (e) => apply(e.payload));
     return () => {
       void un.then((f) => f());
     };
   }, []);
+
+  // 每次展开都重读一次磁盘设置:顺序/可见性以落盘结果为准,
+  // 不再依赖 settings_changed 事件是否送达本窗口(设置页改完立刻可见)。
+  useEffect(() => {
+    if (!open) return;
+    void ipc
+      .getSettings()
+      .then((s) => {
+        setHidden(s.hidden_nav_items ?? []);
+        setOrder(s.nav_order ?? []);
+      })
+      .catch(() => {});
+  }, [open]);
+
+  /** 按用户自定义顺序重排;「对话」固定第一,未参与排序的项保持内置相对顺序。 */
+  const items = useMemo(() => {
+    const rank = new Map(order.map((k, i) => [k, i]));
+    return [...MAIN_ITEMS].sort((a, b) => {
+      if (a.key === 'chat') return -1;
+      if (b.key === 'chat') return 1;
+      return (
+        (rank.get(a.key) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.key) ?? Number.MAX_SAFE_INTEGER)
+      );
+    });
+  }, [order]);
 
   // 路由变化即收起;点击菜单外区域收起
   useEffect(() => setOpen(false), [loc.pathname]);
@@ -92,7 +124,7 @@ export function NavMenu() {
       </button>
       {open && (
         <div className="nav-pop">
-          {MAIN_ITEMS.filter((i) => !hidden.includes(i.key)).map(renderItem)}
+          {items.filter((i) => !hidden.includes(i.key)).map(renderItem)}
           <div className="nav-sep" />
           {FOOT_ITEMS.map(renderItem)}
         </div>

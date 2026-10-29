@@ -8,7 +8,7 @@ MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，�
 
 | 项目 | 说明 |
 |---|---|
-| **版本** | v1.16.3 |
+| **版本** | v1.17.1 |
 | **许可证** | Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明） |
 | **平台** | Windows 10 / 11（64 位） |
 
@@ -39,7 +39,7 @@ MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，�
 - 会话改名(与记忆文件标题同步)与会话导出 Markdown
 - 单会话内中途切换模型
 - Markdown / KaTeX 公式 / Mermaid 图表 / ECharts 图表四类渲染
-- 附件本地解析：PDF(pdf-extract)、DOCX(docx-rs)、XLSX(calamine),不经过云端
+- 附件本地解析：PDF(pdf-extract)、DOCX(docx-rs)、XLSX(calamine)、PPTX/EPUB/HTML,不经过云端
 
 ### 深度研究
 
@@ -106,10 +106,10 @@ MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，�
 |---|---|
 | 桌面框架 | Tauri 2.12（Rust + 系统 WebView2，不捆绑 Chromium） |
 | 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
-| 后端 | Rust（edition 2024，rust 1.90+），约 190 个 IPC 命令 |
-| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 20） |
+| 后端 | Rust（edition 2024，rust 1.90+），约 124 个 IPC 命令 |
+| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 22） |
 | 网络 | reqwest（rustls-tls）+ SSE 流式解析，Rust 层直推前端 |
-| 附件解析 | pdf-extract / docx-rs / calamine（全部本地原生） |
+| 附件解析 | pdf-extract / docx-rs / calamine / pptxgenjs（全部本地原生） |
 | 密钥保护 | Windows DPAPI + AES-GCM 双路径加密（`provider/keychain.rs`） |
 | 渲染 | react-markdown + KaTeX + Mermaid + ECharts + highlight.js |
 
@@ -179,7 +179,7 @@ pnpm tauri build
 
 ```bash
 cd src-tauri
-cargo test        # Rust 单元测试(约 330 项)
+cargo test        # Rust 单元测试(383 项)
 cargo check       # 静态检查
 ```
 
@@ -214,7 +214,7 @@ MetaAgent Float/
     ├── tauri.conf.json         # 窗口、CSP、打包配置
     ├── resources/skills/       # 23 份科研方法论技能文档
     └── src/
-        ├── commands/           # 约 190 个 Tauri IPC 命令
+        ├── commands/           # 约 124 个 Tauri IPC 命令
         │   ├── provider/       # 模型接入/密钥链/流式/用量
         │   ├── research/       # 研究管线/导出/参考文献
         │   ├── memory/         # 记忆 CRUD/版本 diff

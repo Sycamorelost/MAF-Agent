@@ -92,6 +92,7 @@ export default function SettingsPage() {
     engineLabel,
     engineReady,
     hiddenNav,
+    navOrder,
     onSaveSettings,
     onChangeDataDir,
     onOpenDataDir,
@@ -104,6 +105,7 @@ export default function SettingsPage() {
     patchSettings,
     onSaveSelection,
     toggleNavItem,
+    reorderNavItem,
   } = useGeneralSettings();
 
   const providersView = (
@@ -206,10 +208,9 @@ export default function SettingsPage() {
   const navmenuView = (
     <NavMenuView
       hiddenNav={hiddenNav}
-      settingsSaved={settingsSaved}
-      savingSettings={savingSettings}
+      navOrder={navOrder}
       onToggleNavItem={toggleNavItem}
-      onSaveSettings={onSaveSettings}
+      onReorderNavItem={reorderNavItem}
     />
   );
 

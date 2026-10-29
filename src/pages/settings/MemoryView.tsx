@@ -95,7 +95,7 @@ export function MemoryView({
         <div className="set-card-h">上下文与性能</div>
         <div className="set-card-b">
           <div className="set-row">
-            <label className="lbl">上下文窗口</label>
+            <label className="lbl">每轮携带的历史消息数</label>
             <select
               className="pg-field"
               value={String(settings?.context_window_messages ?? 24)}
@@ -111,8 +111,8 @@ export function MemoryView({
             </select>
           </div>
           <p className="set-desc" style={{ margin: 'var(--space-2) 0 0' }}>
-            每轮随请求携带的历史消息条数。条数越多,长会话的 token 与首字延迟越高;
-            超出窗口的旧内容仍会通过记忆提炼摘要保留。
+            每次请求发给模型的历史消息条数(非模型 token 上限)。条数越多,长会话的 token
+            消耗与首字延迟越高;超出窗口的旧内容仍会通过记忆提炼摘要保留。
           </p>
         </div>
       </div>

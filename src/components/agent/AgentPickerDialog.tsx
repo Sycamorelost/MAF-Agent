@@ -21,6 +21,18 @@ interface Props {
   /** B4 / F2:存在时卡片显示「应用为提示词」(仅写会话 system_prompt,不绑定 Agent) */
   sessionId?: string | null;
 }
+
+/** 使用习惯排序:高频智能体在所属分类内前置;未列出者回落内置顺序(排序稳定)。
+ *  bare-assistant(默认助手)置顶,作为「空预制」后的第二选择。 */
+const USAGE_ORDER = [
+  'bare-assistant',
+  'ai-flavor-detector', 'ai-flavor-rewriter', 'academic-voice', 'style-anchor',
+  'product-assistant', 'chinese-assistant', 'translator', 'doc-analyst', 'report-writer',
+  'paper-reader', 'lab-report-writer', 'exp-designer', 'data-analyst',
+  'email-drafter', 'weekly-report', 'code-reviewer', 'bug-hunter', 'meeting-minutes',
+];
+const USAGE_RANK = new Map(USAGE_ORDER.map((id, i) => [id, i]));
+const usageRank = (t: ipc.AgentTemplate) => USAGE_RANK.get(t.agent_id) ?? USAGE_ORDER.length;
 export default function AgentPickerDialog({ currentAgentId, onSelect, onClose, sessionId }: Props) {
   const { templates, loaded, load, save, remove } = useAgentsStore();
   const [query, setQuery] = useState('');
@@ -60,7 +72,7 @@ export default function AgentPickerDialog({ currentAgentId, onSelect, onClose, s
   };
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return templates;
+    if (!q) return [...templates].sort((a, b) => usageRank(a) - usageRank(b));
     return templates.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
@@ -206,8 +218,8 @@ export default function AgentPickerDialog({ currentAgentId, onSelect, onClose, s
             </button>
           </div>
 
-          {/* 空白会话 */}
-          <div className="agent-cat">空白会话</div>
+          {/* 空白会话 + 默认助手(置顶) */}
+          <div className="agent-cat">快速开始</div>
           <div className="agent-grid">
             <div
               className={`agent-card ${currentAgentId == null ? 'active' : ''}`}
@@ -225,9 +237,26 @@ export default function AgentPickerDialog({ currentAgentId, onSelect, onClose, s
                 {currentAgentId == null && <span className="agent-card-badge" style={{ background: 'var(--ok)' }}>当前</span>}
               </div>
             </div>
+            {templates
+              .filter((t) => t.agent_id === 'bare-assistant')
+              .map((t) => (
+                <AgentCard
+                  key={t.agent_id}
+                  t={t}
+                  isActive={currentAgentId === t.agent_id}
+                  sessionId={sessionId}
+                  onSelect={selectCard}
+                  onApplyPrompt={applyPromptOnly}
+                  onCreateVariant={openVariant}
+                  onEdit={openEdit}
+                  onRemove={remove}
+                />
+              ))}
           </div>
 
-          {groups.map((g) => (
+          {groups
+            .filter((g) => g.cat !== 'meta' || !g.items.some((t) => t.agent_id === 'bare-assistant'))
+            .map((g) => (
             <div key={g.cat}>
               <div className="agent-cat">{g.label}</div>
               <div className="agent-grid">

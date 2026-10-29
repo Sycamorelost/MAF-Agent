@@ -1,0 +1,570 @@
+/* ============ 去 AI 味 · AI 生成概率分析(R3 B3) ============ */
+.aif-page {
+  /* 相对视口 fixed 定位,绕开所有父容器宽度对齐问题,强制铺满 */
+  position: fixed;
+  top: var(--titlebar-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  /* 收窄内边距,消除"留白过多" */
+  padding: 12px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.aif-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.aif-head-main { max-width: 760px; min-width: 0; }
+.aif-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--brand);
+  margin-bottom: 4px;
+}
+.aif-head h2 { margin: 0 0 4px; font-size: 19px; line-height: 1.4; letter-spacing: .01em; }
+.aif-head .set-desc { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--text-3); }
+.aif-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px;
+  border: 1px solid var(--border);
+  /* 药丸容器:允许换行,圆角用常规档位(999px 在换行后会变成夸张的胶囊) */
+  border-radius: var(--radius-m);
+  background: var(--bg-side);
+}
+.aif-pill {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+  background: transparent;
+  font-family: inherit;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.aif-pill:hover { color: var(--text-1); background: var(--bg-hover); }
+/* 选中态降噪:不用纯蓝底白字,改中性深底+细边框,视觉重量与未选中态接近 */
+.aif-pill.on { color: var(--text-1); background: var(--bg-hover); border-color: var(--border); font-weight: 600; }
+.aif-pill.on:hover { color: var(--text-1); background: var(--bg-hover); }
+/* aif-page 内的 primary 按钮:不用纯黑底(--ink),改品牌色 */
+.aif-page .btn.primary,
+.aif-page .btn-primary {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+  padding: 8px 16px;
+  font-size: 12.5px;
+}
+.aif-page .btn.primary:hover,
+.aif-page .btn-primary:hover {
+  background: var(--brand-deep);
+  border-color: var(--brand-deep);
+}
+.aif-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  background: var(--bg-side);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--brand);
+  border-radius: var(--radius-s);
+  padding: 8px 12px;
+}
+.aif-grid {
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  gap: 12px;
+}
+/* ========== 三栏:flex 流式 ========== */
+.aif-col:first-child { width: var(--aif-l-w, 260px); flex-shrink: 0; height: 100%; min-height: 0; }
+.aif-col.aif-mid     { flex: 1 1 0; min-width: 0; height: 100%; min-height: 0; }
+.aif-col.aif-right   { width: var(--aif-r-w, 320px); flex-shrink: 0; height: 100%; min-height: 0; }
+/* ========== 拖拽分隔条:absolute 不占布局流 ========== */
+.aif-gutter {
+  position: absolute;
+  background: transparent;
+  touch-action: none;
+  transition: background .15s ease;
+  z-index: 5;
+  border-radius: 2px;
+}
+.aif-gutter:hover, .aif-gutter.dragging { background: var(--brand-line); }
+.aif-gutter.dragging { background: var(--brand); }
+/* 竖向 gutter:贴在栏的边界上,各覆盖 gap 的一半 + 6px 宽 */
+.aif-gutter-v { width: 6px; top: 0; bottom: 0; cursor: col-resize; }
+.aif-gutter.gv1 {
+  /* 贴左栏右缘:左栏宽 + gap/2 - 半条宽,居中落在间隙里 */
+  left: calc(var(--aif-l-w, 260px) + 2px);
+}
+.aif-gutter.gv2 {
+  /* 贴右栏左缘 */
+  right: calc(var(--aif-r-w, 320px) + 2px);
+}
+/* 横向 gutter:绝对定位在折行/堆叠的栏边界 */
+.aif-gutter-h { height: 6px; left: 0; right: 0; cursor: row-resize; }
+/* 默认隐藏所有横向 gutter,@media 中显式 */
+.aif-gutter.gh, .aif-gutter.gh1, .aif-gutter.gh2 { display: none; }
+/* ========== 中屏 800–1199px:flex-wrap,右栏折到下 ========== */
+@media (max-width: 1199px) {
+  .aif-grid { flex-wrap: wrap; }
+  .aif-col:first-child { width: var(--aif-l-w, 220px); }
+  .aif-col.aif-right {
+    width: 100%;
+    flex: 1 1 100%;
+    height: var(--aif-b-h, 200px);
+    min-height: 140px;
+  }
+  /* gv2(右栏左缘 gutter)隐藏,gh(上下分隔)显示 */
+  .aif-gutter.gv2 { display: none; }
+  .aif-gutter.gh {
+    display: block;
+    /* 贴在上排底部:上排高 = grid 全高 - 下栏高 */
+    top: calc(100% - var(--aif-b-h, 200px) - 1px);
+  }
+}
+/* ========== 窄屏 <800px:flex-direction:column 三栏纵向 ========== */
+@media (max-width: 799px) {
+  .aif-grid { flex-direction: column; flex-wrap: nowrap; gap: 12px; }
+  .aif-col:first-child,
+  .aif-col.aif-right { width: 100%; flex-shrink: 1; }
+  /* 注意:fallback 必须用 px 而不是 auto,否则 hook 挂载前第一帧 calc(auto-1px) 无效 */
+  .aif-col:first-child { height: var(--aif-l-h, 200px); max-height: 40%; flex-shrink: 0; }
+  .aif-col.aif-right { height: var(--aif-r-h, 200px); max-height: 50%; flex-shrink: 0; }
+  .aif-col.aif-mid { flex: 1 1 0; min-height: 120px; }
+  .aif-gutter.gv1, .aif-gutter.gv2 { display: none; }
+  .aif-gutter.gh1 {
+    display: block;
+    top: calc(var(--aif-l-h, 200px) - 1px);
+  }
+  .aif-gutter.gh2 {
+    display: block;
+    top: calc(100% - var(--aif-r-h, 200px) - 1px);
+  }
+  .aif-rewrite { max-height: none; }
+}
+/* 极窄窗(minWidth 380):收内边距、页签/档位改整行,避免横向溢出 */
+@media (max-width: 560px) {
+  .aif-page { padding: 8px 8px 8px; gap: 8px; }
+  .aif-head { gap: 8px; }
+  .aif-head h2 { font-size: 17px; }
+  .aif-pills { width: 100%; }
+  .aif-card { padding: 12px; }
+  .aif-scorecard { padding: 12px; gap: 12px; justify-content: center; }
+  .aif-tabs { width: 100%; }
+  .aif-tabs button { flex: 1; text-align: center; padding: 8px 8px; }
+  .aif-levels { flex-direction: column; }
+  .aif-lvl { min-width: 0; }
+  .aif-rule-ex { padding-left: 0; }
+  .aif-rewrite { min-height: 180px; }
+}
+.aif-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+/* 三栏各自独立滚动 */
+.aif-col:first-child,
+.aif-col.aif-mid,
+.aif-col.aif-right {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.aif-card {
+  background: var(--bg-side);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.aif-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.aif-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .01em;
+  color: var(--text-1);
+}
+/* 拖拽文件到输入卡:仅提文本、不落盘 */
+.aif-card.drag-over { border-color: var(--brand); background: var(--brand-soft); }
+.aif-input {
+  width: 100%;
+  min-height: 216px;
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.75;
+  padding: 12px 12px;
+}
+.aif-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 主操作按钮占满整行,形成清晰的「下一步」 */
+.aif-cta { width: 100%; justify-content: center; }
+.aif-count { margin-right: auto; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aif-count.over { color: var(--warn); }
+.aif-hint { font-size: 12px; color: var(--text-3); line-height: 1.7; }
+.aif-hint.warn { color: var(--warn); }
+/* 已插入图片的缩略图横排带 */
+.aif-img-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 0 4px;
+}
+.aif-img-item {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-main);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.aif-img-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.aif-img-item:hover img { opacity: .85; }
+.aif-img-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+  border: none;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.aif-img-item:hover .aif-img-remove { opacity: 1; }
+.aif-img-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, .45);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+.aif-collapse {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.aif-hist { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.aif-hist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.aif-hist-item:hover { background: var(--bg-hover); }
+.aif-hist-item.on { background: var(--brand-soft); }
+.aif-hist-meta { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aif-badge {
+  flex: none;
+  min-width: 30px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 11.5px;
+  border-radius: 6px;
+  padding: 4px 4px;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.aif-badge.lv0 { background: var(--ok); }
+.aif-badge.lv1 { background: var(--warn); }
+.aif-badge.lv2 { background: var(--err); }
+.aif-empty { color: var(--text-3); font-size: 13px; line-height: 1.8; text-align: center; padding: 40px 16px; }
+/* 评分卡:仪表 + 结论 + 雷达 */
+.aif-scorecard {
+  flex-direction: row;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 20px;
+  background: linear-gradient(180deg, var(--bg-side), var(--bg-main));
+}
+.aif-score-side { flex: 1 1 230px; min-width: 200px; display: flex; flex-direction: column; gap: 8px; }
+.aif-score-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.aif-score-note { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aif-level { align-self: flex-start; font-weight: 700; font-size: 13px; border-radius: 999px; padding: 4px 12px; color: #fff; }
+.aif-level.lv0 { background: var(--ok); }
+.aif-level.lv1 { background: var(--warn); }
+.aif-level.lv2 { background: #e67e22; }
+.aif-level.lv3 { background: var(--err); }
+.aif-level.lv4 { background: #c0392b; }
+.aif-stat-line { font-size: 12px; color: var(--text-3); line-height: 1.6; }
+.aif-stat-line.ok { color: var(--ok); }
+.aif-stat-line.warn { color: var(--warn); }
+.aif-score-verdict {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+.aif-score-verdict b { color: var(--text-1); }
+.aif-gauge-num { font-size: 27px; font-weight: 800; fill: var(--text-1); font-variant-numeric: tabular-nums; }
+.aif-gauge-sub { font-size: 10px; fill: var(--text-3); }
+.aif-radar-lbl { font-size: 10.5px; fill: var(--text-3); }
+/* 六维条 */
+.aif-dims { display: flex; flex-direction: column; gap: 12px; }
+.aif-dim-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.aif-dim-name { color: var(--text-2); }
+/* 首要偏离维度:与评分卡结论呼应 */
+.aif-dim.top .aif-dim-name { color: var(--text-1); font-weight: 700; }
+.aif-dim.top .aif-dim-name::after {
+  content: '首要偏离';
+  margin-left: 8px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--warn);
+  background: rgba(198, 122, 9, .12);
+  border-radius: 4px;
+}
+.aif-dim-value { font-size: 13px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.aif-dim-value small { font-size: 11px; font-weight: 400; color: var(--text-3); }
+.aif-dim-raw { color: var(--text-4, var(--text-3)); font-variant-numeric: tabular-nums; }
+.aif-bar { height: 8px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
+.aif-bar i { display: block; height: 100%; border-radius: 3px; }
+.aif-bar i[data-lv='0'] { background: var(--ok); }
+.aif-bar i[data-lv='1'] { background: var(--warn); }
+.aif-bar i[data-lv='2'] { background: #e67e22; }
+.aif-bar i[data-lv='3'] { background: var(--err); }
+/* 热力图:逐句色块,加大行高与色块留白 */
+.aif-legend { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-3); flex-wrap: wrap; }
+.aif-legend i { width: 16px; height: 10px; border-radius: 3px; display: inline-block; }
+.aif-heat {
+  font-size: 13.5px;
+  line-height: 2.15;
+  letter-spacing: .01em;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 4px 4px 4px;
+}
+.aif-sent {
+  border-radius: 4px;
+  padding: 4px 4px;
+  cursor: default;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.aif-sent.focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+/* 规则命中:两行信息,示例单独一行 */
+.aif-rules { display: flex; flex-direction: column; gap: 0; }
+.aif-rule {
+  display: block;
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12.5px;
+  min-width: 0;
+}
+.aif-rule:last-child { border-bottom: none; }
+.aif-rule.clickable { cursor: pointer; }
+.aif-rule.clickable:hover { background: var(--bg-hover); }
+.aif-rule-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.aif-rule b { color: var(--text-1); white-space: nowrap; }
+.aif-rule-cat { color: var(--text-4, var(--text-3)); flex: none; font-size: 11.5px; }
+.aif-rule-count { margin-left: auto; flex: none; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aif-rule-ex {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin-top: 4px;
+  padding-left: 32px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: normal;
+  overflow: hidden;
+}
+.aif-sev {
+  flex: none;
+  font-weight: 700;
+  font-size: 10px;
+  border-radius: 4px;
+  padding: 0 4px;
+  color: #fff;
+}
+.aif-sev.s1 { background: var(--ok); }
+.aif-sev.s2 { background: var(--warn); }
+.aif-sev.s3 { background: var(--err); }
+/* 改写档位:卡片式单选 */
+.aif-levels { display: flex; gap: 8px; flex-wrap: wrap; }
+.aif-lvl {
+  position: relative;
+  flex: 1;
+  min-width: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  transition: border-color .12s ease, background .12s ease;
+}
+.aif-lvl:hover { border-color: var(--brand); }
+.aif-lvl b { font-size: 12.5px; color: var(--text-1); }
+.aif-lvl input { position: absolute; opacity: 0; }
+.aif-lvl.on { border-color: var(--brand); background: var(--brand-soft); }
+.aif-lvl.on::after {
+  content: '✓';
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand);
+}
+.aif-disclaimer { font-size: 11.5px; color: var(--text-3); line-height: 1.7; padding: 0 4px; }
+/* 右栏:分段页签 */
+.aif-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--bg-side);
+}
+.aif-tabs button {
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.aif-tabs button:hover { color: var(--brand); }
+.aif-tabs button.on { background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+/* 右栏本身已独立滚动(见 .aif-col 规则),这里不再设 max-height/overflow,
+   否则会在大滚动区内套出第二个滚动条 */
+.aif-rewrite {
+  font-size: 13px;
+  line-height: 1.7;
+  min-height: 240px;
+  overflow-wrap: anywhere;
+}
+/* 右栏 Markdown 正文:排版统一走 _tokens.css 的 `.md` 模板,此处不再单独覆盖 */
+.aif-disc {
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-2);
+  background: var(--bg-main);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-s);
+  padding: 12px 12px;
+  margin: 0;
+}
+
+/* C4:逐句对照 diff(改写前 → 改写后) */
+.aif-tabs.sub { width: 100%; margin-bottom: 4px; background: var(--bg-main); }
+.aif-tabs.sub button { flex: 1; text-align: center; font-size: 12px; padding: 4px 12px; }
+.aif-diff {
+  max-height: 52vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-main);
+}
+.aif-diff-row {
+  display: flex;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  line-height: 1.75;
+  font-size: 12.5px;
+}
+.aif-diff-row:last-child { border-bottom: none; }
+.aif-diff-row.removed { background: rgba(231, 76, 60, 0.07); }
+.aif-diff-row.added { background: rgba(39, 174, 96, 0.08); }
+.aif-diff-tag { flex: 0 0 16px; font-size: 11px; color: var(--text-4); font-weight: 700; }
+.aif-diff-row.removed .aif-diff-tag { color: var(--err); }
+.aif-diff-row.added .aif-diff-tag { color: var(--ok); }
+.aif-diff-body { flex: 1 1 auto; min-width: 0; }
+.aif-diff-old { color: var(--text-3); font-size: 12px; text-decoration: line-through; text-decoration-color: var(--err); }
+.aif-diff-new { color: var(--text-1); }
+.aif-diff-row.same .aif-diff-new { color: var(--text-2); }
+
+/* F7:提取失败/无文本的附件卡告警态 */
+/* 用双类选择器提高特异性覆盖 .attach-card 的边框,
+   不再依赖 !important(后者会压过一切后续样式,属维护风险) */
+.attach-card.attach-card-warn { border-color: var(--warn); }
+.attach-card-warn .attach-card-kind { color: var(--warn); }
+.aif-lbl-gap label.lbl { margin-top: var(--space-2); }

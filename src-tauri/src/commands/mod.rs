@@ -1,13 +1,15 @@
 //! Tauri commands 集合。
 
 pub mod agents;
+pub mod aiflavor;
 pub mod attachment;
 pub mod capability;
 pub mod datadir;
+pub mod doc;
 pub mod fs;
 pub mod gui;
 pub mod mcp;
-mod mcp_builtin_tools;
+pub(crate) mod mcp_builtin_tools;
 pub mod memory;
 pub mod notes;
 pub mod provider;
@@ -24,13 +26,20 @@ pub mod tutorial;
 macro_rules! all_commands {
     () => {
         tauri::generate_handler![
+            // R3 B2:去 AI 味 · AI 生成概率分析
+            crate::commands::aiflavor::aiflavor_analyze,
+            crate::commands::aiflavor::aiflavor_reports_list,
+            crate::commands::aiflavor::aiflavor_report_get,
+            crate::commands::aiflavor::aiflavor_report_delete,
+            crate::commands::aiflavor::aiflavor_rewrite_save,
+            crate::commands::aiflavor::aiflavor_export_report,
             // session
             crate::commands::memory::crud::create_session,
             crate::commands::memory::crud::list_sessions,
             crate::commands::memory::crud::get_session,
             crate::commands::memory::crud::session_get_todos,
             crate::commands::memory::crud::rename_session,
-            crate::commands::memory::crud::session_export_markdown,
+            crate::commands::memory::crud::session_export_file,
             crate::commands::memory::crud::set_session_model,
             crate::commands::memory::crud::delete_session,
             crate::commands::memory::crud::delete_session_if_empty,
@@ -76,10 +85,13 @@ macro_rules! all_commands {
             crate::commands::datadir::restart_app,
             // attachment(迭代 D1 / F7 附件中心)
             crate::commands::attachment::save_attachment,
+            crate::commands::attachment::extract_text_preview,
             crate::commands::attachment::read_attachment_data,
             crate::commands::attachment::list_all_attachments,
             crate::commands::attachment::insert_attachment_to_session,
             crate::commands::attachment::delete_attachment,
+            // 文档预检索(R4:发送前本地检索,不依赖模型主动调工具)
+            crate::commands::doc::doc_prefetch,
             // provider
             crate::commands::provider::templates::list_provider_templates,
             crate::commands::provider::keys::save_api_key,
@@ -149,8 +161,11 @@ macro_rules! all_commands {
             crate::commands::research::research_list_skills,
             crate::commands::research::research_export_markdown,
             crate::commands::research::research_export_html,
+            crate::commands::research::research_export_docx,
             crate::commands::research::research_figure_data,
             crate::commands::research::pick_save_path,
+            // D4:PDF(打印对话框)
+            crate::commands::research::export_pdf,
             // 研究参考资料(本地文件解析与注入)
             crate::commands::research::import_research_reference,
             crate::commands::research::delete_research_reference,
@@ -196,9 +211,11 @@ macro_rules! all_commands {
             // MCP 工具(Phase 4:配置管理 + 内置时间;Phase 5:运行时 + HITL 审批)
             crate::commands::mcp::mcp_load_config,
             crate::commands::mcp::mcp_save_config,
+            crate::commands::mcp::mcp_clear_memory,
             crate::commands::mcp::mcp_add_server,
             crate::commands::mcp::mcp_remove_server,
             crate::commands::mcp::mcp_start_server,
+            crate::commands::mcp::mcp_start_all_enabled,
             crate::commands::mcp::mcp_list_tools,
             crate::commands::mcp::mcp_call_tool_with_approval,
             crate::commands::mcp::mcp_resolve_approval,
@@ -206,7 +223,6 @@ macro_rules! all_commands {
             crate::commands::mcp::mcp_collect_tools,
             crate::commands::mcp::mcp_get_approval_policy,
             crate::commands::mcp::mcp_set_approval_policy,
-            crate::commands::mcp::get_now,
             // Phase 6:白名单 shell 命令(直接 Rust,极简安全)
             crate::commands::mcp::shell_whitelist_exec,
             // P2:能力令牌(预授权,仅内存)
@@ -219,7 +235,7 @@ macro_rules! all_commands {
             crate::commands::gui::gui_save_policy,
             crate::commands::gui::gui_list_windows,
             crate::commands::gui::gui_find_elements,
-            // 工作区文件服务(路径沙箱 + 备份回滚 + 办公格式导出)
+            // 文件服务(无沙箱 + 备份回滚 + 办公格式导出)
             crate::commands::fs::fs_workspace_info,
             crate::commands::fs::fs_list,
             crate::commands::fs::fs_read_text,
@@ -233,6 +249,7 @@ macro_rules! all_commands {
             crate::commands::fs::fs_zip_list,
             crate::commands::fs::fs_zip_extract,
             crate::commands::fs::fs_open_workspace,
+            crate::commands::fs::fs_pick_workspace_dir,
             crate::commands::fs::fs_open_backups,
         ]
     };

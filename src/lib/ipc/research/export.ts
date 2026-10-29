@@ -29,6 +29,15 @@ export const researchExportHtml = (
   overwrite: boolean,
 ) => invoke<string>('research_export_html', { id, html, token, overwrite });
 
+/** 导出报告为 Word 文档(docx):后端复用 docgen 学术版式,与「文档生成」同一套模板。
+ *  profile 留空则按标题/正文自动识别用途(实验/论文/实践/通用)。 */
+export const researchExportDocx = (
+  id: string,
+  token: string,
+  overwrite: boolean,
+  profile?: string,
+) => invoke<string>('research_export_docx', { id, token, overwrite, profile: profile ?? null });
+
 /** 读取研究图示为 data URL(报告内联预览;仅 figures 目录内图片)。 */
 export const researchFigureData = (id: string, name: string) =>
   invoke<string>('research_figure_data', { id, name });
@@ -81,3 +90,9 @@ export const pickSavePath = (
     filterName,
     filterExt,
   });
+
+// ============ D4:PDF(打印对话框) ============
+
+/** 唤起主窗口的原生打印对话框(用户在对话框里选「另存为 PDF」)。
+ *  调用前渲染层需先把待导出内容铺成全屏白底覆盖层。 */
+export const exportPdf = () => invoke<void>('export_pdf');

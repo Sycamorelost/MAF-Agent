@@ -8,9 +8,14 @@ export const CAT_LABEL: Record<string, string> = {
   create: '创作',
   ops: '运维',
   meta: '管理',
+  life: '生活',
+  study: '学习',
+  work: '工作',
+  academic: '学术',
 };
 
-export const CAT_ORDER = ['chat', 'doc', 'dev', 'create', 'ops', 'meta'];
+/** 分类顺序按使用频率排:日常 → 文档(含去 AI 味) → 学术 → 工作 → 学习 → 开发 → 创作 → 生活 → 运维 → 管理。 */
+export const CAT_ORDER = ['chat', 'doc', 'academic', 'work', 'study', 'dev', 'create', 'life', 'ops', 'meta'];
 
 /** 可选图标 key(与 agentIconComponent 的映射一致,禁 emoji)。 */
 export const ICON_KEYS = [

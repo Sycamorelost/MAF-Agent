@@ -184,7 +184,7 @@ mod tests {
         assert!(grade("choice", "A", "a", None));
         assert!(grade("choice", "B. 所有权", "B", None));
         assert!(!grade("choice", "A", "C", None));
-        assert!(grade("choice", "A", "正确答案:D", None) == false);
+        assert!(!grade("choice", "A", "正确答案:D", None));
         assert!(grade("judge", "对", "正确", None));
         assert!(grade("judge", "错", "false", None));
         assert!(!grade("judge", "对", "错", None));

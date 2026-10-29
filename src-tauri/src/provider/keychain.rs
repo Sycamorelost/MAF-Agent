@@ -361,6 +361,91 @@ pub fn list_stored() -> Result<Vec<String>, String> {
     Ok(out)
 }
 
+// ---------------- 通用值加解密(供 MCP headers 等非 provider 场景复用) ----------------
+
+/// 加密任意字符串值,返回带 `enc:` 前缀的密文(可安全写入配置文件)。
+/// Windows 走 DPAPI,其他平台走 AES-GCM(key 绑定用户名+主机名)。
+pub fn encrypt_value(plain: &str) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let blob = dpapi::protect(plain.as_bytes())?;
+        Ok(format!("{}{}", ENC_PREFIX, B64.encode(&blob)))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // 复用 AES-GCM,但用固定 aad "mcp-headers"(无 provider_id 语义)
+        aes_encrypt_with_aad("mcp-headers", plain)
+    }
+}
+
+/// 解密 `encrypt_value` 产出的密文。未带 `enc:` 前缀视为明文直接返回(兼容旧配置)。
+pub fn decrypt_value(encoded: &str) -> Result<String, String> {
+    let trimmed = encoded.trim();
+    if !trimmed.starts_with(ENC_PREFIX) {
+        return Ok(trimmed.to_string());
+    }
+    let b64 = &trimmed[ENC_PREFIX.len()..];
+    #[cfg(target_os = "windows")]
+    {
+        let blob = B64
+            .decode(b64)
+            .map_err(|e| format!("base64 decode failed: {e}"))?;
+        let bytes = dpapi::unprotect(&blob)?;
+        String::from_utf8(bytes).map_err(|e| format!("utf-8 decode failed: {e}"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        aes_decrypt_with_aad("mcp-headers", b64)
+    }
+}
+
+/// `enc:` 前缀,用于标识已加密的值(区别于明文)。
+const ENC_PREFIX: &str = "enc:";
+
+#[cfg(not(target_os = "windows"))]
+fn aes_encrypt_with_aad(aad: &str, plain: &str) -> Result<String, String> {
+    let key = derive_key();
+    let cipher = Aes256Gcm::new((&key).into());
+    let mut nonce_bytes = [0u8; 12];
+    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(
+            nonce,
+            Payload {
+                msg: plain.as_bytes(),
+                aad: aad.as_bytes(),
+            },
+        )
+        .map_err(|e| format!("encrypt failed: {e}"))?;
+    let mut blob = Vec::with_capacity(12 + ciphertext.len());
+    blob.extend_from_slice(&nonce_bytes);
+    blob.extend_from_slice(&ciphertext);
+    Ok(B64.encode(&blob))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn aes_decrypt_with_aad(aad: &str, encoded: &str) -> Result<String, String> {
+    let blob = B64
+        .decode(encoded.trim())
+        .map_err(|e| format!("base64 decode failed: {e}"))?;
+    if blob.len() < 12 {
+        return Err("secret corrupted".into());
+    }
+    let (nonce_bytes, ciphertext) = blob.split_at(12);
+    let cipher = Aes256Gcm::new((&derive_key()).into());
+    let plain = cipher
+        .decrypt(
+            Nonce::from_slice(nonce_bytes),
+            Payload {
+                msg: ciphertext,
+                aad: aad.as_bytes(),
+            },
+        )
+        .map_err(|_| "decrypt failed (key mismatch or corrupted)".to_string())?;
+    String::from_utf8(plain).map_err(|e| format!("utf-8 decode failed: {e}"))
+}
+
 /// 防止模块未使用的死代码警告;db 模块在这里被引用来确保 data 目录初始化完成。
 #[allow(dead_code)]
 fn _ensure_db_init() {

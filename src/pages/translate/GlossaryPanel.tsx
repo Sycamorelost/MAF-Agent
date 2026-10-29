@@ -9,7 +9,8 @@ interface Props {
   providerId: string;
   model: string;
   noModel: boolean;
-  activeTemplate?: ipc.ProviderTemplate;
+  /** 模型下拉候选(已启用优先,全停用时回退全量,由页面统一计算) */
+  modelOptions: string[];
   onPickProvider: (id: string) => void;
   onModelChange: (model: string) => void;
   running: boolean;
@@ -32,7 +33,7 @@ export default function GlossaryPanel({
   providerId,
   model,
   noModel,
-  activeTemplate,
+  modelOptions,
   onPickProvider,
   onModelChange,
   running,
@@ -81,17 +82,20 @@ export default function GlossaryPanel({
           </select>
           {!noModel && (
             <select className="pg-field" value={model} onChange={(e) => onModelChange(e.target.value)}>
-              {(activeTemplate?.models ?? []).map((m) => (
+              {modelOptions.map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>
               ))}
-              {activeTemplate && !activeTemplate.models.includes(model) && model && (
+              {modelOptions.length > 0 && !modelOptions.includes(model) && model && (
                 <option value={model}>{model}</option>
               )}
             </select>
           )}
           {noModel && <div className="pg-hint">专用翻译引擎,无需选择模型。</div>}
+          {!noModel && modelOptions.length === 0 && (
+            <div className="pg-hint">该服务商没有可用模型,请到设置页拉取或启用模型。</div>
+          )}
         </div>
 
         <div className="pg-sec">

@@ -37,12 +37,18 @@ pub fn import_research_reference(
         AttachmentKind::Docx => "docx",
         AttachmentKind::Xlsx => "xlsx",
         AttachmentKind::Pdf => "pdf",
+        AttachmentKind::Pptx => "pptx",
+        AttachmentKind::Epub => "epub",
+        AttachmentKind::Html => "html",
         AttachmentKind::Text => "text",
         AttachmentKind::Image => {
             return Err("图片需 OCR 才能作为参考资料，当前版本不支持；请改用文本类文件".into());
         }
         AttachmentKind::Other => {
-            return Err("不支持的参考资料格式（仅支持 docx/xlsx/xls/pdf/txt/md/csv 等）".into());
+            return Err(
+                "不支持的参考资料格式（仅支持 docx/xlsx/xls/pdf/pptx/epub/html/txt/md/csv 等）"
+                    .into(),
+            );
         }
     };
 
@@ -132,6 +138,9 @@ fn classify_label(name: &str) -> &'static str {
         AttachmentKind::Docx => "docx",
         AttachmentKind::Xlsx => "xlsx",
         AttachmentKind::Pdf => "pdf",
+        AttachmentKind::Pptx => "pptx",
+        AttachmentKind::Epub => "epub",
+        AttachmentKind::Html => "html",
         _ => "text",
     }
 }

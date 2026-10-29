@@ -59,6 +59,7 @@ export const NAV_VISIBILITY: { key: string; label: string }[] = [
   { key: 'memory', label: '记忆' },
   { key: 'notes', label: '知识库' },
   { key: 'attachments', label: '附件' },
+  { key: 'aiflavor', label: 'AI 味检测' },
 ];
 
 /** 记忆注入策略选项(与 MemoryStrategy 对齐)。 */

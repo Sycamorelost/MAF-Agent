@@ -1,4 +1,4 @@
-//! 全格式文本提取与压缩包解包(均限定在工作区内)。
+//! 全格式文本提取与压缩包解包(绝对路径可指向本机任意文件)。
 //!
 //! 覆盖:
 //! - 办公:docx / xlsx / pdf 复用 `attachment` 的解析器;pptx 抽取幻灯片文本;
@@ -24,7 +24,7 @@ pub struct ZipEntry {
     pub bytes: u64,
 }
 
-/// 从工作区文件提取纯文本(按扩展名分派)。
+/// 从工作区文件提取纯文本(按扩展名分派);绝对路径可指向本机任意文件。
 pub fn extract(rel: &str) -> Result<String, String> {
     extract_in(&paths::workspace_root()?, rel)
 }
@@ -138,13 +138,16 @@ fn ext_of(name: &str) -> String {
     name.rsplit('.').next().unwrap_or("").to_ascii_lowercase()
 }
 
-fn read_lossy(path: &Path) -> Result<String, String> {
+pub(crate) fn read_lossy(path: &Path) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("读取失败: {e}"))?;
     Ok(String::from_utf8_lossy(&bytes).to_string())
 }
 
+// 以下格式函数同时服务「工作区 file_extract」与「聊天附件」两条链路(R4 统一提取),
+// 因此对 crate 内可见,避免再写第二套 pptx/epub/html 解析。
+
 /// pptx:抽取所有 `ppt/slides/slide*.xml` 中的 `<a:t>` 文本,按页输出。
-fn pptx_text(path: &Path) -> Result<String, String> {
+pub(crate) fn pptx_text(path: &Path) -> Result<String, String> {
     let file = std::fs::File::open(path).map_err(|e| format!("打开 pptx 失败: {e}"))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("解析 pptx 失败: {e}"))?;
     let mut slides: Vec<(String, String)> = Vec::new();
@@ -182,7 +185,7 @@ fn pptx_text(path: &Path) -> Result<String, String> {
 }
 
 /// epub:拼接所有 xhtml/html 条目的正文。
-fn epub_text(path: &Path) -> Result<String, String> {
+pub(crate) fn epub_text(path: &Path) -> Result<String, String> {
     let file = std::fs::File::open(path).map_err(|e| format!("打开 epub 失败: {e}"))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("解析 epub 失败: {e}"))?;
     let mut parts = Vec::new();
@@ -225,7 +228,7 @@ fn tags_text(xml: &str, tag: &str) -> Vec<String> {
 }
 
 /// 简单去标签:丢弃 `<...>`,压缩空白。
-fn strip_tags(html: &str) -> String {
+pub(crate) fn strip_tags(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut in_tag = false;
     let mut in_script = false;

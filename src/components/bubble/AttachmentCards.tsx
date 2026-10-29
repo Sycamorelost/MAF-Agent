@@ -52,13 +52,25 @@ export function AttachmentCards({ attachments }: { attachments: string | null })
         m.kind === 'image' ? (
           <ImageAttachment key={`${m.path}-${i}`} meta={m} />
         ) : (
-          <div key={`${m.path}-${i}`} className="attach-card" title={m.path}>
+          <div
+            key={`${m.path}-${i}`}
+            className={`attach-card${m.extract_note ? ' attach-card-warn' : ''}`}
+            title={m.extract_note ?? m.path}
+          >
             <IconDoc size={16} />
             <div className="attach-card-info">
-              <div className="attach-card-name">{m.name}</div>
+              <div className="attach-card-name">
+                {m.extract_note ? '⚠ ' : ''}
+                {m.name}
+              </div>
               <div className="attach-card-kind">
                 {m.kind.toUpperCase()}
-                {m.extracted_text ? ' · 已解析文本' : ''}
+                {m.chunk_count
+                  ? ` · 已驻留 ${m.chunk_count} 块`
+                  : m.extracted_text
+                    ? ' · 已解析文本'
+                    : ''}
+                {m.extract_note ? ` · ${m.extract_note}` : ''}
               </div>
             </div>
           </div>

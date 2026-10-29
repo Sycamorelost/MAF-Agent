@@ -72,12 +72,14 @@ pub fn rename_session(id: String, title: String) -> Result<(), String> {
     Ok(())
 }
 
-/// 导出会话为 Markdown:内容由前端按当前分支视图组装,后端只做路径/令牌校验与写盘。
+/// 导出会话文件:.md / .html 两种纯文本格式。
+/// 内容由前端按当前分支视图组装,后端只做路径/令牌校验与写盘。
+/// 扩展名取自令牌路径(另存为对话框已让用户选定),仅放行 md / html。
 /// 与研究报告导出同一套安全模型(N-6 令牌 + H-2 路径规范与覆盖校验)。
 #[tauri::command]
-pub fn session_export_markdown(
+pub fn session_export_file(
     id: String,
-    markdown: String,
+    content: String,
     token: String,
     overwrite: bool,
     tokens: State<'_, crate::commands::research::ExportPathTokens>,
@@ -85,12 +87,18 @@ pub fn session_export_markdown(
     memory::validate_id(&id)?;
     // 会话必须存在,避免向孤儿 id 写文件
     sessions::get(&id)?.ok_or("会话不存在")?;
-    let target = crate::commands::research::ensure_export_path(
-        &tokens.resolve(&token)?.to_string_lossy(),
-        "md",
-    )?;
+    let raw = tokens.resolve(&token)?.to_string_lossy().into_owned();
+    let ext = std::path::Path::new(&raw)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if ext != "md" && ext != "html" {
+        return Err("会话导出仅支持 .md / .html".into());
+    }
+    let target = crate::commands::research::ensure_export_path(&raw, &ext)?;
     crate::commands::research::ensure_writable(&target, overwrite)?;
-    std::fs::write(&target, markdown).map_err(|e| format!("写入 Markdown 失败: {e}"))?;
+    std::fs::write(&target, content).map_err(|e| format!("写入导出文件失败: {e}"))?;
     Ok(target.to_string_lossy().into_owned())
 }
 

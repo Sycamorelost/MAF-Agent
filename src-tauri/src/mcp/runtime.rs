@@ -135,13 +135,10 @@ impl McpRuntime {
     /// 避免 server 进程挂住时无限阻塞其他 MCP 操作。
     async fn peek_alive(&self, name: &str) -> Result<(), String> {
         use tokio::time::{Duration, timeout};
-        timeout(
-            Duration::from_secs(5),
-            self.list_tools(name),
-        )
-        .await
-        .map_err(|_| format!("probe `{name}` 超时(5s,进程可能已挂)"))?
-        .map(|_| ())
+        timeout(Duration::from_secs(5), self.list_tools(name))
+            .await
+            .map_err(|_| format!("probe `{name}` 超时(5s,进程可能已挂)"))?
+            .map(|_| ())
     }
 
     /// 按配置启动 server —— 统一入口,UI 手动启动与对话前懒启动都走这里。
@@ -159,9 +156,9 @@ impl McpRuntime {
 
         crate::mcp::safety::validate_server_command(&cfg.command)?;
         // 文件系统类 server 把允许目录作为启动参数传入;
-        // 未配置时回落沙箱目录(与安全预检共用 effective_allowed_dirs,边界一致),
+        // 未配置目录时传入本机全部磁盘根(不设沙箱);用户显式指定时只传这些目录,
         // 目录不存在时先创建,避免 server 因参数目录缺失起步失败
-        let dirs = crate::mcp::config::effective_allowed_dirs(cfg, data_dir);
+        let dirs = crate::mcp::config::launch_dirs(cfg);
         for d in &dirs {
             if !d.exists() {
                 let _ = std::fs::create_dir_all(d);
@@ -307,6 +304,17 @@ impl McpRuntime {
                 error: Some("30s 超时".into()),
             },
         }
+    }
+
+    /// 停止并移除指定 server —— 移除 handle 后 Drop 会 kill 子进程(同 stop_all)。
+    /// 返回是否有运行中的实例被停止。
+    pub async fn stop_server(&self, name: &str) -> bool {
+        let mut lock = self.handles.lock().await;
+        let stopped = lock.remove(name).is_some();
+        if stopped {
+            log::info!("[MCP] server `{name}` stopped");
+        }
+        stopped
     }
 
     /// 停止所有 server —— app 退出时调,kill 所有子进程。
