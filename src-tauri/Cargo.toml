@@ -1,7 +1,7 @@
 [package]
 name = "app"
-version = "1.17.1"
-description = "MAF Agent —— 本地优先的桌面智能体框架"
+version = "2.0.1"
+description = "myAgent —— 本地优先的桌面智能体框架"
 authors = ["梧桐吾桐 (Sycamorelost)"]
 license = "Apache-2.0"
 repository = "https://github.com/Sycamorelost/MAF-Agent"

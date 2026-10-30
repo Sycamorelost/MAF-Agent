@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! 文件读写与办公格式导出(绝对路径可直达本机任意位置,相对路径以工作区为基准)。
 //!
 //! 所有写操作写前自动备份(可回滚),路径经 `fs::paths` 解析(位置与文件名均不设限)。
@@ -37,44 +39,85 @@ pub struct SheetInput {
     pub rows: Vec<Vec<String>>,
 }
 
-// ---------------- 对外接口(使用默认工作区) ----------------
+// ---------------- 对外接口(支持项目工作区绑定) ----------------
 
+/// 全局默认工作区根(未绑定项目时使用)。
 pub fn root() -> Result<PathBuf, String> {
     paths::workspace_root()
 }
 
-pub fn list(rel: &str) -> Result<Vec<FileEntry>, String> {
-    list_in(&paths::workspace_root()?, rel.trim())
+/// 解析会话绑定的工作区根 —— 绑定项目且路径有效时返回项目路径,否则回退全局。
+pub fn root_for_session(session_id: Option<&str>) -> Result<PathBuf, String> {
+    paths::resolve_workspace_root(session_id)
+}
+
+pub fn list(rel: &str, session_id: Option<&str>) -> Result<Vec<FileEntry>, String> {
+    list_in(&paths::resolve_workspace_root(session_id)?, rel.trim())
 }
 
 pub fn read_text(
     rel: &str,
     offset: Option<usize>,
     max_chars: Option<usize>,
+    session_id: Option<&str>,
 ) -> Result<String, String> {
     read_text_in(
-        &paths::workspace_root()?,
+        &paths::resolve_workspace_root(session_id)?,
         rel,
         offset.unwrap_or(0),
         max_chars.unwrap_or(MAX_READ_CHARS),
     )
 }
 
-pub fn write_text(rel: &str, content: &str) -> Result<WriteResult, String> {
-    write_text_in(&root()?, rel, content, &backup::backup_dir())
+pub fn write_text(
+    rel: &str,
+    content: &str,
+    session_id: Option<&str>,
+) -> Result<WriteResult, String> {
+    let root = root_for_session(session_id)?;
+    let enforce = session_id_is_bound_to_project(session_id);
+    write_text_in(&root, rel, content, &backup::backup_dir(), enforce)
 }
 
-pub fn delete(rel: &str) -> Result<WriteResult, String> {
-    delete_in(&root()?, rel, &backup::backup_dir())
+pub fn delete(rel: &str, session_id: Option<&str>) -> Result<WriteResult, String> {
+    let root = root_for_session(session_id)?;
+    let enforce = session_id_is_bound_to_project(session_id);
+    delete_in(&root, rel, &backup::backup_dir(), enforce)
 }
 
 /// 完整文档导出:用途模板、目录、封面元信息均可指定。
-pub fn export_docx_ext(rel: &str, req: &docgen::DocRequest) -> Result<WriteResult, String> {
-    export_docx_req_in(&root()?, rel, req, &backup::backup_dir())
+pub fn export_docx_ext(
+    rel: &str,
+    req: &docgen::DocRequest,
+    session_id: Option<&str>,
+) -> Result<WriteResult, String> {
+    let root = root_for_session(session_id)?;
+    let enforce = session_id_is_bound_to_project(session_id);
+    export_docx_req_in(&root, rel, req, &backup::backup_dir(), enforce)
 }
 
-pub fn export_xlsx(rel: &str, sheets: &[SheetInput]) -> Result<WriteResult, String> {
-    export_xlsx_in(&root()?, rel, sheets, &backup::backup_dir())
+pub fn export_xlsx(
+    rel: &str,
+    sheets: &[SheetInput],
+    session_id: Option<&str>,
+) -> Result<WriteResult, String> {
+    let root = root_for_session(session_id)?;
+    let enforce = session_id_is_bound_to_project(session_id);
+    export_xlsx_in(&root, rel, sheets, &backup::backup_dir(), enforce)
+}
+
+/// 判断 session 是否绑定了有效项目路径 —— 用于决定写操作要不要做越界检查。
+fn session_id_is_bound_to_project(session_id: Option<&str>) -> bool {
+    if let Some(sid) = session_id {
+        if let Ok(Some(session)) = crate::db::sessions::get(sid) {
+            if let Some(ref pid) = session.project_id {
+                if let Ok(Some(proj)) = crate::db::projects::get(pid) {
+                    return std::path::Path::new(&proj.path).is_dir();
+                }
+            }
+        }
+    }
+    false
 }
 
 // ---------------- 内核(显式传入工作区根,便于测试) ----------------
@@ -156,8 +199,13 @@ fn read_text_in(root: &Path, rel: &str, offset: usize, max_chars: usize) -> Resu
 
 /// 文本检索(仅文本类扩展名,单文件上限 2MB),返回「文件:行号:内容」。
 /// 绝对路径直接检索;相对路径以工作区为基准。
-pub fn grep(pattern: &str, rel: &str, limit: usize) -> Result<Vec<String>, String> {
-    grep_in(&paths::workspace_root()?, pattern, rel, limit)
+pub fn grep(
+    pattern: &str,
+    rel: &str,
+    limit: usize,
+    session_id: Option<&str>,
+) -> Result<Vec<String>, String> {
+    grep_in(&paths::resolve_workspace_root(session_id)?, pattern, rel, limit)
 }
 
 fn grep_in(root: &Path, pattern: &str, rel: &str, limit: usize) -> Result<Vec<String>, String> {
@@ -245,9 +293,10 @@ fn write_text_in(
     rel: &str,
     content: &str,
     backup_base: &Path,
+    enforce_boundary: bool,
 ) -> Result<WriteResult, String> {
-    let path = write_target(root, rel)?;
-    let backup_id = backup::snapshot_in(backup_base, root, &path)?;
+    let path = write_target(root, rel, enforce_boundary)?;
+    let backup_id = backup::snapshot_in(backup_base, root, &path, None, None)?;
     std::fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))?;
     audit("fs_write", rel, content.len());
     Ok(WriteResult {
@@ -257,12 +306,22 @@ fn write_text_in(
     })
 }
 
-fn delete_in(root: &Path, rel: &str, backup_base: &Path) -> Result<WriteResult, String> {
-    let path = paths::resolve(root, rel, true)?;
+fn delete_in(
+    root: &Path,
+    rel: &str,
+    backup_base: &Path,
+    enforce_boundary: bool,
+) -> Result<WriteResult, String> {
+    // 删除操作也要做越界检查(禁止删项目外的文件)
+    let path = if enforce_boundary {
+        paths::ensure_within(root, Path::new(rel))?
+    } else {
+        paths::resolve(root, rel, true)?
+    };
     if !path.is_file() {
         return Err("仅支持删除文件(目录请先清空)".into());
     }
-    let backup_id = backup::snapshot_in(backup_base, root, &path)?;
+    let backup_id = backup::snapshot_in(backup_base, root, &path, None, None)?;
     std::fs::remove_file(&path).map_err(|e| format!("删除失败: {e}"))?;
     audit("fs_delete", rel, 0);
     Ok(WriteResult {
@@ -286,7 +345,7 @@ fn export_docx_in(
         body: body.to_string(),
         ..Default::default()
     };
-    export_docx_req_in(root, rel, &req, backup_base)
+    export_docx_req_in(root, rel, &req, backup_base, false)
 }
 
 /// 文档导出内核:只负责落盘、备份与审计;排版全部委托 `docgen`。
@@ -295,9 +354,10 @@ fn export_docx_req_in(
     rel: &str,
     req: &docgen::DocRequest,
     backup_base: &Path,
+    enforce_boundary: bool,
 ) -> Result<WriteResult, String> {
-    let path = write_target(root, rel)?;
-    let backup_id = backup::snapshot_in(backup_base, root, &path)?;
+    let path = write_target(root, rel, enforce_boundary)?;
+    let backup_id = backup::snapshot_in(backup_base, root, &path, None, None)?;
     let mut req = req.clone();
     // 相对图片路径默认展开到工作区根目录
     if req.base_dir.as_os_str().is_empty() {
@@ -318,11 +378,12 @@ fn export_xlsx_in(
     rel: &str,
     sheets: &[SheetInput],
     backup_base: &Path,
+    enforce_boundary: bool,
 ) -> Result<WriteResult, String> {
     use rust_xlsxwriter::Workbook;
 
-    let path = write_target(root, rel)?;
-    let backup_id = backup::snapshot_in(backup_base, root, &path)?;
+    let path = write_target(root, rel, enforce_boundary)?;
+    let backup_id = backup::snapshot_in(backup_base, root, &path, None, None)?;
 
     let mut wb = Workbook::new();
     if sheets.is_empty() {
@@ -360,8 +421,13 @@ fn export_xlsx_in(
 }
 
 /// 写目标:校验路径并确保父目录存在。
-fn write_target(root: &Path, rel: &str) -> Result<PathBuf, String> {
-    let path = paths::resolve(root, rel, false)?;
+/// `enforce_boundary=true` 时额外做 ensure_within(项目绑定场景的越界检查)。
+fn write_target(root: &Path, rel: &str, enforce_boundary: bool) -> Result<PathBuf, String> {
+    let path = if enforce_boundary {
+        paths::ensure_within(root, Path::new(rel))?
+    } else {
+        paths::resolve(root, rel, false)?
+    };
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
     }
@@ -399,15 +465,15 @@ mod tests {
     fn write_read_delete_with_backup() {
         let root = ws();
         let base = bak();
-        let r1 = write_text_in(&root, "docs/a.md", "第一版", &base).unwrap();
+        let r1 = write_text_in(&root, "docs/a.md", "第一版", &base, false).unwrap();
         assert!(r1.backup_id.is_none());
         assert_eq!(read_text_in(&root, "docs/a.md", 0, 100).unwrap(), "第一版");
 
-        let r2 = write_text_in(&root, "docs/a.md", "第二版", &base).unwrap();
+        let r2 = write_text_in(&root, "docs/a.md", "第二版", &base, false).unwrap();
         assert!(r2.backup_id.is_some(), "覆盖必须产生备份");
         assert_eq!(read_text_in(&root, "docs/a.md", 0, 100).unwrap(), "第二版");
 
-        let d = delete_in(&root, "docs/a.md", &base).unwrap();
+        let d = delete_in(&root, "docs/a.md", &base, false).unwrap();
         assert!(d.backup_id.is_some());
         assert!(!root.join("docs/a.md").exists());
     }
@@ -424,7 +490,7 @@ mod tests {
             .unwrap()
             .join(format!("maf-escape-{}.txt", std::process::id()));
         let rel = format!("../{}", escaped.file_name().unwrap().to_str().unwrap());
-        write_text_in(&root, &rel, "x", &base).expect("`..` 不再被拦截");
+        write_text_in(&root, &rel, "x", &base, false).expect("`..` 不再被拦截");
         assert!(escaped.exists(), "应写入工作区外:{}", escaped.display());
         std::fs::remove_file(&escaped).ok();
     }
@@ -434,7 +500,7 @@ mod tests {
         let root = ws();
         let base = bak();
         let body: String = "0123456789".repeat(10); // 100 字符
-        write_text_in(&root, "big.txt", &body, &base).unwrap();
+        write_text_in(&root, "big.txt", &body, &base, false).unwrap();
         let tail = read_text_in(&root, "big.txt", 90, 50).unwrap();
         assert!(tail.contains("已跳过前 90 字符"), "got: {tail}");
         assert!(tail.ends_with("0123456789"), "got: {tail}");
@@ -446,8 +512,8 @@ mod tests {
     fn grep_finds_matching_lines() {
         let root = ws();
         let base = bak();
-        write_text_in(&root, "src/a.txt", "第一行\n错误:超时\n第三行", &base).unwrap();
-        write_text_in(&root, "src/b.md", "# 说明\n无关内容", &base).unwrap();
+        write_text_in(&root, "src/a.txt", "第一行\n错误:超时\n第三行", &base, false).unwrap();
+        write_text_in(&root, "src/b.md", "# 说明\n无关内容", &base, false).unwrap();
         let hits = grep_in(&root, "超时", "", 50).unwrap();
         assert_eq!(hits.len(), 1, "got: {hits:?}");
         assert!(hits[0].contains("a.txt:2:"), "got: {}", hits[0]);
@@ -472,7 +538,7 @@ mod tests {
                 vec!["A".into(), "1".into()],
             ],
         }];
-        let x = export_xlsx_in(&root, "out/table.xlsx", &sheets, &base).unwrap();
+        let x = export_xlsx_in(&root, "out/table.xlsx", &sheets, &base, false).unwrap();
         assert!(x.bytes > 0);
         assert!(root.join("out/table.xlsx").exists());
     }
@@ -485,5 +551,28 @@ mod tests {
         let r = export_docx_in(&root, "out/md.docx", "文档标题", body, &base).unwrap();
         assert!(r.bytes > 0);
         assert!(root.join("out/md.docx").exists());
+    }
+
+    #[test]
+    fn boundary_check_blocks_outside_write() {
+        // enforce_boundary=true 时,相对 `../escape.txt` 被拦截
+        let root = ws();
+        let base = bak();
+        let escaped = root
+            .parent()
+            .unwrap()
+            .join(format!("maf-guard-{}.txt", std::process::id()));
+        let rel = format!("../{}", escaped.file_name().unwrap().to_str().unwrap());
+        let err = write_text_in(&root, &rel, "x", &base, true)
+            .expect_err("越界写入必须被拦截");
+        assert!(
+            err.contains("不在项目工作区"),
+            "错误应提示越界,实际: {err}"
+        );
+        assert!(!escaped.exists(), "文件不应被创建");
+        // 正常项目内写入仍可成功
+        let ok = write_text_in(&root, "safe.txt", "ok", &base, true);
+        assert!(ok.is_ok(), "项目内写入应成功");
+        std::fs::remove_file(&escaped).ok();
     }
 }

@@ -15,8 +15,8 @@ mod search;
 
 #[allow(unused_imports)]
 pub use crud::{
-    append, append_on, clear, clear_on, delete_from, delete_from_on, delete_one, delete_one_on,
-    update_content,
+    append, append_on, clear, clear_on, copy_active_branch, delete_from, delete_from_on,
+    delete_one, delete_one_on, update_content,
 };
 #[allow(unused_imports)]
 pub use search::{list, list_on, list_page, list_page_on, recent, recent_on};
@@ -35,7 +35,7 @@ pub struct MessageRow {
     pub tokens: i64,
     /// 附件元数据 JSON 数组(V4;无附件为 NULL)。元素结构见 commands::attachment::AttachmentMeta。
     pub attachments: Option<String>,
-    /// 联网来源 JSON 数组(V5;assistant 消息,无联网为 NULL)。元素结构见 research::SourceItem。
+    /// 联网来源 JSON 数组(V5;assistant 消息,无联网为 NULL)。元素结构见 websearch::SourceItem。
     pub sources: Option<String>,
     /// 链上父消息 id(V9;分支可见历史的回溯指针,会话/分支首条可能为 NULL)
     pub parent_id: Option<i64>,

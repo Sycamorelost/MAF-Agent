@@ -5,19 +5,19 @@ use crate::db::sessions;
 
 /// 列出全部 Agent 模板(内置 14 个 + 用户变体/自定义)。
 #[tauri::command]
-pub fn list_agent_templates() -> Vec<AgentTemplate> {
+pub async fn list_agent_templates() -> Vec<AgentTemplate> {
     agents::list_all()
 }
 
 /// 保存自定义模板或变体(upsert;内置 id 拒绝覆盖)。
 #[tauri::command]
-pub fn save_agent_template(agent: AgentTemplate) -> Result<(), String> {
+pub async fn save_agent_template(agent: AgentTemplate) -> Result<(), String> {
     agents::upsert_custom(agent)
 }
 
 /// 删除自定义模板/变体(内置模板拒绝)。
 #[tauri::command]
-pub fn delete_agent_template(agent_id: String) -> Result<(), String> {
+pub async fn delete_agent_template(agent_id: String) -> Result<(), String> {
     agents::remove_custom(&agent_id)
 }
 
@@ -26,7 +26,7 @@ pub fn delete_agent_template(agent_id: String) -> Result<(), String> {
 /// 并把渲染变量后的 system_prompt 写入会话(B4 / F2),
 /// 使「切换后 system prompt 与记忆注入策略变化」可独立验证。
 #[tauri::command]
-pub fn set_session_agent(id: String, agent_id: Option<String>) -> Result<(), String> {
+pub async fn set_session_agent(id: String, agent_id: Option<String>) -> Result<(), String> {
     let strategy = match &agent_id {
         Some(aid) => {
             let tpl = agents::find(aid).ok_or_else(|| format!("Agent 模板不存在:{aid}"))?;
@@ -51,7 +51,7 @@ pub fn set_session_agent(id: String, agent_id: Option<String>) -> Result<(), Str
 /// 应用 Agent 的 system_prompt 为会话提示词(B4 / F2):
 /// 仅渲染并写入 sessions.system_prompt,不改变 Agent 绑定与记忆注入策略。
 #[tauri::command]
-pub fn apply_agent_prompt(id: String, agent_id: String) -> Result<(), String> {
+pub async fn apply_agent_prompt(id: String, agent_id: String) -> Result<(), String> {
     let tpl = agents::find(&agent_id).ok_or_else(|| format!("Agent 模板不存在:{agent_id}"))?;
     let model = sessions::get(&id)?
         .and_then(|s| s.model_id)

@@ -4,6 +4,9 @@ import { useSessionsStore } from '../stores/sessions';
 import { useUiStore } from '../stores/ui';
 import { useState } from 'react';
 import { IconX } from './icons';
+import { ContextMenu, type MenuItem } from './ContextMenu';
+import { useContextMenu } from '../hooks/useContextMenu';
+import { cloneSession, renameSession } from '../lib/ipc/session';
 import type { SessionRow } from '../lib/ipc';
 
 /** 会话按最近更新时间分组(今天 / 昨天 / 更早),对齐模板 01 的分组侧栏。 */
@@ -36,7 +39,7 @@ function groupSessions(sessions: SessionRow[]) {
  * 打开后持久保持(挤出式:主区自动让位),点 pill / ✕ / Esc 关闭。
  */
 export default function Sidebar() {
-  const { sessions, remove, rename } = useSessionsStore();
+  const { sessions } = useSessionsStore();
   const nav = useNavigate();
   const { id: activeId } = useParams();
   const open = useUiStore((s) => s.sidebarOpen);
@@ -44,6 +47,7 @@ export default function Sidebar() {
   /** 正在内联重命名的会话 id(null = 无) */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const sessionMenu = useContextMenu<SessionRow>();
 
   // 挤出式:挂 body class 让主区让位;卸载/关闭时移除
   useEffect(() => {
@@ -71,7 +75,7 @@ export default function Sidebar() {
     const t = editingText.trim();
     const id = editingId;
     setEditingId(null);
-    if (t) await rename(id, t);
+    if (t) await renameSession(id, t);
   };
 
   const groups = groupSessions(sessions);
@@ -106,13 +110,7 @@ export default function Sidebar() {
                     e.stopPropagation();
                     startRename(s);
                   }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    if (confirm(`删除会话「${s.title}」?`)) {
-                      remove(s.id);
-                      if (s.id === activeId) nav('/');
-                    }
-                  }}
+                  onContextMenu={(e) => sessionMenu.open(e, s)}
                   title={`${s.title}\n双击重命名 · 右键删除`}
                 >
                   <span className="md-dot">M</span>
@@ -139,6 +137,50 @@ export default function Sidebar() {
           ))}
         </div>
       </div>
+      {sessionMenu.pos && sessionMenu.target && (
+        <ContextMenu
+          x={sessionMenu.pos.x}
+          y={sessionMenu.pos.y}
+          onClose={sessionMenu.close}
+          items={buildSidebarSessionMenu(sessionMenu.target)}
+        />
+      )}
     </>
   );
+}
+
+function buildSidebarSessionMenu(
+  s: SessionRow,
+): MenuItem[] {
+  return [
+    {
+      key: 'rename',
+      label: '重命名',
+      onClick: () => {
+        const t = prompt('新标题:', s.title || '');
+        if (t && t.trim()) void renameSession(s.id, t.trim());
+      },
+    },
+    {
+      key: 'clone',
+      label: '克隆会话',
+      onClick: () => {
+        void cloneSession(s.id).then((newId) => {
+          // 聊天页没有 /chat/:id 导航逻辑,clone 后只是创建了副本
+          console.log('[Sidebar] 克隆成功 newId=', newId);
+        });
+      },
+    },
+    { divider: true, key: 's1' },
+    {
+      key: 'delete',
+      label: '删除会话',
+      danger: true,
+      onClick: () => {
+        if (confirm(`删除会话「${s.title || '未命名'}」?此操作不可撤销。`)) {
+          useSessionsStore.getState().remove(s.id);
+        }
+      },
+    },
+  ];
 }

@@ -8,7 +8,7 @@ use super::pricing::{price_tokens_nano, pricing_for};
 
 /// 按维度聚合用量(dimension: model | provider | key | agent;days: 统计窗口天数)。
 #[tauri::command]
-pub fn usage_summary(dimension: String, days: u32) -> Result<UsageSummary, String> {
+pub async fn usage_summary(dimension: String, days: u32) -> Result<UsageSummary, String> {
     let dim = match dimension.as_str() {
         "provider" | "key" | "agent" => dimension.as_str(),
         _ => "model",
@@ -20,7 +20,7 @@ pub fn usage_summary(dimension: String, days: u32) -> Result<UsageSummary, Strin
 /// 时间窗口与维度下钻全部下沉 SQL:明细必须与上方图表同口径,
 /// 不允许"图表近 7 天、明细全历史"的错位。
 #[tauri::command]
-pub fn usage_entries(
+pub async fn usage_entries(
     limit: u32,
     days: u32,
     dimension: Option<String>,
@@ -35,14 +35,14 @@ pub fn usage_entries(
 
 /// 某 Provider 各槽位的健康度(成功 / 限流 / 失败 / token)。
 #[tauri::command]
-pub fn usage_key_health(provider_id: String, days: u32) -> Result<Vec<UsageGroup>, String> {
+pub async fn usage_key_health(provider_id: String, days: u32) -> Result<Vec<UsageGroup>, String> {
     crate::memory::validate_id(&provider_id)?;
     usage::key_health(&provider_id, days)
 }
 
 /// 热力图数据:近 days 天内按「星期 × 小时」分桶的请求数 / Token 数。
 #[tauri::command]
-pub fn usage_hourly(days: u32) -> Result<Vec<UsageHour>, String> {
+pub async fn usage_hourly(days: u32) -> Result<Vec<UsageHour>, String> {
     usage::hourly(days)
 }
 
@@ -74,7 +74,7 @@ pub struct UsageRecalcReport {
 /// 按当前定价试算历史成本(干跑,只报告差异,不写库)。
 /// 用于调价 / 修正汇率后评估历史偏差,对账入口在设置页「用量统计」。
 #[tauri::command]
-pub fn usage_recalc(days: u32) -> Result<UsageRecalcReport, String> {
+pub async fn usage_recalc(days: u32) -> Result<UsageRecalcReport, String> {
     let mixes = usage::token_mix(days)?;
     let mut rows = Vec::with_capacity(mixes.len());
     let mut stored_total = 0i64;

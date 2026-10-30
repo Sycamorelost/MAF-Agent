@@ -27,6 +27,8 @@ interface Props {
   /** 联网搜索开关(会话级持久化在 sessions.web_search_enabled) */
   webSearch?: boolean;
   onToggleWebSearch?: () => void;
+  /** 记忆预算(自动压缩口径):docked 形态在 hint 行显示「自动压缩 上限 · 当前」(b3) */
+  compressInfo?: { tokens: number; limit: number } | null;
   /** 思考控制(v1.9.0 工作块 I):null / enabled=false 时不渲染。
    *  levels=false 仅开关(四档不可用);can_disable=false 锁定为开。 */
   thinking?: ThinkingControl | null;
@@ -49,6 +51,7 @@ export default function Composer({
   onRecall,
   webSearch,
   onToggleWebSearch,
+  compressInfo,
   thinking,
   children,
 }: Props) {
@@ -178,6 +181,18 @@ export default function Composer({
         }
       }}
     >
+      {variant === 'docked' && (
+        <div className="composer-hint">
+          <span>Enter 发送 · Shift + Enter 换行</span>
+          <span className="sp" />
+          {compressInfo && compressInfo.limit > 0 && (
+            <span title="记忆注入预算:超限时发送前自动压缩">
+              自动压缩 {compressInfo.limit} · 当前 {compressInfo.tokens}
+            </span>
+          )}
+          <span>@ 召回记忆与知识库</span>
+        </div>
+      )}
       <div className="composer-box">
         {/* 可拖拽的顶部把手:上下拖动调整输入框高度 */}
         <div

@@ -3,6 +3,8 @@ import * as ipc from '../lib/ipc';
 
 interface SessionsState {
   sessions: ipc.SessionRow[];
+  /** 是否已完成至少一次加载(用于区分「还没拉取」与「确实不存在」) */
+  loaded: boolean;
   loading: boolean;
   refresh: () => Promise<void>;
   create: (title: string, modelId: string, agentId?: string | null) => Promise<string>;
@@ -13,10 +15,18 @@ interface SessionsState {
   setWebSearch: (id: string, enabled: boolean) => Promise<void>;
   /** 更新记忆注入策略(D3.1) */
   setMemoryStrategy: (id: string, strategy: ipc.MemoryStrategy) => Promise<void>;
+  /** 更新会话级工作台模式覆盖(D16) */
+  setWorkbenchMode: (id: string, mode: ipc.WorkbenchMode) => Promise<void>;
+  /** 更新会话级权限档覆盖(D11) */
+  setPermissionMode: (id: string, mode: ipc.PermissionMode) => Promise<void>;
+  /** 钉住/恢复会话级运行时预设(D19;null = 恢复继承) */
+  setPreset: (id: string, presetId: string | null) => Promise<void>;
   /** 绑定/解绑会话的 Agent(B2;null 解绑,会同步记忆注入策略) */
   setAgent: (id: string, agentId: string | null) => Promise<void>;
   /** 切换会话激活分支(F4),并同步本地 sessions 状态 */
   setActiveBranch: (id: string, branchId: string) => Promise<void>;
+  /** 把会话归入文件夹(P8);null = 移出文件夹 */
+  setProject: (id: string, projectId: string | null) => Promise<void>;
   /** 仅当会话没有任何消息时删除(空对话默认不保留),返回是否已删 */
   removeIfEmpty: (id: string) => Promise<boolean>;
   /** 批量清理空会话(0 条消息且超过 grace 秒未更新) */
@@ -28,6 +38,7 @@ interface SessionsState {
 
 export const useSessionsStore = create<SessionsState>((set, get) => ({
   sessions: [],
+  loaded: false,
   loading: false,
   pendingComposer: null,
   setPendingComposer: (p) => set({ pendingComposer: p }),
@@ -38,7 +49,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
       const sessions = await ipc.listSessions();
       set({ sessions });
     } finally {
-      set({ loading: false });
+      set({ loading: false, loaded: true });
     }
   },
 
@@ -81,6 +92,31 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     }));
   },
 
+  setWorkbenchMode: async (id, mode) => {
+    await ipc.setSessionWorkbenchMode(id, mode);
+    set((s) => ({
+      sessions: s.sessions.map((x) => (x.id === id ? { ...x, workbench_mode: mode } : x)),
+    }));
+  },
+
+  setPermissionMode: async (id, mode) => {
+    await ipc.setSessionPermissionMode(id, mode);
+    set((s) => ({
+      sessions: s.sessions.map((x) => (x.id === id ? { ...x, permission_mode: mode } : x)),
+    }));
+  },
+
+  setPreset: async (id, presetId) => {
+    const info = await ipc.setSessionPreset(id, presetId);
+    set((s) => ({
+      sessions: s.sessions.map((x) =>
+        x.id === id
+          ? { ...x, preset_id: info.pinned_id, preset_version: info.pinned_version }
+          : x,
+      ),
+    }));
+  },
+
   setAgent: async (id, agentId) => {
     await ipc.setSessionAgent(id, agentId);
     await get().refresh();
@@ -90,6 +126,13 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     await ipc.setActiveBranch(id, branchId);
     set((s) => ({
       sessions: s.sessions.map((x) => (x.id === id ? { ...x, active_branch: branchId } : x)),
+    }));
+  },
+
+  setProject: async (id, projectId) => {
+    await ipc.setSessionProject(id, projectId);
+    set((s) => ({
+      sessions: s.sessions.map((x) => (x.id === id ? { ...x, project_id: projectId } : x)),
     }));
   },
 

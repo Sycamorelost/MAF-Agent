@@ -6,7 +6,7 @@
 
 /// 本地预检索:返回可直接注入用户消息的片段块;无命中或空查询时返回空串。
 #[tauri::command]
-pub fn doc_prefetch(
+pub async fn doc_prefetch(
     session_id: String,
     query: String,
     doc: Option<String>,
@@ -16,13 +16,18 @@ pub fn doc_prefetch(
     if q.is_empty() {
         return Ok(String::new());
     }
+    // 检索策略随会话预设(P7):limit 缺省取预设 top_k。
+    // 注意:必须先取策略再拿连接锁 —— retrieval_for_session 内部会自行锁库,
+    // std Mutex 不可重入,持锁调用会死锁(前端 await 永不 resolve)。
+    let pol = crate::presets::retrieval_for_session(&session_id);
     let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
-    let out = crate::doc::search(
+    let out = crate::doc::search_with_policy(
         &conn,
         &session_id,
         q,
         doc.as_deref(),
-        limit.unwrap_or(3).clamp(1, 8) as usize,
+        limit.unwrap_or(pol.top_k).clamp(1, 8) as usize,
+        &pol,
     )?;
     if out.hits.is_empty() {
         return Ok(String::new());

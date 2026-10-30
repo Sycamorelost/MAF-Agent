@@ -22,6 +22,8 @@ export interface McpServerConfig {
   /** http:附加请求头,如 { Authorization: "Bearer …" } */
   headers?: Record<string, string>;
   allowed_dirs: string[];
+  /** 启动子进程时注入的环境变量(如 TAVILY_API_KEY;预置联网搜索会自动注入已存 Key) */
+  env?: Record<string, string>;
 }
 
 export interface McpConfig {
@@ -69,12 +71,13 @@ export type ApprovalResult =
   | { decision: "allow_edited"; arguments: Record<string, unknown> }
   | { decision: "deny" };
 
-/** 工具审批模式:手动 / 只读自动 / 完全放行 / 自定义白名单。 */
-export type ApprovalMode = "manual" | "auto" | "full" | "custom";
+/** 工具审批档(D11 三档收敛):逐次审批 / 工作区(默认) / 完全信任。
+ *  旧四档自动迁移:manual→ask,auto/custom→workspace(白名单保留为 workspace 附加放行)。 */
+export type ApprovalMode = "ask" | "workspace" | "full";
 
 export interface ApprovalPolicy {
   mode: ApprovalMode;
-  /** 自定义模式下自动放行的工具,支持 `server::tool` 或只写 `tool` */
+  /** workspace 档下附加自动放行的工具,支持 `server::tool` 或只写 `tool` */
   allow: string[];
 }
 
@@ -111,5 +114,7 @@ export const mcpGetApprovalPolicy = () => invoke<ApprovalPolicy>("mcp_get_approv
 export const mcpSetApprovalPolicy = (policy: ApprovalPolicy) =>
   invoke<void>("mcp_set_approval_policy", { policy });
 
-/** Phase 5e:汇总所有已启用 server 的工具定义(OpenAI function-calling)。 */
-export const mcpCollectTools = () => invoke<ToolDef[]>("mcp_collect_tools");
+/** Phase 5e:汇总所有已启用 server 的工具定义(OpenAI function-calling)。
+ *  P5/D18:传 sessionId 时后端按会话生效预设裁剪工具名单;不传则不过滤。 */
+export const mcpCollectTools = (sessionId?: string) =>
+  invoke<ToolDef[]>("mcp_collect_tools", { sessionId: sessionId ?? null });

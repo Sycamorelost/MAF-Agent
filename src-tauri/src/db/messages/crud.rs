@@ -291,3 +291,75 @@ pub fn clear(session_id: &str, branch_id: &str) -> Result<(), String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     clear_on(&conn, session_id, branch_id)
 }
+
+/// 克隆会话时复制源会话 active_branch 全部消息到新会话 active_branch。
+/// 保留 role/content/model_id/tokens/attachments/sources/reasoning;
+/// 新会话下 parent_id 统一重置为线性链;tool_call_id 置 NULL 避免唯一键冲突。
+pub fn copy_active_branch(
+    conn: &Connection,
+    from_session: &str,
+    to_session: &str,
+    from_branch: &str,
+    to_branch: &str,
+) -> Result<(), String> {
+    use rusqlite::{params, OptionalExtension};
+    // 1. 拉源消息(按 id asc)
+    let mut stmt = conn
+        .prepare(
+            "SELECT role, content, model_id, tokens, attachments, sources, reasoning
+             FROM messages
+             WHERE session_id=?1 AND branch_id=?2
+             ORDER BY id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let origs: Vec<_> = stmt
+        .query_map(params![from_session, from_branch], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, i64>(3)?,
+                r.get::<_, Option<String>>(4)?,
+                r.get::<_, Option<String>>(5)?,
+                r.get::<_, String>(6)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    drop(stmt);
+    // 2. 逐条 INSERT 新会话消息
+    for (role, content, model_id, tokens, att, src, reason) in &origs {
+        conn.execute(
+            "INSERT INTO messages(session_id, role, content, model_id, tokens, attachments, sources,
+                                  parent_id, branch_id, reasoning)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9)",
+            params![
+                to_session, role, content, model_id, tokens, att, src, to_branch, reason
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    // 3. 把新消息(仍按 id asc)用 parent_id 串成线性链
+    let mut last: Option<i64> = None;
+    for mid in 0..origs.len() {
+        // 新插入消息的 id 不确定(可能和原 id 不同),按 session/branch 顺序重查
+        let cur_id: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM messages WHERE session_id=?1 AND branch_id=?2 ORDER BY id ASC LIMIT 1 OFFSET ?3",
+                params![to_session, to_branch, mid as i64],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if let Some(cur_id) = cur_id {
+            conn.execute(
+                "UPDATE messages SET parent_id=?1 WHERE id=?2",
+                params![last, cur_id],
+            )
+            .map_err(|e| e.to_string())?;
+            last = Some(cur_id);
+        }
+    }
+    Ok(())
+}

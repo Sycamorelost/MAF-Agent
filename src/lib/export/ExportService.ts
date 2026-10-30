@@ -11,11 +11,11 @@
  */
 
 import { academicCss, academicPaperCss } from './docStyle';
-import { exportPdf } from '../ipc/research/export';
+import { exportPdf } from '../ipc/export';
 
 /** 打印覆盖层的布局样式:白底、铺满视口、可滚动。 */
 const PRINT_OVERLAY_CSS = `
-  position:fixed;inset:0;z-index:2147483647;
+  position:fixed;inset:0;z-index:var(--z-print);
   background:#fff;
   overflow:auto;
 `;

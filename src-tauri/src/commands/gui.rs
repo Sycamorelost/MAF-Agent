@@ -7,13 +7,13 @@ use crate::paths::data_dir as data_dir_fn;
 
 /// 读取 GUI 自动化策略。
 #[tauri::command]
-pub fn gui_get_policy() -> Result<GuiPolicy, String> {
+pub async fn gui_get_policy() -> Result<GuiPolicy, String> {
     Ok(policy::load(&data_dir_fn()))
 }
 
 /// 保存策略。关闭开关时同步清空元素句柄,避免旧句柄残留。
 #[tauri::command]
-pub fn gui_save_policy(policy: GuiPolicy) -> Result<(), String> {
+pub async fn gui_save_policy(policy: GuiPolicy) -> Result<(), String> {
     policy::save(&data_dir_fn(), &policy)?;
     if !policy.enabled {
         crate::gui::registry::REGISTRY.clear();

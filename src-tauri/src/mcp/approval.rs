@@ -38,20 +38,25 @@ pub enum ApprovalRisk {
     High,
 }
 
-/// 审批模式 —— 决定模型调工具时是否弹窗征求同意(「解放双手」)。
+/// 审批模式 —— 决定模型调工具时是否弹窗征求同意(D11 三档收敛)。
+///
+/// 旧四档映射(serde alias 自动迁移,旧 mcp-approval.json 无需手改):
+///   manual(逐次)→ ask;auto(只读自动)→ workspace;custom(白名单)→ workspace(白名单保留);
+///   full(完全信任)→ full,绝不降级(val.md 风险表)。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApprovalMode {
-    /// 每次调用都弹窗(最保守,默认)
+    /// 逐次审批:每个工具调用都弹窗(最保守)
+    #[serde(alias = "manual")]
+    Ask,
+    /// 工作区(默认,D11):只读与工作区内写自动放行;
+    /// shell / GUI / 删除 / 越界写入仍审批。旧自定义白名单作为本档附加放行继续生效。
     #[default]
-    Manual,
-    /// 只读类工具自动放行,写/执行类仍弹窗
-    Auto,
+    #[serde(alias = "auto", alias = "custom")]
+    Workspace,
     /// 完全不弹窗,直接执行。此模式下:shell 走 run_unrestricted(无白名单/路径/元字符校验),
     /// 写前备份仍生效;GUI 自动化与能力令牌等高级功能仅在此模式下可用(总开关)。
     Full,
-    /// 按 allow 白名单放行,其余弹窗
-    Custom,
 }
 
 /// 审批策略 —— 持久化在 data/mcp-approval.json。
@@ -66,21 +71,53 @@ pub struct ApprovalPolicy {
 
 impl ApprovalPolicy {
     /// 是否需要弹窗审批(false = 后台直接放行)。
-    pub fn requires_approval(&self, server: &str, tool: &str, risk: ApprovalRisk) -> bool {
+    pub fn requires_approval(
+        &self,
+        server: &str,
+        tool: &str,
+        risk: ApprovalRisk,
+        args: &serde_json::Value,
+    ) -> bool {
         match self.mode {
-            ApprovalMode::Manual => true,
+            ApprovalMode::Ask => true,
             ApprovalMode::Full => false,
-            // 「自动审批」:只读操作(低风险)不打扰用户,有副作用的操作仍需确认
-            ApprovalMode::Auto => risk != ApprovalRisk::Low,
-            ApprovalMode::Custom => {
+            // 「工作区」:只读(低风险)不打扰;白名单附加放行;
+            // 内置 fs 写工具且目标在工作区内自动放行,其余(shell/删除/越界写/外部写)仍审批
+            ApprovalMode::Workspace => {
+                if risk == ApprovalRisk::Low {
+                    return false;
+                }
                 let key = format!("{server}::{tool}");
-                !self
-                    .allow
-                    .iter()
-                    .any(|p| p.trim() == key || p.trim() == tool)
+                if self.allow.iter().any(|p| p.trim() == key || p.trim() == tool) {
+                    return false;
+                }
+                !workspace_write_auto_allowed(server, tool, args)
             }
         }
     }
+}
+
+/// 工作区档的写操作免审批判定(D11):仅限内置文本/文档/表格写工具,
+/// 且 path 解析后落在工作区内;删除 / 备份恢复 / zip 解包 / shell 一律仍需审批。
+fn workspace_write_auto_allowed(server: &str, tool: &str, args: &serde_json::Value) -> bool {
+    if server != "builtin" || !matches!(tool, "fs_write" | "fs_export_docx" | "fs_export_xlsx") {
+        return false;
+    }
+    let Some(path) = args.get("path").and_then(|v| v.as_str()) else {
+        return false;
+    };
+    let Ok(root) = crate::fs::paths::workspace_root() else {
+        return false;
+    };
+    in_workspace_at(&root, path)
+}
+
+/// 路径是否落在指定工作区内(相对路径按工作区解析,绝对路径直接判定;解析失败保守按不在)。
+fn in_workspace_at(root: &std::path::Path, path: &str) -> bool {
+    let Ok(abs) = crate::fs::paths::resolve(root, path, false) else {
+        return false;
+    };
+    crate::fs::paths::rel_of(root, &abs).is_ok()
 }
 
 /// 策略文件路径。
@@ -88,11 +125,13 @@ pub fn policy_path(data_dir: &Path) -> PathBuf {
     data_dir.join("mcp-approval.json")
 }
 
-/// 读策略(文件缺失/损坏 → 手动审批)。
+/// 读策略(文件缺失/损坏 → 工作区档,D11 默认)。
 pub fn load_policy(data_dir: &Path) -> ApprovalPolicy {
     std::fs::read_to_string(policy_path(data_dir))
         .ok()
-        .and_then(|s| serde_json::from_str::<ApprovalPolicy>(&s).ok())
+        // 容忍手改文件带入的 UTF-8 BOM:serde_json 遇 BOM 直接解析失败,
+        // 会静默回落到默认档(表现为「完全信任不生效」),此处先剥掉再解析
+        .and_then(|s| serde_json::from_str::<ApprovalPolicy>(s.trim_start_matches('\u{feff}')).ok())
         .unwrap_or_default()
 }
 
@@ -296,42 +335,80 @@ mod tests {
 
     #[test]
     fn policy_modes_gate_approval() {
-        let manual = ApprovalPolicy {
-            mode: ApprovalMode::Manual,
+        let ask = ApprovalPolicy {
+            mode: ApprovalMode::Ask,
             allow: vec![],
         };
-        assert!(manual.requires_approval("s", "read_text_file", ApprovalRisk::Low));
+        assert!(ask.requires_approval("s", "read_text_file", ApprovalRisk::Low, &json!({})));
 
-        let auto = ApprovalPolicy {
-            mode: ApprovalMode::Auto,
+        let ws = ApprovalPolicy {
+            mode: ApprovalMode::Workspace,
             allow: vec![],
         };
-        assert!(!auto.requires_approval("s", "read_text_file", ApprovalRisk::Low));
-        assert!(auto.requires_approval("s", "write_file", ApprovalRisk::High));
+        // 只读免打扰
+        assert!(!ws.requires_approval("s", "read_text_file", ApprovalRisk::Low, &json!({})));
+        // shell / 删除 / 外部写 一律审批(workspace_write_auto_allowed 对非白名单工具直接 false,
+        // 不触碰文件系统,可在测试中安全调用)
+        assert!(
+            ws.requires_approval("builtin", "shell_exec", ApprovalRisk::High, &json!({"command":"ls"}))
+        );
+        assert!(
+            ws.requires_approval("builtin", "fs_delete", ApprovalRisk::High, &json!({"path":"a.txt"}))
+        );
+        assert!(
+            ws.requires_approval("mcp", "write_file", ApprovalRisk::High, &json!({"path":"a.txt"}))
+        );
 
         let full = ApprovalPolicy {
             mode: ApprovalMode::Full,
             allow: vec![],
         };
-        assert!(!full.requires_approval("s", "shell_exec", ApprovalRisk::High));
+        assert!(!full.requires_approval("s", "shell_exec", ApprovalRisk::High, &json!({})));
 
-        let custom = ApprovalPolicy {
-            mode: ApprovalMode::Custom,
+        // 旧自定义白名单 → workspace 档附加放行
+        let ws_allow = ApprovalPolicy {
+            mode: ApprovalMode::Workspace,
             allow: vec!["项目文件::read_text_file".into(), "search_nodes".into()],
         };
-        assert!(!custom.requires_approval("项目文件", "read_text_file", ApprovalRisk::Low));
-        assert!(!custom.requires_approval("长期记忆", "search_nodes", ApprovalRisk::Low));
-        assert!(custom.requires_approval("长期记忆", "create_entities", ApprovalRisk::Medium));
+        assert!(
+            !ws_allow.requires_approval("项目文件", "read_text_file", ApprovalRisk::Low, &json!({}))
+        );
+        assert!(!ws_allow.requires_approval("长期记忆", "search_nodes", ApprovalRisk::Low, &json!({})));
+        assert!(
+            ws_allow.requires_approval("长期记忆", "create_entities", ApprovalRisk::Medium, &json!({}))
+        );
     }
 
     #[test]
-    fn policy_json_roundtrip() {
+    fn workspace_write_boundary_check() {
+        // 纯函数判定:相对路径落在工作区内,绝对越界路径不在
+        let root = std::env::temp_dir().join(format!("maf-ws-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        assert!(in_workspace_at(&root, "out/a.txt"));
+        assert!(in_workspace_at(&root, "sub/../a.txt"));
+        let outside = std::env::temp_dir().join(format!("maf-out-{}", uuid::Uuid::new_v4()));
+        assert!(!in_workspace_at(&root, outside.to_str().unwrap()));
+        // 越过工作区的相对路径(.. 跳不出去时才算在内;跳出根目录即判不在)
+        assert!(!in_workspace_at(&root, "../../../../etc/passwd"));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn policy_json_roundtrip_and_legacy_alias() {
         let p: ApprovalPolicy =
             serde_json::from_str(r#"{"mode":"full","allow":["a::b"]}"#).unwrap();
         assert_eq!(p.mode, ApprovalMode::Full);
         assert_eq!(p.allow, vec!["a::b".to_string()]);
-        // 旧/缺失字段 → 手动审批,不缺省直放
+        // 旧值别名迁移:manual→ask,auto/custom→workspace;full 保持 full(绝不降级)
+        let m: ApprovalPolicy = serde_json::from_str(r#"{"mode":"manual"}"#).unwrap();
+        assert_eq!(m.mode, ApprovalMode::Ask);
+        let a: ApprovalPolicy = serde_json::from_str(r#"{"mode":"auto"}"#).unwrap();
+        assert_eq!(a.mode, ApprovalMode::Workspace);
+        let c: ApprovalPolicy = serde_json::from_str(r#"{"mode":"custom","allow":["x"]}"#).unwrap();
+        assert_eq!(c.mode, ApprovalMode::Workspace);
+        assert_eq!(c.allow, vec!["x".to_string()]);
+        // 缺失/损坏 → 工作区档(D11 默认),不缺省直放也不全弹窗
         let d: ApprovalPolicy = serde_json::from_str("{}").unwrap();
-        assert_eq!(d.mode, ApprovalMode::Manual);
+        assert_eq!(d.mode, ApprovalMode::Workspace);
     }
 }

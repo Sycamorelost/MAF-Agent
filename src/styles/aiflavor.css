@@ -8,11 +8,11 @@
   bottom: 0;
   overflow: hidden;
   /* 收窄内边距,消除"留白过多" */
-  padding: 12px 12px 8px;
+  padding: var(--space-3) var(--space-3) var(--space-2);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  font-size: 13px;
+  gap: var(--space-3);
+  font-size: var(--font-sub);
   line-height: 1.65;
 }
 .aif-head {
@@ -25,20 +25,20 @@
 }
 .aif-head-main { max-width: 760px; min-width: 0; }
 .aif-eyebrow {
-  font-size: 10.5px;
+  font-size: var(--font-micro);
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--brand);
   margin-bottom: 4px;
 }
-.aif-head h2 { margin: 0 0 4px; font-size: 19px; line-height: 1.4; letter-spacing: .01em; }
-.aif-head .set-desc { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--text-3); }
+.aif-head h2 { margin: 0 0 4px; font-size: var(--font-h1); line-height: 1.4; letter-spacing: .01em; }
+.aif-head .set-desc { margin: 0; font-size: var(--font-caption); line-height: 1.7; color: var(--text-3); }
 .aif-pills {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  padding: 4px;
+  padding: var(--space-1);
   border: 1px solid var(--border);
   /* 药丸容器:允许换行,圆角用常规档位(999px 在换行后会变成夸张的胶囊) */
   border-radius: var(--radius-m);
@@ -47,10 +47,12 @@
 .aif-pill {
   border: 1px solid transparent;
   border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 12px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-caption);
   color: var(--text-3);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   background: transparent;
   font-family: inherit;
   line-height: 1.5;
@@ -67,8 +69,8 @@
   background: var(--brand);
   color: #fff;
   border-color: var(--brand);
-  padding: 8px 16px;
-  font-size: 12.5px;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-caption);
 }
 .aif-page .btn.primary:hover,
 .aif-page .btn-primary:hover {
@@ -79,14 +81,14 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--font-caption);
   line-height: 1.6;
   color: var(--text-2);
   background: var(--bg-side);
   border: 1px solid var(--border);
   border-left: 4px solid var(--brand);
   border-radius: var(--radius-s);
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
 }
 .aif-grid {
   flex: 1 1 0;
@@ -101,29 +103,49 @@
 .aif-col:first-child { width: var(--aif-l-w, 260px); flex-shrink: 0; height: 100%; min-height: 0; }
 .aif-col.aif-mid     { flex: 1 1 0; min-width: 0; height: 100%; min-height: 0; }
 .aif-col.aif-right   { width: var(--aif-r-w, 320px); flex-shrink: 0; height: 100%; min-height: 0; }
-/* ========== 拖拽分隔条:absolute 不占布局流 ========== */
+/* ========== 拖拽分隔条:方向 C —— 默认完全透明,hover 时栏边界渐显 ==========
+ * 不是一整条蓝条,而是在相邻栏边缘贴一条 2px 高亮点,配合整栏背景微变提示"这里可拖" */
 .aif-gutter {
   position: absolute;
   background: transparent;
   touch-action: none;
-  transition: background .15s ease;
+  /* 完全透明,hover 时子 ::before 伪元素亮起 */
+  opacity: 0;
+  transition: opacity .18s ease, background .18s ease;
   z-index: 5;
+}
+.aif-gutter:hover,
+.aif-gutter.dragging {
+  opacity: 1;
+}
+.aif-gutter::before {
+  content: '';
+  position: absolute;
+  /* 默认藏在边缘,尺寸在各变体里设置 */
+}
+/* 竖向 gutter:贴左栏右缘 / 右栏左缘,2px 中心亮条 */
+.aif-gutter-v { width: 14px; top: 0; bottom: 0; cursor: col-resize; }
+.aif-gutter-v::before {
+  left: 50%; transform: translateX(-50%);
+  width: 2px; height: 100%;
+  background: var(--brand-line);
   border-radius: 2px;
 }
-.aif-gutter:hover, .aif-gutter.dragging { background: var(--brand-line); }
-.aif-gutter.dragging { background: var(--brand); }
-/* 竖向 gutter:贴在栏的边界上,各覆盖 gap 的一半 + 6px 宽 */
-.aif-gutter-v { width: 6px; top: 0; bottom: 0; cursor: col-resize; }
-.aif-gutter.gv1 {
-  /* 贴左栏右缘:左栏宽 + gap/2 - 半条宽,居中落在间隙里 */
-  left: calc(var(--aif-l-w, 260px) + 2px);
+.aif-gutter-v.dragging::before { background: var(--brand); width: 3px; }
+
+/* 横向 gutter:6px 中心亮条 */
+.aif-gutter-h { height: 14px; left: 0; right: 0; cursor: row-resize; }
+.aif-gutter-h::before {
+  top: 50%; transform: translateY(-50%);
+  height: 2px; width: 100%;
+  background: var(--brand-line);
+  border-radius: 2px;
 }
-.aif-gutter.gv2 {
-  /* 贴右栏左缘 */
-  right: calc(var(--aif-r-w, 320px) + 2px);
-}
-/* 横向 gutter:绝对定位在折行/堆叠的栏边界 */
-.aif-gutter-h { height: 6px; left: 0; right: 0; cursor: row-resize; }
+.aif-gutter-h.dragging::before { background: var(--brand); height: 3px; }
+
+/* 贴栏边缘定位 */
+.aif-gutter.gv1 { left: calc(var(--aif-l-w, 260px) - 6px); }
+.aif-gutter.gv2 { right: calc(var(--aif-r-w, 320px) - 6px); }
 /* 默认隐藏所有横向 gutter,@media 中显式 */
 .aif-gutter.gh, .aif-gutter.gh1, .aif-gutter.gh2 { display: none; }
 /* ========== 中屏 800–1199px:flex-wrap,右栏折到下 ========== */
@@ -168,7 +190,6 @@
 @media (max-width: 560px) {
   .aif-page { padding: 8px 8px 8px; gap: 8px; }
   .aif-head { gap: 8px; }
-  .aif-head h2 { font-size: 17px; }
   .aif-pills { width: 100%; }
   .aif-card { padding: 12px; }
   .aif-scorecard { padding: 12px; gap: 12px; justify-content: center; }
@@ -197,10 +218,10 @@
   background: var(--bg-side);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  padding: 16px;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .aif-card-head {
   display: flex;
@@ -214,9 +235,12 @@
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  font-size: 13px;
+  font-size: var(--font-sub);
   letter-spacing: .01em;
   color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* 拖拽文件到输入卡:仅提文本、不落盘 */
 .aif-card.drag-over { border-color: var(--brand); background: var(--brand-soft); }
@@ -224,16 +248,16 @@
   width: 100%;
   min-height: 216px;
   resize: vertical;
-  font-size: 13px;
+  font-size: var(--font-sub);
   line-height: 1.75;
-  padding: 12px 12px;
+  padding: var(--space-3);
 }
 .aif-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* 主操作按钮占满整行,形成清晰的「下一步」 */
 .aif-cta { width: 100%; justify-content: center; }
-.aif-count { margin-right: auto; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aif-count { margin-right: auto; font-size: var(--font-caption); color: var(--text-3); font-variant-numeric: tabular-nums; }
 .aif-count.over { color: var(--warn); }
-.aif-hint { font-size: 12px; color: var(--text-3); line-height: 1.7; }
+.aif-hint { font-size: var(--font-caption); color: var(--text-3); line-height: 1.7; }
 .aif-hint.warn { color: var(--warn); }
 /* 已插入图片的缩略图横排带 */
 .aif-img-strip {
@@ -244,8 +268,8 @@
 }
 .aif-img-item {
   position: relative;
-  width: 68px;
-  height: 68px;
+  width: calc(68px * var(--ui-scale));
+  height: calc(68px * var(--ui-scale));
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -270,7 +294,7 @@
   background: rgba(0, 0, 0, .55);
   color: #fff;
   border: none;
-  font-size: 11px;
+  font-size: var(--font-micro);
   line-height: 18px;
   text-align: center;
   cursor: pointer;
@@ -286,7 +310,7 @@
   right: 0;
   background: rgba(0, 0, 0, .45);
   color: #fff;
-  font-size: 10px;
+  font-size: var(--font-mini);
   line-height: 16px;
   text-align: center;
 }
@@ -298,7 +322,7 @@
   border: none;
   padding: 0;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--font-sub);
   font-weight: 700;
   color: var(--text-1);
   cursor: pointer;
@@ -308,10 +332,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 8px;
+  padding: var(--space-2);
   border-radius: 6px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--font-caption);
   color: var(--text-2);
 }
 .aif-hist-item:hover { background: var(--bg-hover); }
@@ -322,49 +346,49 @@
   min-width: 30px;
   text-align: center;
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: var(--font-micro);
   border-radius: 6px;
-  padding: 4px 4px;
+  padding: var(--space-1);
   color: #fff;
   font-variant-numeric: tabular-nums;
 }
 .aif-badge.lv0 { background: var(--ok); }
 .aif-badge.lv1 { background: var(--warn); }
 .aif-badge.lv2 { background: var(--err); }
-.aif-empty { color: var(--text-3); font-size: 13px; line-height: 1.8; text-align: center; padding: 40px 16px; }
+.aif-empty { color: var(--text-3); font-size: var(--font-sub); line-height: 1.8; text-align: center; padding: var(--space-10) var(--space-4); }
 /* 评分卡:仪表 + 结论 + 雷达 */
 .aif-scorecard {
   flex-direction: row;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-5);
   flex-wrap: wrap;
-  padding: 20px;
+  padding: var(--space-5);
   background: linear-gradient(180deg, var(--bg-side), var(--bg-main));
 }
 .aif-score-side { flex: 1 1 230px; min-width: 200px; display: flex; flex-direction: column; gap: 8px; }
 .aif-score-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.aif-score-note { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.aif-level { align-self: flex-start; font-weight: 700; font-size: 13px; border-radius: 999px; padding: 4px 12px; color: #fff; }
+.aif-score-note { font-size: var(--font-caption); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aif-level { align-self: flex-start; font-weight: 700; font-size: var(--font-sub); border-radius: 999px; padding: var(--space-1) var(--space-3); color: #fff; }
 .aif-level.lv0 { background: var(--ok); }
 .aif-level.lv1 { background: var(--warn); }
 .aif-level.lv2 { background: #e67e22; }
 .aif-level.lv3 { background: var(--err); }
 .aif-level.lv4 { background: #c0392b; }
-.aif-stat-line { font-size: 12px; color: var(--text-3); line-height: 1.6; }
+.aif-stat-line { font-size: var(--font-caption); color: var(--text-3); line-height: 1.6; }
 .aif-stat-line.ok { color: var(--ok); }
 .aif-stat-line.warn { color: var(--warn); }
 .aif-score-verdict {
   margin-top: 4px;
   padding-top: 8px;
   border-top: 1px dashed var(--border);
-  font-size: 12.5px;
+  font-size: var(--font-caption);
   line-height: 1.7;
   color: var(--text-2);
 }
 .aif-score-verdict b { color: var(--text-1); }
-.aif-gauge-num { font-size: 27px; font-weight: 800; fill: var(--text-1); font-variant-numeric: tabular-nums; }
-.aif-gauge-sub { font-size: 10px; fill: var(--text-3); }
-.aif-radar-lbl { font-size: 10.5px; fill: var(--text-3); }
+.aif-gauge-num { font-size: calc(var(--font-hero) * 1.04); font-weight: 800; fill: var(--text-1); font-variant-numeric: tabular-nums; }
+.aif-gauge-sub { font-size: var(--font-mini); fill: var(--text-3); }
+.aif-radar-lbl { font-size: var(--font-micro); fill: var(--text-3); }
 /* 六维条 */
 .aif-dims { display: flex; flex-direction: column; gap: 12px; }
 .aif-dim-head {
@@ -372,7 +396,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--font-caption);
   color: var(--text-2);
   margin-bottom: 4px;
 }
@@ -383,14 +407,14 @@
   content: '首要偏离';
   margin-left: 8px;
   padding: 0 4px;
-  font-size: 10px;
+  font-size: var(--font-mini);
   font-weight: 700;
   color: var(--warn);
   background: rgba(198, 122, 9, .12);
   border-radius: 4px;
 }
-.aif-dim-value { font-size: 13px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; }
-.aif-dim-value small { font-size: 11px; font-weight: 400; color: var(--text-3); }
+.aif-dim-value { font-size: var(--font-sub); font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.aif-dim-value small { font-size: var(--font-micro); font-weight: 400; color: var(--text-3); }
 .aif-dim-raw { color: var(--text-4, var(--text-3)); font-variant-numeric: tabular-nums; }
 .aif-bar { height: 8px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
 .aif-bar i { display: block; height: 100%; border-radius: 3px; }
@@ -399,16 +423,16 @@
 .aif-bar i[data-lv='2'] { background: #e67e22; }
 .aif-bar i[data-lv='3'] { background: var(--err); }
 /* 热力图:逐句色块,加大行高与色块留白 */
-.aif-legend { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-3); flex-wrap: wrap; }
+.aif-legend { display: flex; align-items: center; gap: 8px; font-size: var(--font-micro); color: var(--text-3); flex-wrap: wrap; }
 .aif-legend i { width: 16px; height: 10px; border-radius: 3px; display: inline-block; }
 .aif-heat {
-  font-size: 13.5px;
+  font-size: var(--font-body);
   line-height: 2.15;
   letter-spacing: .01em;
   color: var(--text-1);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  padding: 4px 4px 4px;
+  padding: var(--space-1);
 }
 .aif-sent {
   border-radius: 4px;
@@ -422,10 +446,10 @@
 .aif-rules { display: flex; flex-direction: column; gap: 0; }
 .aif-rule {
   display: block;
-  padding: 8px 8px;
+  padding: var(--space-2);
   border-bottom: 1px solid var(--border);
   border-radius: 6px;
-  font-size: 12.5px;
+  font-size: var(--font-caption);
   min-width: 0;
 }
 .aif-rule:last-child { border-bottom: none; }
@@ -433,16 +457,18 @@
 .aif-rule.clickable:hover { background: var(--bg-hover); }
 .aif-rule-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .aif-rule b { color: var(--text-1); white-space: nowrap; }
-.aif-rule-cat { color: var(--text-4, var(--text-3)); flex: none; font-size: 11.5px; }
-.aif-rule-count { margin-left: auto; flex: none; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aif-rule-cat { color: var(--text-4, var(--text-3)); flex: none; font-size: var(--font-micro); }
+.aif-rule-count { margin-left: auto; flex: none; font-size: var(--font-micro); color: var(--text-3); font-variant-numeric: tabular-nums; }
 .aif-rule-ex {
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
+  overflow: hidden;
   margin-top: 4px;
   padding-left: 32px;
   color: var(--text-3);
-  font-size: 11.5px;
+  font-size: var(--font-micro);
   line-height: 1.6;
   white-space: normal;
   overflow: hidden;
@@ -450,7 +476,7 @@
 .aif-sev {
   flex: none;
   font-weight: 700;
-  font-size: 10px;
+  font-size: var(--font-mini);
   border-radius: 4px;
   padding: 0 4px;
   color: #fff;
@@ -469,15 +495,15 @@
   gap: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
-  font-size: 11.5px;
+  font-size: var(--font-micro);
   line-height: 1.5;
   color: var(--text-3);
   transition: border-color .12s ease, background .12s ease;
 }
 .aif-lvl:hover { border-color: var(--brand); }
-.aif-lvl b { font-size: 12.5px; color: var(--text-1); }
+.aif-lvl b { font-size: var(--font-caption); color: var(--text-1); }
 .aif-lvl input { position: absolute; opacity: 0; }
 .aif-lvl.on { border-color: var(--brand); background: var(--brand-soft); }
 .aif-lvl.on::after {
@@ -485,11 +511,11 @@
   position: absolute;
   top: 5px;
   right: 8px;
-  font-size: 11px;
+  font-size: var(--font-micro);
   font-weight: 700;
   color: var(--brand);
 }
-.aif-disclaimer { font-size: 11.5px; color: var(--text-3); line-height: 1.7; padding: 0 4px; }
+.aif-disclaimer { font-size: var(--font-micro); color: var(--text-3); line-height: 1.7; padding: 0 4px; }
 /* 右栏:分段页签 */
 .aif-tabs {
   display: flex;
@@ -505,8 +531,8 @@
   background: transparent;
   color: var(--text-3);
   border-radius: 6px;
-  padding: 8px 16px;
-  font-size: 12.5px;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-caption);
   font-family: inherit;
   cursor: pointer;
 }
@@ -515,7 +541,7 @@
 /* 右栏本身已独立滚动(见 .aif-col 规则),这里不再设 max-height/overflow,
    否则会在大滚动区内套出第二个滚动条 */
 .aif-rewrite {
-  font-size: 13px;
+  font-size: var(--font-sub);
   line-height: 1.7;
   min-height: 240px;
   overflow-wrap: anywhere;
@@ -523,19 +549,19 @@
 /* 右栏 Markdown 正文:排版统一走 _tokens.css 的 `.md` 模板,此处不再单独覆盖 */
 .aif-disc {
   white-space: pre-wrap;
-  font-size: 12px;
+  font-size: var(--font-caption);
   line-height: 1.8;
   color: var(--text-2);
   background: var(--bg-main);
   border: 1px dashed var(--border);
   border-radius: var(--radius-s);
-  padding: 12px 12px;
+  padding: var(--space-3);
   margin: 0;
 }
 
 /* C4:逐句对照 diff(改写前 → 改写后) */
 .aif-tabs.sub { width: 100%; margin-bottom: 4px; background: var(--bg-main); }
-.aif-tabs.sub button { flex: 1; text-align: center; font-size: 12px; padding: 4px 12px; }
+.aif-tabs.sub button { flex: 1; text-align: center; font-size: var(--font-caption); padding: 4px 12px; }
 .aif-diff {
   max-height: 52vh;
   overflow: auto;
@@ -546,19 +572,19 @@
 .aif-diff-row {
   display: flex;
   gap: 12px;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border);
   line-height: 1.75;
-  font-size: 12.5px;
+  font-size: var(--font-caption);
 }
 .aif-diff-row:last-child { border-bottom: none; }
 .aif-diff-row.removed { background: rgba(231, 76, 60, 0.07); }
 .aif-diff-row.added { background: rgba(39, 174, 96, 0.08); }
-.aif-diff-tag { flex: 0 0 16px; font-size: 11px; color: var(--text-4); font-weight: 700; }
+.aif-diff-tag { flex: 0 0 16px; font-size: var(--font-micro); color: var(--text-4); font-weight: 700; }
 .aif-diff-row.removed .aif-diff-tag { color: var(--err); }
 .aif-diff-row.added .aif-diff-tag { color: var(--ok); }
 .aif-diff-body { flex: 1 1 auto; min-width: 0; }
-.aif-diff-old { color: var(--text-3); font-size: 12px; text-decoration: line-through; text-decoration-color: var(--err); }
+.aif-diff-old { color: var(--text-3); font-size: var(--font-caption); text-decoration: line-through; text-decoration-color: var(--err); }
 .aif-diff-new { color: var(--text-1); }
 .aif-diff-row.same .aif-diff-new { color: var(--text-2); }
 

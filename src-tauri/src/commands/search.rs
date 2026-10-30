@@ -56,7 +56,7 @@ fn conversations_root() -> PathBuf {
 
 /// 全文搜索。消息走 FTS5(短语匹配,unicode61 分词对中文按字切分,天然支持子串命中)。
 #[tauri::command]
-pub fn search_all(query: String) -> Result<SearchResults, String> {
+pub async fn search_all(query: String) -> Result<SearchResults, String> {
     let q = query.trim().to_string();
     let mut out = SearchResults {
         sessions: Vec::new(),
@@ -93,12 +93,11 @@ pub fn search_all(query: String) -> Result<SearchResults, String> {
         }
     }
 
-    // 2. 消息全文。FTS5 trigram 要求查询 ≥3 字符;更短的词回退 LIKE 子串匹配。
+    // 2. 消息全文。FTS5 trigram:查询经 3-gram OR 展开(retrieval::fts_match_query),
+    //    自然语言问句不再整句 phrase(召回为零的病症,P7);无法展开(如 2 字词)回退 LIKE。
     {
-        let use_fts = q.chars().count() >= 3;
         let conn = db::conn().lock().map_err(|e| e.to_string())?;
-        if use_fts {
-            let phrase = format!("\"{}\"", q.replace('"', "\"\""));
+        if let Some(expr) = crate::retrieval::fts_match_query(&q) {
             let mut stmt = conn
                 .prepare(
                     "SELECT m.session_id, COALESCE(s.title,''), m.id, m.role,
@@ -107,11 +106,11 @@ pub fn search_all(query: String) -> Result<SearchResults, String> {
                      JOIN messages m ON m.id = messages_fts.rowid
                      LEFT JOIN sessions s ON s.id = m.session_id
                      WHERE messages_fts MATCH ?1
-                     ORDER BY m.id DESC LIMIT 20",
+                     ORDER BY rank, m.id DESC LIMIT 20",
                 )
                 .map_err(|e| e.to_string())?;
             let rows = stmt
-                .query_map([&phrase], |r| {
+                .query_map([&expr], |r| {
                     Ok(MessageHit {
                         session_id: r.get(0)?,
                         session_title: r.get(1)?,
@@ -210,19 +209,17 @@ pub fn search_all(query: String) -> Result<SearchResults, String> {
         }
     }
 
-    // 4. 笔记正文(迭代 D8,notes_fts trigram;≥3 字符走 FTS,更短回退 LIKE 子串)
+    // 4. 笔记正文(迭代 D8 / P7:notes_fts trigram,3-gram OR 展开;无法展开回退 LIKE)
     {
         let conn = db::conn().lock().map_err(|e| e.to_string())?;
-        let use_fts = q.chars().count() >= 3;
-        if use_fts {
-            let phrase = format!("\"{}\"", q.replace('"', "\"\""));
+        if let Some(expr) = crate::retrieval::fts_match_query(&q) {
             if let Ok(mut stmt) = conn.prepare(
                 "SELECT n.id, n.title, snippet(notes_fts, 0, '', '', '…', 24) AS snip, n.updated
                  FROM notes_fts
                  JOIN notes n ON n.rid = notes_fts.rowid
                  WHERE notes_fts MATCH ?1
-                 ORDER BY n.updated DESC LIMIT 10",
-            ) && let Ok(rows) = stmt.query_map([&phrase], |r| {
+                 ORDER BY rank, n.updated DESC LIMIT 10",
+            ) && let Ok(rows) = stmt.query_map([&expr], |r| {
                 Ok(NoteHit {
                     id: r.get(0)?,
                     title: r.get(1)?,

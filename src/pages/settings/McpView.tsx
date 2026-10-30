@@ -54,7 +54,7 @@ export function McpView() {
         系统命令按下方审批模式放行。通过 MCP 接入的外部 server 需手动启用,默认关闭。
       </p>
       {msg && (
-        <div className={`mcp-msg${msg.startsWith("❌") || msg.startsWith("删除失败") ? " err" : ""}`}>
+        <div className={`mcp-msg${msg.startsWith("错误") || msg.includes("失败") ? " err" : ""}`}>
           {msg}
         </div>
       )}

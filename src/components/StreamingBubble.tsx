@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { useMessagesStore } from '../stores/messages';
 import { MemoMarkdown } from './MemoMarkdown';
 import ReasoningBlock from './ReasoningBlock';
+import { ToolTrace } from './ToolTrace';
+import { splitTraceSegments } from '../lib/toolTrace';
 
 /** 流式气泡:独立订阅 streaming[sessionId],ChatPage 主树不随 50ms 去抖重渲染。
  *  流式期间降级渲染(无语法高亮 / 无 mermaid),结束后由历史消息的完整渲染接管。
@@ -31,33 +33,49 @@ export default function StreamingBubble({
 
   if (!streaming) return null;
 
+  const segments = text ? splitTraceSegments(text) : [];
+  const lastTextIdx = segments.reduce((acc, s, i) => (s.kind === 'text' ? i : acc), -1);
+
   return (
     <div className="msg assistant" ref={rootRef}>
-      <div className="content">
-        <div className="bubble">
-          {(reasoningText || rInfo?.tokens) && (
-            <ReasoningBlock
-              text={reasoningText}
-              tokens={rInfo?.tokens ?? null}
-              elapsedMs={rInfo?.elapsedMs ?? null}
-              streaming
-            />
-          )}
-          <div className="md">
-            {/* 即时响应:正文与思考都还没到时,先给「正在思考」动态提示(准备阶段/模型首字延迟) */}
-            {!text && !reasoningText && (
+      <div className="avatar bot" aria-hidden="true">
+        M
+      </div>
+      <div className="msg-col">
+        {(reasoningText || rInfo?.tokens) && (
+          <ReasoningBlock
+            text={reasoningText}
+            tokens={rInfo?.tokens ?? null}
+            elapsedMs={rInfo?.elapsedMs ?? null}
+            streaming
+          />
+        )}
+        {segments.length === 0 && (
+          <div className="bubble">
+            <div className="md">
+              {/* 即时响应:正文与思考都还没到时,先给「正在思考」动态提示(准备阶段/模型首字延迟) */}
               <div className="thinking-hint" aria-live="polite">
                 <span className="th-dot" />
                 <span className="th-dot" />
                 <span className="th-dot" />
                 <span className="th-label">正在思考…</span>
               </div>
-            )}
-            <MemoMarkdown content={text} withCodeBlock streaming />
-            <span className="stream-cursor" aria-hidden="true" />
+            </div>
           </div>
-        </div>
-        <div className="meta">{modelId && <span>{modelId}</span>}</div>
+        )}
+        {segments.map((seg, i) =>
+          seg.kind === 'trace' ? (
+            <ToolTrace key={`t${i}`} raw={seg.raw} />
+          ) : (
+            <div className="bubble" key={`m${i}`}>
+              <div className="md">
+                <MemoMarkdown content={seg.text} withCodeBlock streaming />
+                {i === lastTextIdx && <span className="stream-cursor" aria-hidden="true" />}
+              </div>
+            </div>
+          ),
+        )}
+        <div className="msg-meta">{modelId && <span>{modelId}</span>}</div>
       </div>
     </div>
   );

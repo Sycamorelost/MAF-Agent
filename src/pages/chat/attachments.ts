@@ -47,7 +47,7 @@ function renderAttachment(
     return `${head}${sum}\n全文已分块入库,细节请用 doc_search(query=…) 检索、doc_read(doc=…, start=…) 回看任意章节;未检索到的内容不要臆测。`;
   }
   if (text) return `【附件:${m.name}】\n${text}`;
-  if (m.extract_note) return `[附件:${m.name} ⚠ ${m.extract_note}]`;
+  if (m.extract_note) return `[附件:${m.name} 警告:${m.extract_note}]`;
   return `[附件:${m.name}]`;
 }
 

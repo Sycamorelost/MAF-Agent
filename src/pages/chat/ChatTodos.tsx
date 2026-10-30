@@ -10,14 +10,17 @@ import {
   todosEvent,
   type TodoItem,
 } from '../../lib/ipc/session';
+import { IconChevronDown, IconChevronRight } from '../../components/icons';
 
 interface Props {
   sessionId: string;
   /** 把后端通知转给对话页已有横幅(compressNotice)展示。 */
   onNotice: (msg: string) => void;
+  /** 隐藏清单本体(工作台模式由左栏任务计划展示),但仍保留事件订阅。 */
+  hidden?: boolean;
 }
 
-export function ChatTodos({ sessionId, onNotice }: Props) {
+export function ChatTodos({ sessionId, onNotice, hidden = false }: Props) {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -38,7 +41,7 @@ export function ChatTodos({ sessionId, onNotice }: Props) {
     };
   }, [sessionId, onNotice]);
 
-  if (todos.length === 0) return null;
+  if (hidden || todos.length === 0) return null;
   const done = todos.filter((t) => t.status === 'completed').length;
 
   return (
@@ -48,7 +51,7 @@ export function ChatTodos({ sessionId, onNotice }: Props) {
         <span className="chat-todos-count">
           {done}/{todos.length}
         </span>
-        <span className="chat-todos-arrow">{collapsed ? '▸' : '▾'}</span>
+        {collapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
       </button>
       {!collapsed && (
         <ul className="chat-todos-list">

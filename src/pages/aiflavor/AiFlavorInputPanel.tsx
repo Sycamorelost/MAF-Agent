@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import * as ipc from '../../lib/ipc';
 import { CHAR_BUDGET, stripImagePlaceholders } from './utils';
+import { IconChevronDown, IconChevronRight, IconX } from '../../components/icons';
 
 /** 左栏:输入文本 / 风格锚点 / 历史报告。 */
 export interface AiFlavorInputPanelProps {
@@ -94,7 +95,7 @@ export function AiFlavorInputPanel({
                   title="移除"
                   onClick={() => onRemoveImage(i)}
                 >
-                  ✕
+                  <IconX size={14} />
                 </button>
                 <span className="aif-img-label">图 {i + 1}</span>
               </div>
@@ -160,7 +161,7 @@ export function AiFlavorInputPanel({
           className="aif-collapse"
           onClick={() => setShowAnchor((v) => !v)}
         >
-          风格锚点(可选) {showAnchor ? '▾' : '▸'}
+          风格锚点(可选) {showAnchor ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
         </button>
         {showAnchor && (
           <>

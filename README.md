@@ -1,10 +1,10 @@
-# MAF Agent
+# myAgent
 
 > 本地优先的 AI 桌面工作台 —— 把研究、学习与创作的过程，留在自己手里。
 
-MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust + React 19** 构建。
+myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust + React 19** 构建。
 
-与云端 AI 助手不同，MAF **不托管任何模型与数据**：你自备 API Key，数据全部存储在本机（SQLite + 纯文本文件），只与你的模型服务商直连。
+与云端 AI 助手不同，myAgent **不托管任何模型与数据**：你自备 API Key，数据全部存储在本机（SQLite + 纯文本文件），只与你的模型服务商直连。
 
 | 项目 | 说明 |
 |---|---|
@@ -40,15 +40,6 @@ MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，�
 - 单会话内中途切换模型
 - Markdown / KaTeX 公式 / Mermaid 图表 / ECharts 图表四类渲染
 - 附件本地解析：PDF(pdf-extract)、DOCX(docx-rs)、XLSX(calamine)、PPTX/EPUB/HTML,不经过云端
-
-### 深度研究
-
-- 多阶段研究管线，支持 staged / concise / decide / synthesis 四种模式
-- 蓝图库(Blueprint)与研究模板
-- **检查点(Checkpoint)暂停 / 恢复 / 断点续研**
-- 搜索引擎 + 网页抓取 + 排序全自研(`search/engine.rs`、`fetch.rs`、`rank.rs`)
-- 参考文献管理、图表嵌入、研究报告导出
-- 内置 23 份中文重构的科研方法论技能文档(衍生自 nature-skills)
 
 ### 学习规划
 
@@ -98,6 +89,21 @@ MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，�
 - 内置 DeepSeek、智谱 GLM 等服务商模板，支持任意 **OpenAI 兼容** 端点自定义接入
 - 多 API Key 轮换(Rotation)与故障转移(Failover)
 
+### 运行时预设
+
+- 内置四档预设,决定工具集、上下文策略、记忆注入与检索策略,与界面布局、审批档位正交:
+
+| 档位 | 定位 | 工具 | 检索策略 |
+|---|---|---|---|
+| 经济 | 省 token、快回答 | 只读白名单 | 单路全文检索,Top-3 |
+| 标准 | 日常默认 | 常用读写(无子代理/删除) | 混合检索,Top-5 |
+| 深度 | 复杂任务 | 全量工具 | 混合检索 + 软重排,Top-5 |
+| 代码 | 研发场景 | 全量工具 | 混合检索,Top-5 |
+
+- 三级合并:**会话钉住 > Agent 模板默认 > 全局默认**(设置 → 预设);会话创建时钉住预设清单版本,老会话不随内置预设升级漂移,切换需显式确认
+- 混合检索:FTS5 trigram(3-gram OR 展开)+ 覆盖率打分两路 RRF 融合;黄金查询基准 Top-3 命中率 95% → 100%
+- 用户可在数据目录放 `presets.json` 覆盖同名内置档或追加新档
+
 ---
 
 ## 技术架构
@@ -107,7 +113,7 @@ MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，�
 | 桌面框架 | Tauri 2.12（Rust + 系统 WebView2，不捆绑 Chromium） |
 | 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
 | 后端 | Rust（edition 2024，rust 1.90+），约 124 个 IPC 命令 |
-| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 22） |
+| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 27） |
 | 网络 | reqwest（rustls-tls）+ SSE 流式解析，Rust 层直推前端 |
 | 附件解析 | pdf-extract / docx-rs / calamine / pptxgenjs（全部本地原生） |
 | 密钥保护 | Windows DPAPI + AES-GCM 双路径加密（`provider/keychain.rs`） |
@@ -157,7 +163,7 @@ MAF Agent（MetaAgent Float）是一款开源的 Windows 桌面 AI 工作站，�
 
 ```bash
 # 克隆仓库后进入项目目录
-cd "MetaAgent Float"
+cd "myAgent"
 
 # 安装前端依赖
 pnpm install
@@ -199,29 +205,29 @@ cargo check       # 静态检查
 ## 项目结构
 
 ```
-MetaAgent Float/
+myAgent/
 ├── index.html                  # Vite 入口
 ├── package.json                # 前端依赖与脚本
 ├── vite.config.ts              # Vite 配置(端口 1420)
-├── tutorials/                  # 应用内教程(聊天记忆/绘图/研究/翻译)
+├── tutorials/                  # 应用内教程(聊天记忆/绘图/翻译)
 ├── src/                        # 前端源码(React 19 + TS)
 │   ├── components/             # 标题栏、导航、全局搜索等通用组件
 │   ├── lib/                    # IPC 封装、工具函数
-│   ├── pages/                  # chat / research / study / translate / draw / settings
+│   ├── pages/                  # chat / study / translate / draw / settings
 │   ├── stores/                 # Zustand 状态
 │   └── styles/                 # 样式
 └── src-tauri/                  # 后端源码(Rust)
     ├── tauri.conf.json         # 窗口、CSP、打包配置
-    ├── resources/skills/       # 23 份科研方法论技能文档
+    ├── resources/aiflavor/     # AI 味检测语料资源
     └── src/
-        ├── commands/           # 约 124 个 Tauri IPC 命令
+        ├── commands/           # Tauri IPC 命令
         │   ├── provider/       # 模型接入/密钥链/流式/用量
-        │   ├── research/       # 研究管线/导出/参考文献
+        │   ├── websearch.rs    # 联网搜索配置与连通性测试
         │   ├── memory/         # 记忆 CRUD/版本 diff
         │   └── ...
         ├── db/                 # SQLite 会话与分支存储
         ├── provider/           # 服务商模板/Key 轮换/DPAPI 密钥链
-        ├── research/           # 研究引擎(管线/蓝图/技能注入/检索排序)
+        ├── websearch/          # 联网搜索(引擎/抓取/排序)
         ├── study/              # 学习计划/测验/掌握度
         ├── memory/             # memory.md 读写与监听
         ├── selection.rs        # 全局划词(Win32)
@@ -244,7 +250,6 @@ data/
 │   ├── memory.md               # 会话记忆(可直接编辑)
 │   └── memory.versions/        # 记忆版本快照
 ├── notes/                      # 知识库 Markdown 笔记
-├── research/<id>/              # 研究工程与 report.md
 ├── translations/               # 翻译历史
 ├── attachments/                # 会话附件
 ├── images/                     # AI 绘画产物
@@ -252,6 +257,10 @@ data/
 ```
 
 **重要**:记忆与笔记均为纯文本 Markdown,你可以用任何编辑器直接修改，应用会通过文件监听实时同步。删除应用前如需保留数据，备份整个数据目录即可。
+
+> 历史版本说明：深度研究功能已整体移除，数据库升级时会自动删除 `research_sessions` 表；历史研究产物文件（`data/research/**`）保留在数据目录中，可自行清理。
+>
+> 数据库迁移全自动且幂等：升级即建（如 V26 会话预设钉住列、V27 文档块全文索引 `doc_chunks_fts`）,存量数据自动回填；索引表缺失或分词器过旧时自动重建自愈，无需手工干预。
 
 ---
 
@@ -269,7 +278,6 @@ data/
 
 本项目包含以下开源作品的衍生内容，均已遵循其许可证(详见 [NOTICE](NOTICE)):
 
-- **[nature-skills](https://github.com/Yuan1z0825/nature-skills)**(Apache-2.0)—— 研究方法论技能文档，经中文翻译与六段式模板重构，用于深度研究模块
 - **[Deep-tutor](https://github.com/hershate/Deep-tutor)**(Apache-2.0)—— 学习规划管线，由 FastAPI/React 移植为 Rust/React 并重新实现
 - **[Cherry Studio](https://github.com/CherryHQ/cherry-studio)**(AGPL-3.0)—— 仅参考其服务商管理与桌面助手架构理念，未复制任何代码或资源
 

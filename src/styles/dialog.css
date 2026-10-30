@@ -7,7 +7,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-modal);
 }
 .dialog {
   background: var(--bg-main);
@@ -45,4 +45,81 @@
   background: var(--bg-side);
 }
 .dialog-foot .sp { flex: 1; }
+
+/* ============ ModelSwitchDialog 模型切换卡片 ============ */
+
+/* 每个服务商一个区块 */
+.provider-block {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+.provider-block:last-child { margin-bottom: 0; }
+
+/* 服务商标题条 */
+.provider-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding-bottom: var(--space-2); margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+.provider-head .name {
+  font-size: var(--font-body); font-weight: 600; color: var(--text-1);
+}
+.provider-head .badge {
+  font-size: var(--font-mini); color: var(--text-3);
+  padding: 1px 8px; border-radius: 999px;
+  background: var(--bg-hover);
+}
+.provider-head .tool-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; font-size: var(--font-mini);
+  border: 1px solid var(--border); border-radius: var(--radius-s);
+  background: var(--bg-main); color: var(--text-2);
+  cursor: pointer; transition: background .12s;
+}
+.provider-head .tool-chip:hover:not(:disabled) {
+  background: var(--bg-hover); color: var(--text-1);
+}
+.provider-head .tool-chip:disabled { opacity: .5; cursor: default; }
+
+/* 模型 chip 网格 */
+.provider-models {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2);
+}
+.model-chip-wrap {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.model-chip {
+  display: block; width: 100%; padding: var(--space-2) var(--space-3);
+  font-size: var(--font-body); text-align: left; color: var(--text-1);
+  background: var(--bg-main); border: 1px solid var(--border);
+  border-radius: var(--radius-s); cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.model-chip:hover {
+  background: var(--bg-hover); border-color: var(--border-strong);
+}
+.model-chip.active {
+  background: var(--bg-active); border-color: var(--brand);
+  color: var(--brand); font-weight: 500;
+}
+.model-chip-meta {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 0 4px;
+  font-size: var(--font-mini); color: var(--text-4);
+}
+.model-chip-meta .cost-badge {
+  font-size: var(--font-mini); padding: 0 6px; border-radius: 999px;
+  background: var(--bg-hover); color: var(--text-3);
+}
+.model-chip-meta .cost-badge.tier-free { color: #22c55e; }
+.model-chip-meta .cost-badge.tier-cheap { color: #3b82f6; }
+.model-chip-meta .cost-badge.tier-mid { color: #f59e0b; }
+.model-chip-meta .cost-badge.tier-expensive { color: #ef4444; }
+.model-chip-meta .cost-badge.tier-premium { color: #a855f7; }
 

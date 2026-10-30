@@ -1,5 +1,6 @@
 import type { McpServerConfig, McpToolInfo } from '../../lib/ipc/mcp';
 import { serverDesc, toolDesc } from '../../lib/mcpCatalog';
+import { IconX } from '../../components/icons';
 
 /** 单个 server 的运行状态(running + 最近一次工具列表)。 */
 export type McpServerStatus = { running: boolean; tools?: McpToolInfo[] };
@@ -94,7 +95,7 @@ export function McpServerCard({
                 title="移除该目录"
                 onClick={() => onRemoveDir(s, d)}
               >
-                ✕
+                <IconX size={14} />
               </button>
             </span>
           ))}

@@ -44,7 +44,7 @@ pub struct StudyParams {
     pub paused: Arc<AtomicBool>,
     pub channel: Channel<StudyEvent>,
     /// H3 同款:stream_options 被拒时重建 Provider 的入参快照
-    pub rebuild: Option<crate::research::ProviderRebuild>,
+    pub rebuild: Option<crate::provider::rebuild::ProviderRebuild>,
     pub fallback: std::sync::Mutex<Option<Arc<dyn Provider>>>,
 }
 

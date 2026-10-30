@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { IconCheck, IconDownload, IconResearch } from '../../components/icons';
 import type { NodeState, PlanPayload, StudyStats, TodayPlan } from '../../lib/ipc/study';
 import * as studyIpc from '../../lib/ipc/study';
-import { EXPORT_TARGET_EXISTS, pickSavePath } from '../../lib/ipc/research';
-import { safeExportName } from '../research/helpers';
+import { EXPORT_TARGET_EXISTS, pickSavePath } from '../../lib/ipc/export';
+import { safeExportName } from '../../lib/export/names';
 import { levelText } from './PlanList';
 import { StatsSec } from './StatsSec';
 

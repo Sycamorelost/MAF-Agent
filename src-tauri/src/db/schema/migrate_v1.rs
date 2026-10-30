@@ -34,20 +34,9 @@ CREATE TABLE IF NOT EXISTS memory_versions (
 CREATE INDEX IF NOT EXISTS idx_memory_versions_session ON memory_versions(session_id, id);
 "#;
 
-/// V2:深度研究会话表(Phase 2)。
-pub(super) const MIGRATION_V2: &str = r#"
-CREATE TABLE IF NOT EXISTS research_sessions (
-  id TEXT PRIMARY KEY,             -- 8 位 hex
-  topic TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'running',  -- running / done / error / cancelled
-  rounds INTEGER NOT NULL DEFAULT 0,       -- 实际执行的轮数
-  max_rounds INTEGER NOT NULL DEFAULT 8,
-  model_id TEXT,
-  error TEXT,
-  created TEXT NOT NULL,
-  updated TEXT NOT NULL
-);
-"#;
+/// V2:深度研究会话表(Phase 2)。研究功能已于 V23 整体移除,建表语句退役;
+/// 旧库遗留的 research_sessions 由 V23 的 DROP TABLE 清理(见 schema/mod.rs)。
+pub(super) const MIGRATION_V2: &str = r#"-- V23 起退役:研究功能移除,此版本不再建表。"#;
 
 /// V3:消息全文索引(FTS5 trigram 分词;rowid 与 messages.id 对应)。
 /// trigram 支持任意 ≥3 字符的子串匹配(含中文);更短的查询由搜索命令回退 LIKE。

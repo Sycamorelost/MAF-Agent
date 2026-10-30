@@ -504,13 +504,13 @@ fn list_images_in(dir: &std::path::Path) -> Result<Vec<ImageListItem>, String> {
 
 /// 列出全部历史作品(按文件名时间戳倒序),附缩略图与 meta。
 #[tauri::command]
-pub fn list_images() -> Result<Vec<ImageListItem>, String> {
+pub async fn list_images() -> Result<Vec<ImageListItem>, String> {
     list_images_in(&images_dir())
 }
 
 /// 读取单张图片的完整 data URL(历史列表点击放大时用)。
 #[tauri::command]
-pub fn read_image(path: String) -> Result<String, String> {
+pub async fn read_image(path: String) -> Result<String, String> {
     let p = std::path::PathBuf::from(&path);
     ensure_in_images_dir(&p)?;
     let bytes = std::fs::read(&p).map_err(|e| format!("读取图片失败: {e}"))?;

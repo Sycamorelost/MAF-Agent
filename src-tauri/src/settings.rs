@@ -42,20 +42,39 @@ pub struct AppSettings {
     /// 用户自定义底层 Prompt(空 = 使用内置默认 BASE_PHYSICAL_CONTRACT)
     #[serde(default)]
     pub custom_base_prompt: Option<String>,
-    /// 用户自定义应用名称(空 = 使用 "MAF Agent",仅影响窗口标题/托盘/快捷方式)
+    /// 用户自定义应用名称(空 = 使用 "myAgent",仅影响窗口标题/托盘/快捷方式)
     #[serde(default)]
     pub custom_app_name: Option<String>,
     /// 用户自定义应用图标路径(空 = 使用内置图标,仅影响窗口/托盘/快捷方式)
     #[serde(default)]
     pub custom_app_icon: Option<String>,
-    /// 默认工作区根目录(空 = `<数据目录>/workspace`;环境变量 `MAF_WORKSPACE` 仍优先)。
+    /// 用户自定义首页提示语(空 = 使用默认「myAgent | 向更美好的生活出发！」)
+    #[serde(default)]
+    pub home_prompt: Option<String>,
+    /// 默认工作区根目录(空 = `<数据目录>/workspace`;环境变量 `MYAGENT_WORKSPACE` 仍优先)。
     /// 这是「相对路径」的基准目录;绝对路径不受其限制。
     #[serde(default)]
     pub workspace_root: Option<String>,
+    /// 默认工作台模式(P3 / D16):chat = 普通会话;work = 专业 Agent 工作台。
+    /// 决定首页落点与新建会话的界面形态;单个会话可用 sessions.workbench_mode 覆盖。
+    #[serde(default = "default_workbench")]
+    pub default_workbench: String,
+    /// 全局默认运行时预设(P5 / D19):economy / standard / deep / code。
+    /// 会话创建时钉住;已有会话可用 sessions.preset_id 覆盖。
+    #[serde(default = "default_preset")]
+    pub default_preset: String,
 }
 
 fn default_context_window() -> u32 {
     24
+}
+
+fn default_workbench() -> String {
+    "chat".into()
+}
+
+fn default_preset() -> String {
+    crate::presets::DEFAULT_PRESET.into()
 }
 
 impl Default for AppSettings {
@@ -73,7 +92,10 @@ impl Default for AppSettings {
             custom_base_prompt: None,
             custom_app_name: None,
             custom_app_icon: None,
+            home_prompt: None,
             workspace_root: None,
+            default_workbench: default_workbench(),
+            default_preset: default_preset(),
         }
     }
 }

@@ -35,6 +35,9 @@ pub struct McpServerConfig {
     /// 文件系统类工具:显式允许的目录列表(空 = 不做文件夹授权限制)
     #[serde(default)]
     pub allowed_dirs: Vec<PathBuf>,
+    /// 启动子进程时注入的环境变量(如 TAVILY_API_KEY)
+    #[serde(default)]
+    pub env: HashMap<String, String>,
 }
 
 impl McpServerConfig {
@@ -73,7 +76,11 @@ fn default_true() -> bool {
 /// 当前预置服务版本 —— 新增/修改预置项时 +1。
 /// v2:预置 server 由默认关闭改为默认启用(开箱即用),旧配置合并时一次性置为启用。
 /// v3:builtin_tools 默认开启(开箱即用,对话直接可用 shell_exec/fs_*),旧配置合并时一次性点亮。
-pub const PRESETS_VERSION: u32 = 3;
+/// v4:新增「联网搜索」预置(Tavily 官方 MCP,github.com/tavily-ai/tavily-mcp,2.4k★,MIT);
+///     启动时自动注入已保存的 Tavily 搜索 Key,供联网搜索「MCP 调用」模式直接复用。
+/// v5:「联网搜索」默认换为 **agent-search-mcp**(github.com/lennney/agent-search-mcp,112★,Apache2.0),
+///     零 Key、9 引擎并行、原生中文适配;Tavily 官方 MCP 保留但降为「付费档可选预置」(需显式启用)。
+pub const PRESETS_VERSION: u32 = 5;
 
 /// 预置服务清单(官方 npm 包,stdio,无需 API Key)。
 /// 全部 `enabled: true` —— 开箱即用(v2);安全边界由审批弹窗、目录白名单与审计兜底。
@@ -93,6 +100,7 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             // 允许目录为空时不做文件夹授权限制:启动时传入本机全部磁盘根(见 launch_dirs);
             // 用户也可在 UI 里指定目录主动收窄范围
             allowed_dirs: vec![],
+            env: HashMap::new(),
         },
         McpServerConfig {
             name: "长期记忆".into(),
@@ -103,6 +111,7 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             url: String::new(),
             headers: HashMap::new(),
             allowed_dirs: vec![],
+            env: HashMap::new(),
         },
         McpServerConfig {
             name: "顺序思考".into(),
@@ -116,8 +125,46 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             url: String::new(),
             headers: HashMap::new(),
             allowed_dirs: vec![],
+            env: HashMap::new(),
+        },
+        // v5:联网搜索(默认 agent-search-mcp,零 Key、9 引擎并行、原生中文适配)。
+        // 提供 free_search / free_search_advanced / free_extract / fetch_github_readme /
+        // fetch_csdn_article / fetch_juejin_article / search_with_synthesis。
+        // Tavily 官方 MCP 保留为可选付费档(见下方 "联网搜索·付费" preset,需显式启用)。
+        McpServerConfig {
+            name: "联网搜索".into(),
+            enabled: true,
+            transport: Transport::Stdio,
+            command: "npx".into(),
+            args: vec!["-y".into(), "agent-search-mcp@latest".into()],
+            url: String::new(),
+            headers: HashMap::new(),
+            allowed_dirs: vec![],
+            env: HashMap::new(),
         },
     ]
+}
+
+/// 预置 server 的自动环境变量:
+/// - agent-search-mcp: 零 Key,不注入任何 env;用户如需启用付费档(Brave/Tavily/Exa/Boch/SerpAPI),
+///   请自己在 MCP 设置页显式配置 BRAVE_API_KEY / TAVILY_API_KEY / EXA_API_KEY / BOCHA_API_KEY / SERPAPI_API_KEY
+/// - tavily-mcp(可选付费档,未默认预置):启动时自动注入已保存的 Tavily 搜索 Key,
+///   复用「联网搜索」页的 Key 配置,用户无需在 MCP 页再填一遍。
+/// 已显式配置 env 的同名变量优先(不覆盖)。
+pub(crate) fn preset_env(args: &[String], configured: &HashMap<String, String>) -> Vec<(String, String)> {
+    // agent-search-mcp 默认零 Key 即跑通,不注入任何 env
+    if args.iter().any(|a| a.contains("agent-search-mcp")) {
+        return Vec::new();
+    }
+    if args.iter().any(|a| a.contains("tavily-mcp")) && !configured.contains_key("TAVILY_API_KEY") {
+        match crate::provider::keychain::load("tavily-search") {
+            Ok(Some(key)) if !key.trim().is_empty() => {
+                return vec![("TAVILY_API_KEY".into(), key.trim().to_string())];
+            }
+            _ => return Vec::new(),
+        }
+    }
+    Vec::new()
 }
 
 impl McpConfig {
@@ -238,6 +285,7 @@ mod tests {
             url: String::new(),
             headers: HashMap::new(),
             allowed_dirs: dirs,
+            env: HashMap::new(),
         }
     }
 

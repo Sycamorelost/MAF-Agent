@@ -55,6 +55,14 @@ pub(crate) async fn execute_builtin(
     session_id: Option<&str>,
     sub_llm: Option<&crate::provider::SubLlm>,
 ) -> (String, bool) {
+    // 审计日志:查一次 project_id,避免每条日志都查
+    let project_id = session_id.and_then(|sid| {
+        crate::db::sessions::get(sid)
+            .ok()
+            .flatten()
+            .and_then(|s| s.project_id)
+    });
+
     // GUI 自动化:UIA / SendInput 都是阻塞调用,隔离到阻塞线程池,避免卡住 tokio worker
     if crate::gui::tools::is_gui_tool(name) {
         let tool = name.to_string();
@@ -62,12 +70,34 @@ pub(crate) async fn execute_builtin(
         return match tokio::task::spawn_blocking(move || crate::gui::tools::execute(&tool, &a))
             .await
         {
-            Ok(r) => r,
-            Err(e) => (format!("GUI 工具执行线程异常:{e}"), false),
+            Ok(r) => {
+                let _ = write_log(session_id, project_id.as_deref(), name, args, &r.0, r.1);
+                r
+            }
+            Err(e) => {
+                let msg = format!("GUI 工具执行线程异常:{e}");
+                let _ = write_log(session_id, project_id.as_deref(), name, args, &msg, false);
+                (msg, false)
+            }
         };
     }
-    match name {
-        "get_now" => match crate::commands::mcp::get_now(None) {
+
+    // 先处理会 return 的 early-exit 分支(shell_exec 参数校验)
+    if name == "shell_exec" {
+        let cmd = args
+            .get("command")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if cmd.is_empty() {
+            let msg = "缺少 command 参数\n[提示] command 填程序名(如 git、ls、where),参数放进 args 数组";
+            let _ = write_log(session_id, project_id.as_deref(), name, args, msg, false);
+            return (msg.into(), false);
+        }
+    }
+
+    let (content, ok) = match name {
+        "get_now" => match crate::commands::mcp::get_now(None).await {
             Ok(now) => (
                 format!(
                     "当前时间:{} {} (UTC{}) 日期:{}",
@@ -111,13 +141,6 @@ pub(crate) async fn execute_builtin(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .trim();
-            if cmd.is_empty() {
-                return (
-                    "缺少 command 参数\n[提示] command 填程序名(如 git、ls、where),参数放进 args 数组"
-                        .into(),
-                    false,
-                );
-            }
             // args 容错:字符串/数字不再静默丢弃(见 shell::parse_shell_args)
             let (argv, warn) = crate::mcp::shell::parse_shell_args(args.get("args"));
             let cwd = args
@@ -162,7 +185,7 @@ pub(crate) async fn execute_builtin(
         }
         "fs_list" => {
             let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
-            match crate::fs::text::list(path) {
+            match crate::fs::text::list(path, session_id) {
                 Ok(entries) => (serde_json::to_string(&entries).unwrap_or_default(), true),
                 Err(e) => (format!("列目录失败:{e}"), false),
             }
@@ -181,7 +204,7 @@ pub(crate) async fn execute_builtin(
                 .get("offset")
                 .and_then(|v| v.as_u64())
                 .map(|n| n as usize);
-            match crate::fs::text::read_text(path, offset, max) {
+            match crate::fs::text::read_text(path, offset, max, session_id) {
                 Ok(text) => (text, true),
                 Err(e) => (format!("读取失败:{e}"), false),
             }
@@ -197,7 +220,7 @@ pub(crate) async fn execute_builtin(
             }
             let rel = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
-            match crate::fs::text::grep(pattern, rel, limit) {
+            match crate::fs::text::grep(pattern, rel, limit, session_id) {
                 Ok(v) if v.is_empty() => ("未命中任何文本行".into(), true),
                 Ok(v) => (v.join("\n"), true),
                 Err(e) => (format!("检索失败:{e}"), false),
@@ -209,7 +232,7 @@ pub(crate) async fn execute_builtin(
             if path.is_empty() {
                 return ("缺少 path 参数".into(), false);
             }
-            match crate::fs::text::write_text(path, content) {
+            match crate::fs::text::write_text(path, content, session_id) {
                 Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
                 Err(e) => (format!("写入失败:{e}"), false),
             }
@@ -219,7 +242,7 @@ pub(crate) async fn execute_builtin(
             if path.is_empty() {
                 return ("缺少 path 参数".into(), false);
             }
-            match crate::fs::text::delete(path) {
+            match crate::fs::text::delete(path, session_id) {
                 Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
                 Err(e) => (format!("删除失败:{e}"), false),
             }
@@ -238,7 +261,7 @@ pub(crate) async fn execute_builtin(
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .unwrap_or_default();
             let req = crate::fs::docgen::DocRequest::from_parts(title, body, profile, toc, meta);
-            match crate::fs::text::export_docx_ext(path, &req) {
+            match crate::fs::text::export_docx_ext(path, &req, session_id) {
                 Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
                 Err(e) => (format!("导出 docx 失败:{e}"), false),
             }
@@ -255,7 +278,7 @@ pub(crate) async fn execute_builtin(
                 },
                 None => Vec::new(),
             };
-            match crate::fs::text::export_xlsx(path, &sheets) {
+            match crate::fs::text::export_xlsx(path, &sheets, session_id) {
                 Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
                 Err(e) => (format!("导出 xlsx 失败:{e}"), false),
             }
@@ -265,7 +288,7 @@ pub(crate) async fn execute_builtin(
             if id.is_empty() {
                 return ("缺少 id 参数".into(), false);
             }
-            let root = match crate::fs::text::root() {
+            let root = match crate::fs::text::root_for_session(session_id) {
                 Ok(r) => r,
                 Err(e) => return (format!("工作区不可用:{e}"), false),
             };
@@ -279,7 +302,7 @@ pub(crate) async fn execute_builtin(
             if path.is_empty() {
                 return ("缺少 path 参数".into(), false);
             }
-            match crate::fs::formats::extract(path) {
+            match crate::fs::formats::extract(path, session_id) {
                 Ok(text) => (text, true),
                 Err(e) => (format!("提取失败:{e}"), false),
             }
@@ -289,7 +312,7 @@ pub(crate) async fn execute_builtin(
             if path.is_empty() {
                 return ("缺少 path 参数".into(), false);
             }
-            match crate::fs::formats::zip_list(path) {
+            match crate::fs::formats::zip_list(path, session_id) {
                 Ok(entries) => (serde_json::to_string(&entries).unwrap_or_default(), true),
                 Err(e) => (format!("列压缩包失败:{e}"), false),
             }
@@ -300,13 +323,49 @@ pub(crate) async fn execute_builtin(
             if path.is_empty() || dest.is_empty() {
                 return ("缺少 path / dest 参数".into(), false);
             }
-            match crate::fs::formats::zip_extract(path, dest) {
+            match crate::fs::formats::zip_extract(path, dest, session_id) {
                 Ok(n) => (format!("解包完成,共 {n} 个文件"), true),
                 Err(e) => (format!("解包失败:{e}"), false),
             }
         }
         _ => ("未知内置工具".into(), false),
-    }
+    };
+
+    // 统一审计日志(覆盖所有正常返回;early-return 分支 GUI 已在上面写)
+    let _ = write_log(session_id, project_id.as_deref(), name, args, &content, ok);
+    (content, ok)
+}
+
+/// 审计日志写入助手:从 args 里提取 path/cmd 作为 target_path,截断 args_preview 到 200 字符。
+fn write_log(
+    session_id: Option<&str>,
+    project_id: Option<&str>,
+    tool_name: &str,
+    args: &Value,
+    content: &str,
+    ok: bool,
+) {
+    let Some(sid) = session_id else {
+        return; // 无会话上下文时不写
+    };
+    let target_path = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .or_else(|| args.get("dest").and_then(|v| v.as_str()))
+        .or_else(|| args.get("command").and_then(|v| v.as_str()))
+        .map(|s| s.to_string());
+    let args_preview = serde_json::to_string(args)
+        .ok()
+        .map(|s| if s.len() > 200 { format!("{}…", &s[..200]) } else { s });
+    let result = if ok { "ok".to_string() } else { content.to_string() };
+    crate::db::tool_log::record(
+        sid,
+        project_id,
+        tool_name,
+        target_path.as_deref(),
+        args_preview.as_deref(),
+        &result,
+    );
 }
 
 /// todo_write 入参(模型提交完整列表;id 可省略,缺省按序编号)。
@@ -316,6 +375,8 @@ struct TodoItemIn {
     content: String,
     status: Option<String>,
     priority: Option<String>,
+    /// 关联的目标级任务 id(V25;可选,空/无效值按未关联存储)
+    task_id: Option<String>,
 }
 
 const TODO_STATUSES: [&str; 4] = ["pending", "in_progress", "completed", "cancelled"];
@@ -358,6 +419,7 @@ fn todo_write_exec(args: &Value, session_id: Option<&str>) -> (String, bool) {
             content,
             status,
             priority,
+            task_id: r.task_id.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
         });
     }
     if items.is_empty() {
@@ -420,16 +482,18 @@ fn doc_search_exec(args: &Value, session_id: Option<&str>) -> (String, bool) {
         return ("缺少 query 参数".into(), false);
     }
     let hint = args.get("doc").and_then(|v| v.as_str());
+    // 检索策略随会话预设(P7):limit 缺省取预设 top_k
+    let pol = crate::presets::retrieval_for_session(sid);
     let limit = args
         .get("limit")
         .and_then(|v| v.as_u64())
-        .unwrap_or(6)
+        .unwrap_or(pol.top_k as u64)
         .clamp(1, 20) as usize;
     let conn = match crate::db::conn().lock() {
         Ok(c) => c,
         Err(e) => return (format!("db lock 失败: {e}"), false),
     };
-    match crate::doc::search(&conn, sid, query, hint, limit) {
+    match crate::doc::search_with_policy(&conn, sid, query, hint, limit, &pol) {
         Ok(out) if out.hits.is_empty() => (
             format!(
                 "未命中:会话内共 {} 块,没有匹配「{query}」的内容。可换关键词,或用 doc_read 按块浏览。",

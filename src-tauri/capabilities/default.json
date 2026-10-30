@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "MAF Agent 主窗口 capability:core 插件权限 + 对话框 + 托盘",
+  "description": "myAgent 主窗口 capability:core 插件权限 + 对话框 + 托盘",
   "windows": ["main"],
   "permissions": [
     "core:default",

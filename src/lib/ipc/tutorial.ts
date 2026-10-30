@@ -6,7 +6,7 @@
 /** 一张教程卡:tutorials/*.md 的 front-matter + markdown 正文。 */
 export interface TutorialDoc {
   id: string;
-  /** 所属页面:chat / research / draw / translate */
+  /** 所属页面:chat / draw / translate */
   page: string;
   title: string;
   summary: string;

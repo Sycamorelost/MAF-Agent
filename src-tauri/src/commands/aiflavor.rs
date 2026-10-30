@@ -160,7 +160,7 @@ fn save_rewrite(
 
 /// 运行本地检测并落库。
 #[tauri::command]
-pub fn aiflavor_analyze(text: String, source_kind: Option<String>) -> Result<FlavorReport, String> {
+pub async fn aiflavor_analyze(text: String, source_kind: Option<String>) -> Result<FlavorReport, String> {
     if text.trim().is_empty() {
         return Err("文本为空".into());
     }
@@ -175,28 +175,28 @@ pub fn aiflavor_analyze(text: String, source_kind: Option<String>) -> Result<Fla
 
 /// 历史报告列表。
 #[tauri::command]
-pub fn aiflavor_reports_list(limit: Option<i64>) -> Result<Vec<AiflavorReportSummary>, String> {
+pub async fn aiflavor_reports_list(limit: Option<i64>) -> Result<Vec<AiflavorReportSummary>, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     list_reports(&conn, limit.unwrap_or(50).clamp(1, 200))
 }
 
 /// 回看完整报告。
 #[tauri::command]
-pub fn aiflavor_report_get(id: i64) -> Result<FlavorReport, String> {
+pub async fn aiflavor_report_get(id: i64) -> Result<FlavorReport, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     get_report(&conn, id)
 }
 
 /// 删除单份报告。
 #[tauri::command]
-pub fn aiflavor_report_delete(id: i64) -> Result<(), String> {
+pub async fn aiflavor_report_delete(id: i64) -> Result<(), String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     delete_report(&conn, id)
 }
 
 /// 记录一次改写结果。
 #[tauri::command]
-pub fn aiflavor_rewrite_save(
+pub async fn aiflavor_rewrite_save(
     report_id: i64,
     level: String,
     diff_json: String,
@@ -209,7 +209,7 @@ pub fn aiflavor_rewrite_save(
 /// 导出报告:C4。`format` = md(默认)/ html;HTML 为自包含可打印版(浏览器「打印 → 存为 PDF」)。
 /// 落盘到工作区 `exports/`,返回绝对路径供前端展示。
 #[tauri::command]
-pub fn aiflavor_export_report(id: i64, format: Option<String>) -> Result<String, String> {
+pub async fn aiflavor_export_report(id: i64, format: Option<String>) -> Result<String, String> {
     let report = {
         let conn = db::conn().lock().map_err(|e| e.to_string())?;
         get_report(&conn, id)?
@@ -392,7 +392,7 @@ mod tests {
         let back = get_report(&conn, id).unwrap();
         assert_eq!(back.id, Some(id));
         assert_eq!(back.score, r.score);
-        assert_eq!(back.dims.len(), 6);
+        assert_eq!(back.dims.len(), 9);
         assert_eq!(back.sentence_marks.len(), r.sentence_marks.len());
         assert!(back.disclaimer.contains("61.2"));
     }

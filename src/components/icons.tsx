@@ -2,7 +2,7 @@
  * 共享线性 SVG 图标库。
  *
  * 规则(见 project_memory.md):
- *   - stroke 风格,1.8px 描边,round caps & joins
+ *   - stroke 风格,1.5px 描边,round caps & joins
  *   - 默认 18px,可通过 size 覆盖
  *   - 颜色继承 currentColor,由父级控制
  *   - 禁止在 UI 中使用 emoji;所有图标必须走这里
@@ -17,7 +17,7 @@ interface IconProps {
 function I({
   size = 18,
   className,
-  strokeWidth = 1.8,
+  strokeWidth = 1.5,
   children,
   viewBox = '0 0 24 24',
 }: IconProps & { children: React.ReactNode; viewBox?: string }) {
@@ -50,6 +50,13 @@ export const IconBrain = (p: IconProps) => (
     <path d="M12 4a4 4 0 0 0-4 4 4 4 0 0 0-3 3.87A4 4 0 0 0 7 20h1" />
     <path d="M12 4a4 4 0 0 1 4 4 4 4 0 0 1 3 3.87A4 4 0 0 1 17 20h-1" />
     <path d="M12 4v16" />
+  </I>
+);
+
+export const IconLayers = (p: IconProps) => (
+  <I {...p}>
+    <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+    <path d="m3 13 9 5 9-5" />
   </I>
 );
 
@@ -169,6 +176,15 @@ export const IconCopy = (p: IconProps) => (
   </I>
 );
 
+/** 更多(三点):消息操作栏溢出菜单入口 */
+export const IconMore = (p: IconProps) => (
+  <I {...p}>
+    <circle cx="5" cy="12" r="1.6" />
+    <circle cx="12" cy="12" r="1.6" />
+    <circle cx="19" cy="12" r="1.6" />
+  </I>
+);
+
 export const IconCheck = (p: IconProps) => (
   <I {...p}>
     <path d="M20 6 9 17l-5-5" />
@@ -184,6 +200,13 @@ export const IconPlay = (p: IconProps) => (
 export const IconStop = (p: IconProps) => (
   <I {...p}>
     <rect x="6" y="6" width="12" height="12" rx="2" />
+  </I>
+);
+
+export const IconSkipForward = (p: IconProps) => (
+  <I {...p}>
+    <path d="M5 5l9 7-9 7V5Z" />
+    <path d="M19 5v14" />
   </I>
 );
 
@@ -376,11 +399,58 @@ export const IconShield = (p: IconProps) => (
   </I>
 );
 
+export const IconGauge = (p: IconProps) => (
+  <I {...p}>
+    <path d="M4 14a8 8 0 1 1 16 0" />
+    <path d="M12 14l4-4" />
+    <path d="M4 14h1M19 14h1M12 6V5" />
+    <circle cx="12" cy="14" r="1.4" />
+  </I>
+);
+
 export const IconArchive = (p: IconProps) => (
   <I {...p}>
     <rect x="3" y="4" width="18" height="5" rx="1" />
     <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
     <path d="M10 13h4" />
+  </I>
+);
+
+/** 文件夹(工作台会话分组)。 */
+export const IconFolder = (p: IconProps) => (
+  <I {...p}>
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+  </I>
+);
+
+/** 文件夹打开态(分组展开指示)。 */
+export const IconFolderOpen = (p: IconProps) => (
+  <I {...p}>
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3V7z" />
+    <path d="M3 10h18l-2 9a1 1 0 0 1-1 .8H4a1 1 0 0 1-1-.8V10z" />
+  </I>
+);
+
+/** 纲要 / 列表(会话纲要面板开关)。 */
+export const IconList = (p: IconProps) => (
+  <I {...p}>
+    <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+  </I>
+);
+
+/** 信息提示(附件解析异常等)。 */
+export const IconInfo = (p: IconProps) => (
+  <I {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8h.01M11 12h1v4h1" />
+  </I>
+);
+
+/** 终端(shell / 命令执行工具)。 */
+export const IconTerminal = (p: IconProps) => (
+  <I {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="m7 9 3 3-3 3M13 15h4" />
   </I>
 );
 
@@ -442,6 +512,36 @@ export const IconRestore = (p: IconProps) => (
   <I {...p}>
     <path d="M4 10a8 8 0 1 1 2 6" />
     <path d="M4 4v6h6" />
+  </I>
+);
+
+/** 闪电(快捷提示)。 */
+export const IconZap = (p: IconProps) => (
+  <I {...p}>
+    <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />
+  </I>
+);
+
+/** 时钟(已暂停 / 等待确认)。 */
+export const IconClock = (p: IconProps) => (
+  <I {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </I>
+);
+
+/** 右箭头(「全部任务」等跳转入口)。 */
+export const IconArrowRight = (p: IconProps) => (
+  <I {...p}>
+    <path d="M4 12h15m-6-6 6 6-6 6" />
+  </I>
+);
+
+/** 侧栏面板(检查器展开/收起)。 */
+export const IconPanel = (p: IconProps) => (
+  <I {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M15 4v16" />
   </I>
 );
 

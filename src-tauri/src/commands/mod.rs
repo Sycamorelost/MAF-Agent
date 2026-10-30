@@ -6,6 +6,7 @@ pub mod attachment;
 pub mod capability;
 pub mod datadir;
 pub mod doc;
+pub mod export;
 pub mod fs;
 pub mod gui;
 pub mod mcp;
@@ -13,12 +14,15 @@ pub(crate) mod mcp_builtin_tools;
 pub mod memory;
 pub mod notes;
 pub mod provider;
-pub mod research;
+pub mod projects;
+pub mod presets;
 pub mod search;
 pub mod settings;
 pub mod study;
+pub mod tasks;
 pub mod translate;
 pub mod tutorial;
+pub mod websearch;
 
 /// 汇总所有 command handler,供 Builder.invoke_handler 注册。
 ///
@@ -39,6 +43,7 @@ macro_rules! all_commands {
             crate::commands::memory::crud::get_session,
             crate::commands::memory::crud::session_get_todos,
             crate::commands::memory::crud::rename_session,
+            crate::commands::memory::crud::clone_session,
             crate::commands::memory::crud::session_export_file,
             crate::commands::memory::crud::set_session_model,
             crate::commands::memory::crud::delete_session,
@@ -46,6 +51,8 @@ macro_rules! all_commands {
             crate::commands::memory::crud::prune_empty_sessions,
             crate::commands::memory::crud::update_session_settings,
             crate::commands::memory::crud::set_session_web_search,
+            crate::commands::memory::crud::set_session_workbench_mode,
+            crate::commands::memory::crud::set_session_permission_mode,
             // message
             crate::commands::memory::crud::append_message,
             crate::commands::memory::crud::list_messages,
@@ -135,41 +142,33 @@ macro_rules! all_commands {
             crate::commands::translate::save_translation,
             crate::commands::translate::list_translations,
             crate::commands::translate::delete_translation,
-            // research(深度研究)
-            crate::commands::research::get_search_config,
-            crate::commands::research::save_search_config,
-            crate::commands::research::search_test,
-            crate::commands::research::research_start,
-            crate::commands::research::research_cancel,
-            crate::commands::research::research_pause,
-            crate::commands::research::research_resume,
-            crate::commands::research::research_stage_continue,
-            crate::commands::research::research_update_stages,
-            crate::commands::research::research_preset_list,
-            crate::commands::research::research_preset_save,
-            crate::commands::research::research_preset_delete,
-            crate::commands::research::blueprint_list,
-            crate::commands::research::blueprint_save,
-            crate::commands::research::blueprint_delete,
-            crate::commands::research::research_template_list,
-            crate::commands::research::research_template_save,
-            crate::commands::research::research_template_reset,
-            crate::commands::research::research_list,
-            crate::commands::research::research_get,
-            crate::commands::research::research_delete,
-            // 科研增强 + 报告导出(v1.9.0 工作块 II)
-            crate::commands::research::research_list_skills,
-            crate::commands::research::research_export_markdown,
-            crate::commands::research::research_export_html,
-            crate::commands::research::research_export_docx,
-            crate::commands::research::research_figure_data,
-            crate::commands::research::pick_save_path,
-            // D4:PDF(打印对话框)
-            crate::commands::research::export_pdf,
-            // 研究参考资料(本地文件解析与注入)
-            crate::commands::research::import_research_reference,
-            crate::commands::research::delete_research_reference,
-            crate::commands::research::list_research_references,
+            // 项目(P8.1 项目化升级)
+            crate::commands::projects::project_list,
+            crate::commands::projects::project_create,
+            crate::commands::projects::project_rename,
+            crate::commands::projects::project_update_path,
+            crate::commands::projects::project_update_model,
+            crate::commands::projects::project_update_context,
+            crate::commands::projects::project_delete,
+            crate::commands::projects::project_update_sort,
+            crate::commands::projects::session_set_project,
+            // 运行时预设(P5 / D18 / D19)
+            crate::commands::presets::list_presets,
+            crate::commands::presets::resolve_session_preset,
+            crate::commands::presets::set_session_preset,
+            // 联网搜索(P0 自 research 迁出,IPC 名不变)
+            crate::commands::websearch::get_search_config,
+            crate::commands::websearch::save_search_config,
+            crate::commands::websearch::search_test,
+            // 工作台任务计划(harness 目标级任务)
+            crate::commands::tasks::task_create,
+            crate::commands::tasks::task_list,
+            crate::commands::tasks::task_update,
+            crate::commands::tasks::task_set_plan,
+            crate::commands::tasks::task_delete,
+            // 通用导出(另存为令牌 / 打印导出 PDF)
+            crate::commands::export::pick_save_path,
+            crate::commands::export::export_pdf,
             // 全局搜索
             crate::commands::search::search_all,
             // 知识库 / 笔记库(迭代 D8)
@@ -242,6 +241,7 @@ macro_rules! all_commands {
             crate::commands::fs::fs_write_text,
             crate::commands::fs::fs_delete,
             crate::commands::fs::fs_backup_list,
+            crate::commands::fs::fs_backup_read,
             crate::commands::fs::fs_restore,
             crate::commands::fs::fs_export_docx,
             crate::commands::fs::fs_export_xlsx,
@@ -251,6 +251,8 @@ macro_rules! all_commands {
             crate::commands::fs::fs_open_workspace,
             crate::commands::fs::fs_pick_workspace_dir,
             crate::commands::fs::fs_open_backups,
+            crate::commands::fs::fs_open,
+            crate::commands::fs::fs_reveal,
         ]
     };
 }

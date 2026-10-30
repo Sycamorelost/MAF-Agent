@@ -6,9 +6,10 @@
  */
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import Composer from '../components/Composer';
 import AgentPickerDialog from '../components/AgentPickerDialog';
-import { agentIconComponent } from '../components/icons';
+import { agentIconComponent, IconInfo } from '../components/icons';
 import { useSessionsStore } from '../stores/sessions';
 import { useProvidersStore } from '../stores/providers';
 import { useAgentsStore } from '../stores/agents';
@@ -16,6 +17,9 @@ import { DEFAULT_THINKING_LEVEL, useThinkingStore } from '../stores/thinking';
 import type { ThinkingSelection } from '../stores/thinking';
 import * as ipc from '../lib/ipc';
 import type { AttachmentMeta } from '../lib/ipc';
+
+/** 首页默认提示语(用户可在设置 · 主题与字体大小 · 首页中自定义)。 */
+export const DEFAULT_HOME_PROMPT = 'myAgent | 向更美好的生活出发！';
 
 /** 首页选中的待上传附件:文件本体 + 占位元数据(真正落盘要等会话创建后) */
 interface PendingFile {
@@ -52,6 +56,24 @@ export default function HomePage() {
   });
   const [thinkCap, setThinkCap] = useState<ipc.ReasoningCapability | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [greeting, setGreeting] = useState(DEFAULT_HOME_PROMPT);
+
+  // 首页提示语:读取设置里的自定义文案,并随设置保存实时更新
+  useEffect(() => {
+    let alive = true;
+    const apply = (s: ipc.AppSettings) => {
+      if (alive) setGreeting(s.home_prompt?.trim() || DEFAULT_HOME_PROMPT);
+    };
+    ipc
+      .getSettings()
+      .then(apply)
+      .catch(() => {});
+    const un = listen<ipc.AppSettings>('settings_changed', (e) => apply(e.payload));
+    return () => {
+      alive = false;
+      void un.then((f) => f());
+    };
+  }, []);
 
   useEffect(() => {
     if (!loaded) void load();
@@ -154,7 +176,8 @@ export default function HomePage() {
 
   return (
     <div className="stage home">
-      <h2 className="greeting">MAF Agent | 向更美好的生活出发！</h2>
+      <h2 className="greeting">{greeting}</h2>
+      <p className="sub">回答问题 · 检索资料 · 整理文档，从一个输入框开始</p>
 
       <Composer
         value={text}
@@ -192,6 +215,10 @@ export default function HomePage() {
           <span className="agent-chip-text">{agent?.name ?? '智能体'}</span>
         </button>
       </Composer>
+      <div className="home-note">
+        <IconInfo size={12} />
+        Enter 发送 · Shift + Enter 换行 · @ 召回记忆与知识库
+      </div>
 
       {error && (
         <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-caption)', color: 'var(--err)' }}>

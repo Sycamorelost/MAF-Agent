@@ -1,8 +1,6 @@
-//! MAF Agent 后端入口。
+//! myAgent 后端入口。
 //!
 //! 第三方来源声明 / Third-party attribution(详见仓库根目录 `LICENSE` 与 `NOTICE`):
-//! - nature-skills        <https://github.com/Yuan1z0825/nature-skills>   Apache-2.0
-//!   衍生:resources/skills/**、research/skills.rs(中文重构)
 //! - Deep-tutor           <https://github.com/hershate/Deep-tutor>        Apache-2.0
 //!   衍生:study/**、study/template.rs(Rust 重写)
 //! - Cherry Studio        <https://github.com/CherryHQ/cherry-studio>     AGPL-3.0
@@ -17,18 +15,22 @@ mod attachment;
 mod commands;
 mod db;
 mod doc;
+mod export;
 mod fs;
 mod gui;
 mod mcp;
 mod memory;
 mod navguard;
 mod paths;
+mod presets;
 mod provider;
-mod research;
+mod retrieval;
 mod selection;
 mod settings;
 mod study;
 mod sys;
+mod tasks;
+mod websearch;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
@@ -45,10 +47,10 @@ fn show_main_window(app: &AppHandle) {
 
 /// 创建系统托盘:左键点击 / 菜单「显示」恢复主窗口,菜单「退出」结束应用。
 fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    // 读取用户自定义应用名称(空 = "MAF Agent")
+    // 读取用户自定义应用名称(空 = "myAgent")
     let app_name = crate::settings::load()
         .custom_app_name
-        .unwrap_or_else(|| "MAF Agent".to_string());
+        .unwrap_or_else(|| "myAgent".to_string());
     let show_label = format!("显示 {}", app_name);
     let show = MenuItem::with_id(app, "tray_show", &show_label, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "tray_quit", "退出", true, None::<&str>)?;
@@ -86,11 +88,10 @@ pub fn run() {
         // M-15:顶级导航白名单(必须在静态 main 窗口创建前的 Builder 阶段注册)
         .plugin(navguard::init())
         .manage(memory::watcher::WatcherState::default())
-        .manage(commands::research::ResearchRegistry::default())
         .manage(commands::study::StudyRegistry::default())
         .manage(provider::rotation::RotationState::default())
         .manage(commands::provider::StreamCancelState::default())
-        .manage(commands::research::ExportPathTokens::default())
+        .manage(export::path::ExportPathTokens::default())
         .manage(commands::mcp::McpState(std::sync::Mutex::new(
             mcp::McpConfig::default(),
         )))
@@ -150,8 +151,7 @@ pub fn run() {
                 });
             }
 
-            // 科研增强:解析内置技能资源目录(未命中打包资源时回退源码树,注入层静默降级)
-            research::skills::init_resource(app.handle());
+            // 解析内置 AI 味资源目录(未命中打包资源时回退源码树,注入层静默降级)
             aiflavor::init_resource(app.handle());
 
             // Phase 1 §3.1:SQLite 初始化(建目录 + 打开 + 迁移)
@@ -160,13 +160,9 @@ pub fn run() {
                 std::io::Error::other(e)
             })?;
 
-            // L1:研究任务是进程内任务,重启后 running/paused 无法恢复,统一标记为中断
+            // 学习规划:generating 中的计划属进程内任务,重启后无法恢复,统一标记为中断
             match db::conn().lock() {
                 Ok(conn) => {
-                    if let Err(e) = research::store::mark_interrupted(&conn) {
-                        log::error!("mark interrupted research failed: {e}");
-                    }
-                    // 学习规划同款:generating 中的计划重启后无法恢复
                     if let Err(e) = study::store::mark_interrupted(&conn) {
                         log::error!("mark interrupted plans failed: {e}");
                     }

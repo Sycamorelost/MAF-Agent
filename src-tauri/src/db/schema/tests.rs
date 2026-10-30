@@ -10,7 +10,6 @@ fn migrate_creates_all_tables() {
         "sessions",
         "messages",
         "memory_versions",
-        "research_sessions",
         "messages_fts",
         "notes",
         "notes_fts",
@@ -39,6 +38,16 @@ fn migrate_creates_all_tables() {
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
     assert_eq!(v, SCHEMA_VERSION);
+
+    // V23:研究功能移除,新库不再创建 research_sessions
+    let n: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='research_sessions'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(n, 0, "research_sessions should not exist after V23");
 
     // 幂等:二次执行不报错
     migrate(&conn).unwrap();
@@ -101,10 +110,29 @@ fn migrate_creates_perf_indexes() {
 
 #[test]
 fn migrate_self_heals_version_drift() {
-    // 模拟漂移:user_version 已是 2,但 research_sessions 表缺失
+    // 模拟漂移:user_version 已是最新,但 V19 引入的 todos 表缺失
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch(MIGRATION_V1).unwrap();
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)
+        .unwrap();
+
+    migrate(&conn).unwrap();
+
+    let n: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='todos'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(n, 1, "drifted db should self-heal todos");
+}
+
+/// V23:旧库遗留的 research_sessions 在迁移后被删除。
+#[test]
+fn migrate_v23_drops_research_sessions() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE research_sessions(id TEXT PRIMARY KEY);")
         .unwrap();
 
     migrate(&conn).unwrap();
@@ -116,7 +144,7 @@ fn migrate_self_heals_version_drift() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(n, 1, "drifted db should self-heal research_sessions");
+    assert_eq!(n, 0, "legacy research_sessions should be dropped by V23");
 }
 
 /// FTS5 trigram:≥3 字符子串可命中(含中文);<3 字符由命令层回退 LIKE。
@@ -295,4 +323,116 @@ fn migrate_v9_backfills_linear_chain_in_main() {
         .collect::<rusqlite::Result<_>>()
         .unwrap();
     assert_eq!(chain, chain2);
+}
+
+/// V26:旧库(仅 V1 结构)迁移后自动补齐 preset_id / preset_version 两列(运行时预设钉住)。
+#[test]
+fn migrate_v26_adds_preset_columns_to_old_db() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(MIGRATION_V1).unwrap();
+
+    migrate(&conn).unwrap();
+
+    let has_col = |table: &str, col: &str| {
+        let mut stmt = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .unwrap();
+        let cols: Vec<String> = stmt
+            .query_map([], |r| r.get::<_, String>(1))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        cols.iter().any(|c| c == col)
+    };
+    assert!(has_col("sessions", "preset_id"));
+    assert!(has_col("sessions", "preset_version"));
+
+    // 幂等:二次执行不报错
+    migrate(&conn).unwrap();
+
+    // 新列可读写
+    conn.execute(
+        "INSERT INTO sessions(id, title, created, updated, preset_id, preset_version)
+         VALUES('s1','t','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','deep',1)",
+        [],
+    )
+    .unwrap();
+    let (pid, pv): (Option<String>, Option<i64>) = conn
+        .query_row(
+            "SELECT preset_id, preset_version FROM sessions WHERE id='s1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(pid.as_deref(), Some("deep"));
+    assert_eq!(pv, Some(1));
+}
+
+/// V27:doc_chunks_fts 随迁移创建(trigram),存量 doc_chunks 回填入索引,且幂等。
+#[test]
+fn migrate_v27_creates_doc_chunks_fts() {
+    let conn = Connection::open_in_memory().unwrap();
+    // 旧库:V1 + V22 风格的 doc_chunks,且已有存量块
+    conn.execute_batch(MIGRATION_V1).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE doc_chunks (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           session_id TEXT NOT NULL,
+           doc_id TEXT NOT NULL,
+           doc_name TEXT NOT NULL,
+           kind TEXT NOT NULL DEFAULT 'txt',
+           page INTEGER,
+           section TEXT NOT NULL DEFAULT '',
+           ord INTEGER NOT NULL,
+           content TEXT NOT NULL,
+           created TEXT NOT NULL
+         );",
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO doc_chunks(session_id, doc_id, doc_name, ord, content, section, created)
+         VALUES('s1','d1','白皮书.pdf',0,'定价策略分为按量计费与包年包月两种','第三章 定价','2026-01-01T00:00:00Z')",
+        [],
+    )
+    .unwrap();
+
+    migrate(&conn).unwrap();
+
+    // 表存在且为 trigram 分词
+    let sql: String = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='doc_chunks_fts'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(
+        sql.contains("trigram"),
+        "doc_chunks_fts should use trigram: {sql}"
+    );
+
+    // 存量块已回填(rowid = doc_chunks.id),章节标题也入索引
+    let n: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM doc_chunks_fts WHERE doc_chunks_fts MATCH '\"定价策略\"'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(n, 1, "existing chunk should be backfilled into fts");
+    let n: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM doc_chunks_fts WHERE doc_chunks_fts MATCH '\"第三章\"'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(n, 1, "section title should be indexed");
+
+    // 幂等:二次迁移不重复回填
+    migrate(&conn).unwrap();
+    let n: i64 = conn
+        .query_row("SELECT COUNT(*) FROM doc_chunks_fts", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 1);
 }

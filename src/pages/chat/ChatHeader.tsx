@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   IconCheck,
   IconChevronDown,
   IconDownload,
   IconEdit,
+  IconLayers,
+  IconList,
   IconPullRequest,
   IconTrash,
   IconX,
   IconBrain,
+  IconPanel,
+  IconChat,
 } from '../../components/icons';
+import { PresetChip } from '../../components/PresetChip';
+import { useWorkbenchChrome } from '../../lib/workbenchChrome';
 import { useMessagesStore } from '../../stores/messages';
 import { useSessionsStore } from '../../stores/sessions';
 import * as ipc from '../../lib/ipc';
-import { safeExportName } from '../research/helpers';
+import { safeExportName } from '../../lib/export/names';
 import { buildSessionHtml, buildSessionMarkdown } from './chatExport';
 
 /** 分支显示名:用户自定义 > 默认(主分支 / 分支 xxxx)。 */
@@ -25,6 +32,8 @@ function branchLabel(b: ipc.BranchInfo | undefined, fallbackId: string): string 
 interface ChatHeaderProps {
   title: string;
   sessionId: string;
+  /** 当前会话的生效形态:work 时头部多出示模式徽标、预设 chip 与检查器开关(ui-design b3)。 */
+  mode: 'chat' | 'work';
   activeBranch: string;
   /** 递增信号:同一分支内分叉后也强制重载分支列表 */
   branchRefresh: number;
@@ -41,6 +50,7 @@ interface ChatHeaderProps {
 export function ChatHeader({
   title,
   sessionId,
+  mode,
   activeBranch,
   branchRefresh,
   current,
@@ -54,6 +64,9 @@ export function ChatHeader({
   // ---------- F4:会话分支树 ----------
   const setActiveBranch = useSessionsStore((s) => s.setActiveBranch);
   const renameSession = useSessionsStore((s) => s.rename);
+  const setWorkbenchMode = useSessionsStore((s) => s.setWorkbenchMode);
+  const chrome = useWorkbenchChrome();
+  const nav = useNavigate();
   const [branches, setBranches] = useState<ipc.BranchInfo[]>([]);
   const [branchOpen, setBranchOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
@@ -220,6 +233,16 @@ export function ChatHeader({
           </button>
         </>
       )}
+      {/* b3:工作台模式下头部出示模式徽标与预设 chip(预设唯一入口,composer 只保留权限 chip) */}
+      {mode === 'work' && (
+        <>
+          <span className="mode-badge" title="当前会话使用专业 Agent 工作台">
+            <IconLayers size={12} />
+            专业
+          </span>
+          <PresetChip sessionId={sessionId} onError={onError} />
+        </>
+      )}
       {/* F4:分支指示条(仅多分支或激活分支非 main 时显示) */}
       {(branches.length > 1 || activeBranch !== 'main') && (
         <div className="branch-chip-wrap">
@@ -313,6 +336,57 @@ export function ChatHeader({
           )}
         </div>
       )}
+      <span className="sp" />
+      {mode === 'work' ? (
+        <>
+          <button
+            type="button"
+            className="btn-ghost btn-xs"
+            title="切到普通对话(仅此会话;不改变全局默认)"
+            onClick={() => {
+              void (async () => {
+                try {
+                  await setWorkbenchMode(sessionId, 'chat');
+                  nav(`/chat/${sessionId}`);
+                } catch (e) {
+                  onError(`切换普通对话失败:${e instanceof Error ? e.message : String(e)}`);
+                }
+              })();
+            }}
+          >
+            <IconChat size={12} />
+            切到普通对话
+          </button>
+          {chrome && (
+            <button
+              type="button"
+              className={`chat-panel-toggle${chrome.inspectorOpen ? ' on' : ''}`}
+              title={chrome.inspectorOpen ? '收起检查器' : '展开检查器'}
+              onClick={chrome.onToggleInspector}
+            >
+              <IconPanel size={15} />
+            </button>
+          )}
+        </>
+      ) : (
+        <button
+          type="button"
+          className="chat-panel-toggle"
+          title="切到工作台(仅此会话;不改变全局默认)"
+          onClick={() => {
+            void (async () => {
+              try {
+                await setWorkbenchMode(sessionId, 'work');
+                nav(`/work/${sessionId}`);
+              } catch (e) {
+                onError(`切换工作台失败:${e instanceof Error ? e.message : String(e)}`);
+              }
+            })();
+          }}
+        >
+          <IconLayers size={14} />
+        </button>
+      )}
       <button
         type="button"
         className="model-switch"
@@ -320,7 +394,7 @@ export function ChatHeader({
         title="切换本会话使用的模型"
       >
         <span className={`stat-dot ${current ? 'ok' : 'warn'}`} />
-        {current ? current.model : '未配置模型'}
+        <span className="model-name">{current ? current.model : '未配置模型'}</span>
         {current && <span className="tag">{current.providerId}</span>}
         <IconChevronDown size={13} />
       </button>
@@ -336,7 +410,7 @@ export function ChatHeader({
         </button>
         {exportMenuOpen && (
           <>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setExportMenuOpen(false)} />
+            <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-menu)' }} onClick={() => setExportMenuOpen(false)} />
             <div className="set-pop" style={{ right: 0, top: 'calc(100% + 4px)', minWidth: 150 }}>
               <button type="button" onClick={() => void runExport('md')}>Markdown</button>
               <button type="button" onClick={() => void runExport('html')}>HTML(可直接打开)</button>
@@ -344,22 +418,27 @@ export function ChatHeader({
           </>
         )}
       </div>
-      <button
-        type="button"
-        className={`chat-panel-toggle${outlineOpen ? ' on' : ''}`}
-        onClick={onToggleOutline}
-        title={outlineOpen ? '收起纲要面板' : '展开纲要面板'}
-      >
-        <span style={{ fontSize: 13, fontWeight: 700 }}>#</span>
-      </button>
-      <button
-        type="button"
-        className={`chat-panel-toggle${memCollapsed ? '' : ' on'}`}
-        onClick={onToggleMemPanel}
-        title={memCollapsed ? '展开记忆面板' : '收起记忆面板'}
-      >
-        <IconBrain size={15} />
-      </button>
+      {/* 工作台模式下纲要/记忆由检查器承载,头部不再重复入口 */}
+      {mode !== 'work' && (
+        <>
+          <button
+            type="button"
+            className={`chat-panel-toggle${outlineOpen ? ' on' : ''}`}
+            onClick={onToggleOutline}
+            title={outlineOpen ? '收起纲要面板' : '展开纲要面板'}
+          >
+            <IconList size={15} />
+          </button>
+          <button
+            type="button"
+            className={`chat-panel-toggle${memCollapsed ? '' : ' on'}`}
+            onClick={onToggleMemPanel}
+            title={memCollapsed ? '展开记忆面板' : '收起记忆面板'}
+          >
+            <IconBrain size={15} />
+          </button>
+        </>
+      )}
     </div>
   );
 }

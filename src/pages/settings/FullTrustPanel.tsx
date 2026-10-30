@@ -67,10 +67,10 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
         ONE_CLICK_TTL_SECS,
         undefined,
       );
-      setCapMsg(`✅ 已授权全部能力,${fmtTime(cap.expires_at)} 前工具调用不再弹窗`);
+      setCapMsg(`已授权全部能力,${fmtTime(cap.expires_at)} 前工具调用不再弹窗`);
       await refreshCaps();
     } catch (e: any) {
-      setCapMsg(`❌ 授权失败: ${e}`);
+      setCapMsg(`授权失败: ${e}`);
     } finally {
       setCapBusy(false);
     }
@@ -82,7 +82,7 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
       await refreshCaps();
       setCapMsg("已撤销该授权");
     } catch (e: any) {
-      setCapMsg(`❌ 撤销失败: ${e}`);
+      setCapMsg(`撤销失败: ${e}`);
     }
   };
 
@@ -109,9 +109,9 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
     try {
       await guiSavePolicy(next);
       setPolicy(next);
-      setGuiMsg("✅ GUI 策略已保存,对下一次工具调用生效");
+      setGuiMsg("GUI 策略已保存,对下一次工具调用生效");
     } catch (e: any) {
-      setGuiMsg(`❌ 保存失败: ${e}`);
+      setGuiMsg(`保存失败: ${e}`);
     } finally {
       setGuiBusy(false);
     }
@@ -135,7 +135,7 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
       setWins(list);
       setGuiMsg(list.length ? `发现 ${list.length} 个可见窗口` : "没有可见窗口");
     } catch (e: any) {
-      setGuiMsg(`❌ 枚举窗口失败: ${e}`);
+      setGuiMsg(`枚举窗口失败: ${e}`);
     }
   };
 
@@ -145,7 +145,7 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
       setPreview({ title: w.title, items });
       setGuiMsg(items.length ? `「${w.title}」发现 ${items.length} 个元素` : "未找到元素");
     } catch (e: any) {
-      setGuiMsg(`❌ ${e}`);
+      setGuiMsg(`错误: ${e}`);
     }
   };
 
@@ -189,7 +189,7 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
           </button>
         )}
       </div>
-      {capMsg && <div className={`mcp-msg${capMsg.startsWith("❌") ? " err" : ""}`}>{capMsg}</div>}
+      {capMsg && <div className={`mcp-msg${capMsg.startsWith("错误") || capMsg.includes("失败") ? " err" : ""}`}>{capMsg}</div>}
       {caps.length > 0 && (
         <div className="cap-list">
           {caps.map((c) => (
@@ -311,7 +311,7 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
         </span>
       </div>
 
-      {guiMsg && <div className={`mcp-msg${guiMsg.startsWith("❌") ? " err" : ""}`}>{guiMsg}</div>}
+      {guiMsg && <div className={`mcp-msg${guiMsg.startsWith("错误") || guiMsg.includes("失败") ? " err" : ""}`}>{guiMsg}</div>}
 
       {wins.length > 0 && (
         <div className="gui-win-list">

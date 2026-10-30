@@ -6,7 +6,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-3);
-  height: 32px;
+  height: calc(32px * var(--ui-scale));
   width: 280px;
   background: var(--bg-side);
   border: 1px solid var(--border);
@@ -49,7 +49,7 @@
   box-shadow: var(--shadow-card-h);
   max-height: 320px;
   overflow-y: auto;
-  z-index: 50;
+  z-index: var(--z-pop-card);
 }
 .gs-item {
   padding: var(--space-2) var(--space-3);
@@ -148,7 +148,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-lightbox);
   cursor: zoom-out;
 }
 .draw-lightbox img {
@@ -185,7 +185,7 @@
   position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
   background: var(--ink); color: #fff;
   padding: var(--space-2) var(--space-4); border-radius: var(--radius-m);
-  font-size: var(--font-caption); z-index: 200; box-shadow: var(--shadow-card-h);
+  font-size: var(--font-caption); z-index: var(--z-toast); box-shadow: var(--shadow-card-h);
 }
 
 /* ============ 联网开关激活态 & 来源卡(迭代 D2) ============ */
@@ -279,7 +279,7 @@
   flex-shrink: 0; width: 18px; height: 18px; padding: 0;
   border: none; background: transparent; color: var(--text-4);
   border-radius: var(--radius-s); cursor: pointer; line-height: 1;
-  font-size: 14px;
+  font-size: var(--font-body);
 }
 .ref-del:hover { background: var(--bg-hover); color: var(--err); }
 
@@ -386,7 +386,7 @@
 }
 .dw-card .meta .acts { display: flex; gap: var(--space-1); flex-shrink: 0; }
 .dw-card .meta .acts .a {
-  width: 24px; height: 24px; border: none; background: transparent;
+  width: calc(24px * var(--ui-scale)); height: calc(24px * var(--ui-scale)); border: none; background: transparent;
   border-radius: var(--radius-s);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; color: var(--text-3);
@@ -558,7 +558,7 @@
 .att-ops button.danger:hover { background: var(--bg-hover); color: var(--err); }
 
 .att-lightbox {
-  position: fixed; inset: 0; z-index: 400;
+  position: fixed; inset: 0; z-index: var(--z-lightbox);
   background: rgba(20, 20, 22, .72);
   display: flex; align-items: center; justify-content: center;
   cursor: zoom-out; padding: var(--space-4);
@@ -569,7 +569,7 @@
 }
 
 .att-modal-mask {
-  position: fixed; inset: 0; z-index: 400;
+  position: fixed; inset: 0; z-index: var(--z-lightbox);
   background: rgba(20, 20, 22, .45);
   display: flex; align-items: center; justify-content: center; padding: var(--space-4);
 }
@@ -602,7 +602,7 @@
 
 .att-toast {
   position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
-  z-index: 410; padding: 8px 16px;
+  z-index: var(--z-toast); padding: 8px 16px;
   background: var(--ink); color: #fff; border-radius: var(--radius-m);
   font-size: var(--font-caption); box-shadow: var(--shadow-card-h);
 }

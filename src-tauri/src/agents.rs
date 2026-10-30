@@ -61,6 +61,9 @@ pub struct AgentTemplate {
     /// 触发词(Skill 层,命中时提示切换智能体;Phase A 仅存储)
     #[serde(default)]
     pub triggers: Vec<String>,
+    /// 模板默认运行时预设(P5 / D19):None = 跟随全局默认;economy / standard / deep / code
+    #[serde(default)]
+    pub preset: Option<String>,
 }
 
 /// 合法分类(R3 A3 扩展:生活/学习/工作/学术四大方向)。
@@ -91,6 +94,7 @@ fn v2_defaults() -> AgentTemplate {
         temperature: None,
         doc_pipeline: String::new(),
         triggers: Vec::new(),
+        preset: None,
     }
 }
 
@@ -123,7 +127,7 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
         builtin: true,
         ..v2_defaults()
     };
-    vec![
+    let mut list = vec![
         // 一、Chat 类（3 个核心）
         t(
             "product-assistant",
@@ -221,10 +225,10 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
         // 四、Create 类（2 个核心）
         t(
             "deep-researcher",
-            "深度研究员",
+            "检索研究员",
             "search",
             "create",
-            "多轮检索 + 反思 + 综合输出(独立研究管线)",
+            "多轮联网检索 + 来源核对 + 结构化综述",
             "deepseek-v3",
             "summary",
             prompt_for("deep-researcher"),
@@ -482,7 +486,14 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
                 &[],
             )
         },
-    ]
+    ];
+    // P5 / D19:代码类模板默认「代码」预设;会话创建时钉住,之后可会话级覆盖。
+    for tpl in list.iter_mut() {
+        if tpl.category == "dev" {
+            tpl.preset = Some("code".into());
+        }
+    }
+    list
 }
 
 fn custom_path() -> PathBuf {

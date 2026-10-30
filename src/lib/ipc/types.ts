@@ -1,5 +1,11 @@
 // ============ 类型 ============
 
+/** 会话级工作台模式覆盖(D16):inherit = 跟随全局默认;chat / work = 强制。 */
+export type WorkbenchMode = 'inherit' | 'chat' | 'work';
+
+/** 会话级权限档覆盖(D11):inherit = 跟随全局审批策略;ask / workspace / full = 强制。 */
+export type PermissionMode = 'inherit' | 'ask' | 'workspace' | 'full';
+
 export interface SessionRow {
   id: string;
   title: string;
@@ -19,6 +25,16 @@ export interface SessionRow {
   agent_id: string | null;
   /** 当前激活分支(F4;'main' 或 8 位 hex) */
   active_branch: string;
+  /** 会话级工作台模式覆盖(D16) */
+  workbench_mode: WorkbenchMode;
+  /** 会话级权限档覆盖(D11 / V25) */
+  permission_mode: PermissionMode;
+  /** 会话级运行时预设钉住(V26 / D19;null = 继承 Agent/全局) */
+  preset_id: string | null;
+  /** 钉住时的预设清单版本(未钉住为 null) */
+  preset_version: number | null;
+  /** 所属文件夹(V28 / P8):null = 未分类 */
+  project_id: string | null;
 }
 
 /** Agent 模板(迭代 B2,与后端 AgentTemplate 对齐)。 */
@@ -58,6 +74,8 @@ export interface AgentTemplate {
   doc_pipeline?: string;
   /** 触发词(Skill 层,Phase A 仅存储) */
   triggers?: string[];
+  /** 模板默认运行时预设(P5 / D19;空 = 跟随全局默认) */
+  preset?: string | null;
 }
 
 /** 记忆注入策略(与后端 INJECTION_STRATEGIES 对齐)。 */
@@ -159,6 +177,10 @@ export type StreamChunk =
       server_name: string;
       content: string;
       ok: boolean;
+      /** 实际执行参数 JSON 摘要(截断 500;旧版本后端无此字段) */
+      arguments?: string | null;
+      /** 执行耗时(毫秒,不含审批等待;旧版本后端无此字段) */
+      elapsed_ms?: number | null;
     }
   | {
       type: 'done';

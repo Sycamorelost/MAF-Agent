@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { SessionRow, AgentTemplate, MemoryStrategy } from './types';
+import type { SessionRow, AgentTemplate, MemoryStrategy, WorkbenchMode, PermissionMode } from './types';
 
 // ============ session ============
 
@@ -25,6 +25,8 @@ export interface TodoItem {
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | string;
   /** high | medium | low */
   priority: 'high' | 'medium' | 'low' | string;
+  /** 关联的目标级任务 id(V25;可空,空 = 未关联) */
+  task_id?: string | null;
 }
 
 /** 初始拉取会话任务清单;后续变更由 `session-todos-{id}` 事件推送。 */
@@ -39,6 +41,10 @@ export const chatNoticeEvent = (sessionId: string) => `chat-notice-${sessionId}`
 
 export const renameSession = (id: string, title: string) =>
   invoke<void>('rename_session', { id, title });
+
+/** 克隆会话:新建「副本-{原标题}」,复制 project_id / settings / 全部消息。 */
+export const cloneSession = (id: string) =>
+  invoke<string>('clone_session', { id });
 
 /** 导出会话文件(前端组装内容,后端凭 pickSavePath 令牌写盘),返回实际写入路径。
  *  扩展名由令牌路径锁定,后端仅放行 .md / .html。 */
@@ -80,6 +86,14 @@ export const setSessionWebSearch = (id: string, enabled: boolean) =>
 /** 更新切换模型时的记忆注入策略(D3.1)。 */
 export const setSessionMemoryStrategy = (id: string, strategy: MemoryStrategy) =>
   invoke<void>('set_session_memory_strategy', { id, strategy });
+
+/** 更新会话级工作台模式覆盖(D16):inherit / chat / work。 */
+export const setSessionWorkbenchMode = (id: string, mode: WorkbenchMode) =>
+  invoke<void>('set_session_workbench_mode', { id, mode });
+
+/** 更新会话级权限档覆盖(D11):inherit / ask / workspace / full。 */
+export const setSessionPermissionMode = (id: string, mode: PermissionMode) =>
+  invoke<void>('set_session_permission_mode', { id, mode });
 
 // ============ Agent 模板(B2) ============
 

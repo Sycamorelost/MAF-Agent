@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as ipc from '../../lib/ipc';
+import { mcpLoadConfig } from '../../lib/ipc/mcp';
 import { ENGINES, NAV_VISIBILITY } from './constants';
 import type { SearchDraft } from './SearchView';
 
@@ -19,10 +20,19 @@ export function useGeneralSettings() {
   const [dirRestarting, setDirRestarting] = useState(false);
 
   const [searchCfg, setSearchCfg] = useState<ipc.SearchConfigDto | null>(null);
-  const [searchDraft, setSearchDraft] = useState({ engine: 'searxng', base_url: '', api_key: '' });
+  const [searchDraft, setSearchDraft] = useState({
+    mode: 'mcp' as ipc.SearchMode,
+    engine: 'searxng',
+    base_url: '',
+    api_key: '',
+    mcp_server: '',
+    mcp_tool: '',
+  });
   const [savingSearch, setSavingSearch] = useState(false);
   const [searchTestStatus, setSearchTestStatus] = useState<string | null>(null);
   const [searchTesting, setSearchTesting] = useState(false);
+  /** MCP 调用方式的下拉候选:已有服务名(工具名由后端 get_search_config 直接返回) */
+  const [mcpServerNames, setMcpServerNames] = useState<string[]>([]);
 
   // 翻译术语表(迭代 D6.1)
   const [glossary, setGlossary] = useState<ipc.GlossaryEntry[] | null>(null);
@@ -37,16 +47,42 @@ export function useGeneralSettings() {
     ipc.getDataDir().then(setDataDir).catch(() => {});
     ipc.getSearchConfig().then((c) => {
       setSearchCfg(c);
-      setSearchDraft((d) => ({ ...d, engine: c.engine, base_url: c.base_url }));
+      setSearchDraft((d) => ({
+        ...d,
+        mode: c.mode,
+        engine: c.engine,
+        base_url: c.base_url,
+        mcp_server: c.mcp_server,
+        mcp_tool: c.mcp_tool,
+      }));
     });
     ipc.glossaryList().then(setGlossary);
   }, []);
 
-  const engineLabel = ENGINES.find((e) => e.id === searchCfg?.engine)?.name ?? '未配置';
+  // MCP 调用方式:服务下拉候选(已保存的 MCP server);工具名由后端 get_search_config 实时返回,无需前端单独探测
+  useEffect(() => {
+    mcpLoadConfig()
+      .then((c) => setMcpServerNames(c.servers.map((s) => s.name)))
+      .catch(() => setMcpServerNames([]));
+  }, []);
+
+  // 当前端改选 MCP 服务时,重新拉一次完整配置(让后端用新服务探测工具名)
+  useEffect(() => {
+    if (searchDraft.mode !== 'mcp') return;
+    ipc.getSearchConfig().then(setSearchCfg).catch(() => {});
+  }, [searchDraft.mode, searchDraft.mcp_server]);
+
+  const engineLabel = searchCfg
+    ? searchCfg.mode === 'mcp'
+      ? `MCP · ${searchCfg.mcp_server_display || searchCfg.mcp_server || '联网搜索'}`
+      : (ENGINES.find((e) => e.id === searchCfg.engine)?.name ?? '未配置')
+    : '未配置';
   const engineReady = searchCfg
-    ? searchCfg.engine === 'searxng'
-      ? !!searchCfg.base_url
-      : searchCfg.has_api_key
+    ? searchCfg.mode === 'mcp'
+      ? searchCfg.mcp_ready && (!searchCfg.mcp_needs_key || searchCfg.has_api_key)
+      : searchCfg.engine === 'searxng'
+        ? !!searchCfg.base_url
+        : searchCfg.has_api_key
     : false;
 
   const onSaveSettings = async () => {
@@ -103,13 +139,23 @@ export function useGeneralSettings() {
     setSearchTestStatus(null);
     try {
       await ipc.saveSearchConfig({
+        mode: searchDraft.mode,
         engine: searchDraft.engine,
         base_url: searchDraft.base_url,
         api_key: searchDraft.api_key || null,
+        mcp_server: searchDraft.mcp_server,
+        mcp_tool: searchDraft.mcp_tool,
       });
       const c = await ipc.getSearchConfig();
       setSearchCfg(c);
-      setSearchDraft((d) => ({ ...d, base_url: c.base_url, api_key: '' }));
+      setSearchDraft((d) => ({
+        ...d,
+        mode: c.mode,
+        base_url: c.base_url,
+        api_key: '',
+        mcp_server: c.mcp_server,
+        mcp_tool: c.mcp_tool,
+      }));
     } catch (e) {
       setSearchTestStatus(`保存失败:${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -120,16 +166,31 @@ export function useGeneralSettings() {
   const onTestSearch = async () => {
     setSearchTesting(true);
     setSearchTestStatus('测试中…');
+    const t0 = performance.now();
+    const modeLabel = searchDraft.mode === 'mcp' ? 'MCP' : 'API';
     try {
-      const res = await ipc.searchTest('MAF Agent');
+      // 按当前草稿测(未保存也能验证「切换」是否真的生效)
+      const res = await ipc.searchTest('myAgent', {
+        mode: searchDraft.mode,
+        engine: searchDraft.engine,
+        base_url: searchDraft.base_url,
+        mcp_server: searchDraft.mcp_server,
+        mcp_tool: searchDraft.mcp_tool,
+      });
+      const ms = Math.round(performance.now() - t0);
       if (res.length === 0) {
-        setSearchTestStatus('测试成功,但未返回结果(可换关键词)');
+        setSearchTestStatus(`${modeLabel} 调用成功,但未返回结果(可换关键词)· ${ms}ms`);
       } else {
         const first = res[0];
-        setSearchTestStatus(`测试成功,返回 ${res.length} 条;示例:${first.title || first.url}`);
+        setSearchTestStatus(
+          `${modeLabel} 调用成功,返回 ${res.length} 条 · ${ms}ms;示例:${first.title || first.url}`,
+        );
       }
     } catch (e) {
-      setSearchTestStatus(`测试失败:${e instanceof Error ? e.message : String(e)}`);
+      const ms = Math.round(performance.now() - t0);
+      setSearchTestStatus(
+        `${modeLabel} 调用失败(${ms}ms):${e instanceof Error ? e.message : String(e)}`,
+      );
     } finally {
       setSearchTesting(false);
     }
@@ -237,6 +298,18 @@ export function useGeneralSettings() {
     void persistSettings({ ...settings, hidden_nav_items: hidden });
   };
 
+  /** 设置全局默认工作台模式(D16),即时保存并广播 settings_changed。 */
+  const setDefaultWorkbench = (mode: 'chat' | 'work') => {
+    if (!settings) return;
+    void persistSettings({ ...settings, default_workbench: mode });
+  };
+
+  /** 设置全局默认运行时预设(D19),即时保存;新建会话钉住该档,已有会话不变。 */
+  const setDefaultPreset = (presetId: string) => {
+    if (!settings) return;
+    void persistSettings({ ...settings, default_preset: presetId });
+  };
+
   /** 拖拽排序:把 fromKey 移动到 toKey 所在的位置(前后两个方向都支持)。 */
   const reorderNavItem = (fromKey: string, toKey: string) => {
     if (!settings) return;
@@ -261,6 +334,7 @@ export function useGeneralSettings() {
     savingSearch,
     searchTestStatus,
     searchTesting,
+    mcpServerNames,
     glossary,
     glossaryDirty,
     glossaryMsg,
@@ -284,5 +358,7 @@ export function useGeneralSettings() {
     onSaveSelection,
     toggleNavItem,
     reorderNavItem,
+    setDefaultWorkbench,
+    setDefaultPreset,
   };
 }

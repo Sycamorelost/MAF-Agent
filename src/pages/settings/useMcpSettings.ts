@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import {
   mcpLoadConfig,
   mcpSaveConfig,
@@ -30,7 +30,7 @@ export function useMcpSettings() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string>("");
   const [showAdd, setShowAdd] = useState(false);
-  const [policy, setPolicy] = useState<ApprovalPolicy>({ mode: "manual", allow: [] });
+  const [policy, setPolicy] = useState<ApprovalPolicy>({ mode: "workspace", allow: [] });
   const [allowText, setAllowText] = useState("");
   /** 文件工作区根目录与备份数量(内置 fs 工具的输出位置) */
   const [wsRoot, setWsRoot] = useState("");
@@ -81,7 +81,7 @@ export function useMcpSettings() {
       setCfg(newCfg);
       setMsg(next ? "已开启国内镜像(npx→npmmirror,uvx/pip→清华 PyPI)" : "已关闭国内镜像");
     } catch (e: any) {
-      setMsg(`❌ 保存镜像设置失败: ${e}`);
+      setMsg(`失败: 保存镜像设置失败: ${e}`);
     }
   };
 
@@ -106,7 +106,7 @@ export function useMcpSettings() {
     setMsg(
       checked
         ? "自由人格模式已开启:system 仅保留工具物理契约,身份/人格完全交给智能体或中转模型"
-        : "身份锚已恢复:system 追加「你是 MAF Agent 助手」",
+        : "身份锚已恢复:system 追加「你是 myAgent 助手」",
     );
   };
 
@@ -122,15 +122,15 @@ export function useMcpSettings() {
     );
   };
 
-  /** 切换审批模式(「解放双手」:自动 / 完全信任可让 Agent 连续执行)。 */
+  /** 切换审批档(D11 三档:逐次 / 工作区 / 完全信任)。 */
   const onPickMode = async (mode: ApprovalMode) => {
     setPolicy((p) => ({ ...p, mode }));
     try {
       await mcpSetApprovalPolicy({ ...policy, mode });
       const title = APPROVAL_MODES.find((m) => m.id === mode)?.title ?? mode;
-      setMsg(`审批模式已切换为「${title}」`);
+      setMsg(`审批档已切换为「${title}」`);
     } catch (e: any) {
-      setMsg(`❌ 保存审批模式失败: ${e}`);
+      setMsg(`失败: 保存审批档失败: ${e}`);
     }
   };
 
@@ -142,9 +142,9 @@ export function useMcpSettings() {
     setPolicy((p) => ({ ...p, allow }));
     try {
       await mcpSetApprovalPolicy({ ...policy, allow });
-      setMsg(`自定义白名单已保存(${allow.length} 项)`);
+      setMsg(`附加放行白名单已保存(${allow.length} 项)`);
     } catch (e: any) {
-      setMsg(`❌ 保存白名单失败: ${e}`);
+      setMsg(`失败: 保存白名单失败: ${e}`);
     }
   };
 
@@ -161,11 +161,11 @@ export function useMcpSettings() {
       const size = await mcpClearMemory();
       setMsg(
         size > 0
-          ? `✅ 已清除长期记忆数据(${(size / 1024).toFixed(1)} KB),相关 server 已停止`
+          ? `成功: 已清除长期记忆数据(${(size / 1024).toFixed(1)} KB),相关 server 已停止`
           : "长期记忆数据为空,无需清除",
       );
     } catch (e: any) {
-      setMsg(`❌ 清除失败: ${e}`);
+      setMsg(`失败: 清除失败: ${e}`);
     }
   };
 
@@ -203,9 +203,9 @@ export function useMcpSettings() {
     setMsg("已恢复默认工作区(数据目录/workspace)");
   };
 
-  const onOpenWorkspace = () => fsOpenWorkspace().catch((e) => setMsg(`❌ 打开工作区失败: ${e}`));
+  const onOpenWorkspace = () => fsOpenWorkspace().catch((e) => setMsg(`失败: 打开工作区失败: ${e}`));
 
-  const onOpenBackups = () => fsOpenBackups().catch((e) => setMsg(`❌ 打开备份目录失败: ${e}`));
+  const onOpenBackups = () => fsOpenBackups().catch((e) => setMsg(`失败: 打开备份目录失败: ${e}`));
 
   return {
     cfg,

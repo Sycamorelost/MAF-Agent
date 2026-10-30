@@ -4,10 +4,10 @@ import { effortHint, THINKING_LEVEL_LABEL } from './thinkingHint';
 describe('THINKING_LEVEL_LABEL', () => {
   it('四档均有显示名', () => {
     expect(THINKING_LEVEL_LABEL).toEqual({
-      light: 'Light',
-      medium: 'Medium',
-      high: 'High',
-      ultra: 'Ultra',
+      light: '轻量',
+      medium: '标准',
+      high: '深入',
+      ultra: '极限',
     });
   });
 });

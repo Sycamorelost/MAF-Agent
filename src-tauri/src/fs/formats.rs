@@ -25,18 +25,22 @@ pub struct ZipEntry {
 }
 
 /// 从工作区文件提取纯文本(按扩展名分派);绝对路径可指向本机任意文件。
-pub fn extract(rel: &str) -> Result<String, String> {
-    extract_in(&paths::workspace_root()?, rel)
+pub fn extract(rel: &str, session_id: Option<&str>) -> Result<String, String> {
+    extract_in(&paths::resolve_workspace_root(session_id)?, rel)
 }
 
 /// 列出 zip 内容。
-pub fn zip_list(rel: &str) -> Result<Vec<ZipEntry>, String> {
-    zip_list_in(&paths::workspace_root()?, rel)
+pub fn zip_list(rel: &str, session_id: Option<&str>) -> Result<Vec<ZipEntry>, String> {
+    zip_list_in(&paths::resolve_workspace_root(session_id)?, rel)
 }
 
 /// 解包 zip 到工作区目录,返回解包文件数。
-pub fn zip_extract(rel: &str, dest: &str) -> Result<usize, String> {
-    zip_extract_in(&paths::workspace_root()?, rel, dest)
+pub fn zip_extract(
+    rel: &str,
+    dest: &str,
+    session_id: Option<&str>,
+) -> Result<usize, String> {
+    zip_extract_in(&paths::resolve_workspace_root(session_id)?, rel, dest)
 }
 
 // ---------------- 内核 ----------------

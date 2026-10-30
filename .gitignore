@@ -14,6 +14,23 @@ src-tauri/gen/
 
 # ===== 本地数据（测试与真实数据应放在 D:\MyProject\Datas，不落地到仓库） =====
 data/
+data_old/
+examples/
+dev_plan/
+
+# ===== 旧测试 / 临时产物 =====
+*.bench.*
+*.perf.*
+__snapshots__/
+tmp/
+tmp_*
+.tmp/
+.cache/
+.parcel-cache/
+.vite/
+
+# ===== npx / npm 运行时缓存（首次下载 mcp server 时生成） =====
+*.tsbuildinfo
 
 # ===== 编辑器 =====
 .vscode/*
@@ -47,8 +64,8 @@ desktop.ini
 !.env.example
 
 # ===== 内部文档（审计报告 / 计划文档，不随仓库分发） =====
-# val.md：安全/功能/性能评估报告（含内部实测数据与运行环境细节）
-val.md
+# dev_plan/：开发全过程严格约束与参考（含 val.md 与界面设计稿），不参与 git
+dev_plan/
 plan/
 plans/
 *.audit.md

@@ -4,14 +4,15 @@
 //! 字符串被打进二进制,安装后恒为构建机的源码路径,用户无法自定义。
 //!
 //! 解析优先级(`init` 时确定并缓存):
-//!   1. 环境变量 `MAF_DATA_DIR`(调试/自动化)
+//!   1. 环境变量 `MYAGENT_DATA_DIR`(调试/自动化)
 //!   2. 引导配置 `config.json` 里的 `data_dir`
 //!   3. 历史兼容:`<源码目录>/data` 存在且含 `metaagent.db` → 采用(老版本升级不丢数据)
 //!   4. debug 构建 → `<源码目录>/data`(保持开发期行为,开发/测试数据留在 D 盘)
 //!   5. 其它 → 待定目录(先让 db::init 跑起来,随后由首次启动弹窗接管)
 //!
-//! 引导配置放在 `app.exe` 同目录(便携);该目录不可写时回退
-//! `%APPDATA%/<identifier>/config.json`(Tauri app_config_dir)。
+//! 引导配置放在 `%APPDATA%/<identifier>/config.json`(Tauri app_config_dir,安装版默认);
+//! 仅当 `app.exe` 同目录**已存在** config.json 时视为便携模式,读写都走 exe 旁(显式 opt-in,
+//! 避免 release 首启把数据静默写进安装目录)。
 
 use std::{
     collections::BTreeMap,
@@ -95,6 +96,22 @@ fn key(p: &Path) -> String {
         .to_lowercase()
 }
 
+/// 去掉 Windows `\\?\` 扩展前缀(UNC 形式还原为 `\\server\share`)。
+///
+/// `canonicalize` 会给存在的路径加 `\\?\` 前缀;该前缀只对 Win32 长路径 API 有意义,
+/// 一旦写进引导配置或被拼进工具参数/附件路径,SQLite、外部脚本与用户看到的都是带前缀的怪路径,
+/// 甚至被模型误当作 UNC 网络路径。配置与运行时解析统一使用普通形式。
+fn plain_path(p: &Path) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        p.to_path_buf()
+    }
+}
+
 /// 是否同一路径。
 fn same_path(a: &Path, b: &Path) -> bool {
     key(&canon(a)) == key(&canon(b))
@@ -117,10 +134,12 @@ fn is_writable(dir: &Path) -> bool {
 
 // ---------------- 引导配置 ----------------
 
-/// 引导配置目录:优先 exe 旁,不可写则回退 Tauri app_config_dir。
+/// 引导配置目录:exe 旁已有 config.json → 便携模式(exe 旁);否则 Tauri app_config_dir。
+/// 旧行为是「exe 可写就用 exe 旁」,release 首启会把数据写进安装目录(F3);现改为显式 opt-in:
+/// 想要便携模式,手工(或安装器)在 exe 旁放一个 config.json 即可。
 fn pick_config_dir(app: &tauri::AppHandle) -> PathBuf {
     let exe = exe_dir();
-    if is_writable(&exe) {
+    if exe.join("config.json").is_file() {
         return exe;
     }
     app.path().app_config_dir().unwrap_or_else(|_| {
@@ -168,8 +187,12 @@ fn legacy_data_dir() -> PathBuf {
 
 /// 按优先级解析数据目录(不依赖 AppHandle)。
 fn resolve_data_dir(boot: &Bootstrap) -> PathBuf {
+    plain_path(&resolve_data_dir_raw(boot))
+}
+
+fn resolve_data_dir_raw(boot: &Bootstrap) -> PathBuf {
     // 1. 环境变量覆盖
-    if let Some(v) = env::var_os("MAF_DATA_DIR")
+    if let Some(v) = env::var_os("MYAGENT_DATA_DIR")
         && !v.is_empty()
     {
         return PathBuf::from(v);
@@ -252,7 +275,7 @@ pub fn init(app: &tauri::AppHandle) -> Result<(), String> {
                 // 迁移失败:保留标志位,本次回退到旧目录运行,下次启动自动重试(幂等)
                 log::error!("data dir migration failed: {e}");
                 let _ = MIGRATION_ERROR.set(e);
-                resolved = from;
+                resolved = plain_path(&from);
             }
         }
     }
@@ -276,7 +299,7 @@ pub fn set_data_dir(new_dir: &Path, migrate: bool) -> Result<SetDirResult, Strin
     // 与当前目录相同 = 仅确认配置,无需重启
     if same_path(&cur, new_dir) {
         let mut b = read_bootstrap();
-        b.data_dir = Some(canon(&cur).display().to_string());
+        b.data_dir = Some(plain_path(&canon(&cur)).display().to_string());
         b.pending_migration_from = None;
         write_bootstrap(&b)?;
         return Ok(SetDirResult {
@@ -302,16 +325,16 @@ pub fn set_data_dir(new_dir: &Path, migrate: bool) -> Result<SetDirResult, Strin
         return Err("该目录不可写,请另选一个".into());
     }
     if n.join("metaagent.db").exists() {
-        return Err("该目录已存在 MAF Agent 数据(metaagent.db),请另选一个,避免覆盖".into());
+        return Err("该目录已存在 myAgent 数据(metaagent.db),请另选一个,避免覆盖".into());
     }
 
     let pending = if migrate && cur.exists() {
-        Some(c.display().to_string())
+        Some(plain_path(&c).display().to_string())
     } else {
         None
     };
     let b = Bootstrap {
-        data_dir: Some(n.display().to_string()),
+        data_dir: Some(plain_path(&n).display().to_string()),
         pending_migration_from: pending.clone(),
     };
     write_bootstrap(&b)?;
@@ -563,14 +586,32 @@ mod tests {
     }
 
     #[test]
+    fn plain_path_strips_win32_extended_prefix() {
+        // 配置里可能已经存了带 `\\?\` 的历史值;解析后必须回到普通形式
+        assert_eq!(
+            plain_path(Path::new(r"\\?\D:\MeatAgentFloat\mydata")),
+            PathBuf::from(r"D:\MeatAgentFloat\mydata")
+        );
+        // UNC 共享路径还原成 `\\server\share`,而不是保留 `\\?\UNC\`
+        assert_eq!(
+            plain_path(Path::new(r"\\?\UNC\srv\share\data")),
+            PathBuf::from(r"\\srv\share\data")
+        );
+        // 普通路径原样返回
+        let p = PathBuf::from(r"D:\plain\dir");
+        assert_eq!(plain_path(&p), p);
+    }
+
+    #[test]
     fn bootstrap_roundtrip() {
+        // 纯字符串往返,不触盘;夹具路径用中性占位(不再硬编码品牌历史目录)
         let b = Bootstrap {
-            data_dir: Some("D:\\MAFData".into()),
+            data_dir: Some("C:\\tmp\\maf-fixture".into()),
             pending_migration_from: Some("C:\\old".into()),
         };
         let text = serde_json::to_string(&b).unwrap();
         let back: Bootstrap = serde_json::from_str(&text).unwrap();
-        assert_eq!(back.data_dir.as_deref(), Some("D:\\MAFData"));
+        assert_eq!(back.data_dir.as_deref(), Some("C:\\tmp\\maf-fixture"));
         assert_eq!(back.pending_migration_from.as_deref(), Some("C:\\old"));
         // 旧版可能只有 data_dir 字段
         let only: Bootstrap = serde_json::from_str("{\"data_dir\":\"D:\\\\x\"}").unwrap();

@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
-import { IconCheck, IconCopy } from './icons';
+import { IconCheck, IconChevronDown, IconChevronRight, IconCopy } from './icons';
 import MermaidBlock from './MermaidBlock';
 import EchartsBlock from './EchartsBlock';
 import { ToolTrace } from './ToolTrace';
@@ -63,7 +63,11 @@ export function CodeBlock({
         title={collapsible ? (collapsed ? '展开代码' : '收起代码') : undefined}
       >
         <span className="codeblock-meta">
-          {collapsible && <span className="codeblock-caret">{collapsed ? '▸' : '▾'}</span>}
+          {collapsible && (
+            <span className="codeblock-caret">
+              {collapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}
+            </span>
+          )}
           <span>{lang || 'CODE'}</span>
           {collapsible && <span className="codeblock-lines">{lines} 行</span>}
         </span>

@@ -16,7 +16,11 @@ export default function McpApprovalDialog() {
   useEffect(() => {
     const unlisten = listen<ApprovalRequest>(
       "mcp-approval-request",
-      (e) => setReq(e.payload),
+      (e) => {
+        setReq(e.payload);
+        // 供工作台运行状态条(P4)感知「等待审批」阶段
+        window.dispatchEvent(new CustomEvent("mcp-approval-pending", { detail: true }));
+      },
     );
     return () => {
       unlisten.then((fn) => fn());
@@ -26,7 +30,10 @@ export default function McpApprovalDialog() {
   if (!req) return null;
 
   const resolve = (result: ApprovalResult) => {
-    mcpResolveApproval(req.approval_id, result).then(() => setReq(null));
+    mcpResolveApproval(req.approval_id, result).then(() => {
+      setReq(null);
+      window.dispatchEvent(new CustomEvent("mcp-approval-pending", { detail: false }));
+    });
   };
 
   return (

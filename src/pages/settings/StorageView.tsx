@@ -145,10 +145,6 @@ export function StorageView({
                 <td className="mn">data/provider_models.json</td>
               </tr>
               <tr>
-                <td>深度研究</td>
-                <td className="mn">data/research/&#123;id&#125;/report.md</td>
-              </tr>
-              <tr>
                 <td>密钥(加密)</td>
                 <td className="mn">data/secrets/&#123;provider&#125;.bin</td>
               </tr>

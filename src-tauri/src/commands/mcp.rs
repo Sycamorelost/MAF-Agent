@@ -15,7 +15,7 @@ pub struct McpState(pub Mutex<McpConfig>);
 // ============ 配置管理(Phase 4) ============
 
 #[tauri::command]
-pub fn mcp_load_config(state: State<'_, McpState>) -> Result<McpConfig, String> {
+pub async fn mcp_load_config(state: State<'_, McpState>) -> Result<McpConfig, String> {
     let dir = data_dir_fn();
     let cfg = mcp::load_or_init(&dir);
     if let Ok(mut g) = state.0.lock() {
@@ -98,18 +98,18 @@ pub async fn mcp_clear_memory(
 
 /// 读取审批策略(手动 / 自动 / 完全访问 / 自定义)。文件缺失 → 手动审批。
 #[tauri::command]
-pub fn mcp_get_approval_policy() -> Result<ApprovalPolicy, String> {
+pub async fn mcp_get_approval_policy() -> Result<ApprovalPolicy, String> {
     Ok(mcp::approval::load_policy(&data_dir_fn()))
 }
 
 /// 保存审批策略 —— 立即对下一次工具调用生效(dispatcher 每次读文件)。
 #[tauri::command]
-pub fn mcp_set_approval_policy(policy: ApprovalPolicy) -> Result<(), String> {
+pub async fn mcp_set_approval_policy(policy: ApprovalPolicy) -> Result<(), String> {
     mcp::approval::save_policy(&data_dir_fn(), &policy)
 }
 
 #[tauri::command]
-pub fn mcp_add_server(server: McpServerConfig, state: State<'_, McpState>) -> Result<(), String> {
+pub async fn mcp_add_server(server: McpServerConfig, state: State<'_, McpState>) -> Result<(), String> {
     if server.name.is_empty() {
         return Err("name 不能为空".into());
     }
@@ -139,7 +139,7 @@ pub fn mcp_add_server(server: McpServerConfig, state: State<'_, McpState>) -> Re
 }
 
 #[tauri::command]
-pub fn mcp_remove_server(name: String, state: State<'_, McpState>) -> Result<(), String> {
+pub async fn mcp_remove_server(name: String, state: State<'_, McpState>) -> Result<(), String> {
     let mut cfg = state
         .0
         .lock()
@@ -241,13 +241,22 @@ pub async fn mcp_call_tool_with_approval(
         return Ok(runtime.call_tool(call, dir).await);
     }
 
-    // 能力令牌:与 ChatStream 主链路同一顺序(会话允许 → 令牌 → 弹窗);
-    // 令牌已并入「完全信任」总开关,非完全信任模式不消费(回落弹窗)
+    // 完全信任:跳过能力令牌和审批弹窗,直接调用(只保留审计)
+    if mcp::approval::load_policy(&dir).mode == mcp::ApprovalMode::Full {
+        mcp::audit(
+            &dir,
+            "full_trust_call",
+            &call.server_name,
+            &call.tool_name,
+            "mode=full;跳过审批直接执行",
+        );
+        return Ok(runtime.call_tool(call, dir).await);
+    }
+
+    // 能力令牌(仅非完全信任模式消费;Full 模式已在上方提前返回)
     let risk = mcp::approval::assess_risk(&call.server_name, &call.tool_name, &call.arguments);
     let scope = mcp::builtin::capability_scope(&call.server_name, &call.tool_name, risk);
-    if mcp::approval::load_policy(&dir).mode == mcp::ApprovalMode::Full
-        && let Some(cap) = capability.consume(scope)
-    {
+    if let Some(cap) = capability.consume(scope) {
         mcp::audit(
             &dir,
             "capability_use",
@@ -376,7 +385,7 @@ pub struct NowResult {
 }
 
 #[tauri::command]
-pub fn get_now(_tz: Option<String>) -> Result<NowResult, String> {
+pub async fn get_now(_tz: Option<String>) -> Result<NowResult, String> {
     use chrono::Local;
     let now = Local::now();
     let weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
@@ -400,10 +409,13 @@ pub fn get_now(_tz: Option<String>) -> Result<NowResult, String> {
 /// 汇总内置工具与已启动 MCP server 的工具,转成 OpenAI function-calling 定义。
 /// R4/D2:只读内置工具默认下发(长文档 doc_search 不再依赖工具总开关);
 /// 写入/执行类工具与 MCP server 工具仍需打开总开关。
+/// P5/D18:按会话生效预设的 tools.include/exclude 裁剪(内置与 MCP 工具共用同一名单);
+/// session_id 为空或会话不存在时不过滤(保持既有调用方行为)。
 #[tauri::command]
 pub async fn mcp_collect_tools(
     runtime: State<'_, McpRuntime>,
     state: State<'_, McpState>,
+    session_id: Option<String>,
 ) -> Result<Vec<crate::provider::ToolDef>, String> {
     let dir = data_dir_fn();
     let (tools_enabled, builtin_enabled) = state
@@ -423,7 +435,13 @@ pub async fn mcp_collect_tools(
     if full_trust {
         out.extend(crate::gui::tools::tool_defs());
     }
-    // 总开关关闭:不再下发 MCP server 工具与写入类内置工具
+    // 写入/执行类内置工具(shell / fs 写 / 导出 / 解包):内置开关打开时才下发。
+    // 注意:必须在 tools_enabled 提前返回之前下发 —— 内置工具只受 builtin_tools 门控,
+    // tools_enabled 管的是 MCP server 工具;放 return 之后会导致内置写工具永不下发。
+    if builtin_enabled {
+        out.extend(super::mcp_builtin_tools::write_tool_defs());
+    }
+    // 总开关关闭:不再下发 MCP server 工具
     if !tools_enabled {
         return Ok(out);
     }
@@ -509,9 +527,14 @@ pub async fn mcp_collect_tools(
             });
         }
     }
-    // 写入/执行类内置工具(shell / fs 写 / 导出 / 解包):总开关打开时才下发
-    if builtin_enabled {
-        out.extend(super::mcp_builtin_tools::write_tool_defs());
+    // P5 / D18:按会话生效预设裁剪(钉住 > Agent 模板 > 全局默认)。
+    if let Some(sid) = session_id.as_deref()
+        && let Ok(Some(s)) = crate::db::sessions::get(sid)
+    {
+        let info = super::presets::resolve_for(&s);
+        out = crate::presets::resolve::filter_defs(&info.preset.tools, out, |t| {
+            t.function.name.as_str()
+        });
     }
     Ok(out)
 }

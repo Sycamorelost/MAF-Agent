@@ -1,7 +1,7 @@
 //! SQLite schema 定义与迁移。
 //!
 //! 对应 plan/01-phase1-mvp.md §3.1。
-//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION(22)。
+//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION(27)。
 //!
 //! 拆分(§10.2.1):`migrate_v1` 收敛 V1–V15 的迁移 SQL 与自愈式加列助手,
 //! `v16` 收敛 V16–V22 的迁移 SQL;版本执行顺序仍由本文件统一编排。
@@ -24,7 +24,54 @@ use v16::{
 };
 
 /// 当前 schema 版本。每次结构变更 +1 并追加迁移 SQL。
-pub const SCHEMA_VERSION: i32 = 22;
+pub const SCHEMA_VERSION: i32 = 30;
+
+/// V29(P8.1 项目化升级):folders → projects,加字段对齐 Cursor Projects 设计。
+/// - 重命名 folders → projects(SQLite ALTER TABLE RENAME)
+/// - 加 model_override TEXT(项目级默认模型,覆盖全局)
+/// - 加 shared_context TEXT(项目级共享系统提示/记忆)
+/// - sessions.folder_id → sessions.project_id
+/// UI 视觉不变,内部概念从「文件夹」升级为「项目」。
+///
+/// 注意:V29 DDL 不在 SQL 常量里写,而是在 migrate() 里用 Rust 条件化执行
+/// (先查 sqlite_master / pragma_table_info 再决定执行哪条 DDL),保证幂等。
+
+/// V28(P8 工作台文件夹化):folders 表 + sessions.folder_id 列。
+///
+/// V28.1 增补:folders.path 列(真实磁盘目录路径)。
+/// 文件夹 = 用户从磁盘选一个本地目录,系统挂载为「项目文件夹」;
+/// 每个文件夹下可以有多个任务会话。未选时回退到全局 workspace_root。
+const MIGRATION_V28_FOLDERS: &str = "
+CREATE TABLE IF NOT EXISTS folders (
+  id       TEXT PRIMARY KEY,
+  name     TEXT NOT NULL,
+  path     TEXT NOT NULL DEFAULT '',
+  sort     INTEGER NOT NULL DEFAULT 0,
+  created  TEXT NOT NULL,
+  updated  TEXT NOT NULL
+);
+";
+
+/// V23(P1 结构调整):深度研究功能整体移除,删除研究会话表。
+/// 依据 D2 不做数据导出;历史产物文件 data/research/** 保留在数据目录,由用户自行清理。
+const MIGRATION_V23_DROP_RESEARCH: &str = "DROP TABLE IF EXISTS research_sessions;";
+
+/// V25(P4 结构调整):专业工作台任务表。plan 只存结构化 JSON(步骤/状态),不存大段正文。
+/// created/updated 为 RFC3339 文本(与 sessions 表口径一致)。
+const MIGRATION_V25_TASKS: &str = "
+CREATE TABLE IF NOT EXISTS tasks (
+  id         TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  goal       TEXT NOT NULL DEFAULT '',
+  status     TEXT NOT NULL DEFAULT 'pending',
+  priority   TEXT NOT NULL DEFAULT 'normal',
+  plan       TEXT,
+  created    TEXT NOT NULL,
+  updated    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id, created);
+";
 
 /// 快路径判定(PERF-2):`user_version` 已是最新且核心表齐全时,可跳过全量 DDL 与回填。
 ///
@@ -37,10 +84,10 @@ fn is_schema_ready(conn: &Connection) -> rusqlite::Result<bool> {
     }
     const CORE: &[&str] = &[
         "sessions",
+        "projects",
         "messages",
         "messages_fts",
         "memory_versions",
-        "research_sessions",
         "branches",
         "notes",
         "notes_fts",
@@ -54,6 +101,9 @@ fn is_schema_ready(conn: &Connection) -> rusqlite::Result<bool> {
         "reviews",
         "todos",
         "doc_chunks",
+        "doc_chunks_fts",
+        "tasks",
+        "tool_call_log",
     ];
     let placeholders = vec!["?"; CORE.len()].join(",");
     let sql = format!("SELECT COUNT(*) FROM sqlite_master WHERE name IN ({placeholders})");
@@ -156,33 +206,6 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "TEXT NOT NULL DEFAULT 'main'",
     )?;
     tx.execute_batch(MIGRATION_BRANCHES)?;
-    // V12(专项研究):研究模式 / 当前阶段 / 来源方案名
-    ensure_column(
-        &tx,
-        "research_sessions",
-        "mode",
-        "TEXT NOT NULL DEFAULT 'legacy'",
-    )?;
-    ensure_column(
-        &tx,
-        "research_sessions",
-        "current_stage",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
-    ensure_column(&tx, "research_sessions", "blueprint_name", "TEXT")?;
-    // V13(专项研究 M4):阶段进度回写列,列表页零文件 IO(StageDone/StageSkipped 时更新)
-    ensure_column(
-        &tx,
-        "research_sessions",
-        "stages_done",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
-    ensure_column(
-        &tx,
-        "research_sessions",
-        "stages_total",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
     // V10(API 流转):用量记录表
     tx.execute_batch(MIGRATION_USAGE)?;
     // V11(Phase 2):助手归因 + 成本定价快照(旧库自愈式加列)
@@ -230,6 +253,173 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     tx.execute_batch(MIGRATION_V21_AIFLAVOR)?;
     // V22(R3 C1):文档驻留层(doc_chunks)。
     tx.execute_batch(MIGRATION_V22_DOC_CHUNKS)?;
+    // V23:移除深度研究功能(建表语句已随 V2 退役,此处清理旧库遗留表)。
+    tx.execute_batch(MIGRATION_V23_DROP_RESEARCH)?;
+    // V24(P3 结构调整):会话级工作台模式覆盖(D16)。inherit = 跟随全局 default_workbench。
+    ensure_column(
+        &tx,
+        "sessions",
+        "workbench_mode",
+        "TEXT NOT NULL DEFAULT 'inherit'",
+    )?;
+    // V25(P4 结构调整):专业工作台任务模型 + 权限三档会话级覆盖(D8/D11)。
+    //   - tasks:目标级任务(步骤级清单仍在 todos,task_id 可空关联,旧数据按会话维度继续工作);
+    //   - sessions.permission_mode:inherit = 跟随全局审批档;ask/workspace/full = 会话覆盖。
+    tx.execute_batch(MIGRATION_V25_TASKS)?;
+    ensure_column(&tx, "todos", "task_id", "TEXT")?;
+    tx.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_todos_task ON todos(task_id, item_id);",
+    )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "permission_mode",
+        "TEXT NOT NULL DEFAULT 'inherit'",
+    )?;
+    // V26(P5 结构调整 / D19):会话级运行时预设钉住。
+    //   - preset_id:NULL = 继承(Agent 模板默认 → 全局默认);非空 = 会话钉住的预设 id;
+    //   - preset_version:钉住时的内置预设清单版本,老会话不随内置预设升级漂移。
+    ensure_column(&tx, "sessions", "preset_id", "TEXT")?;
+    ensure_column(&tx, "sessions", "preset_version", "INTEGER")?;
+    // V27(P7 检索升级):doc_chunks 的 FTS5 trigram 索引(内容 + 章节标题一并入索引)。
+    // 旧定义若非 trigram 则重建;rowid 直接复用 doc_chunks.id(INTEGER PRIMARY KEY)。
+    let doc_fts_sql: Option<String> = tx
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='doc_chunks_fts'",
+            [],
+            |r| r.get(0),
+        )
+        .ok();
+    if let Some(sql) = doc_fts_sql
+        && !sql.contains("trigram")
+    {
+        tx.execute_batch("DROP TABLE doc_chunks_fts;")?;
+    }
+    tx.execute_batch(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS doc_chunks_fts USING fts5(content, tokenize='trigram');",
+    )?;
+    // 存量回填(幂等):章节标题入索引,使「按章节名检索」也能命中。
+    tx.execute_batch(
+        "INSERT INTO doc_chunks_fts(rowid, content)
+         SELECT id, section || ' ' || content FROM doc_chunks
+         WHERE id NOT IN (SELECT rowid FROM doc_chunks_fts);",
+    )?;
+    // V28(P8 工作台文件夹化):folders 表 + sessions.folder_id 列。
+    // 先加列(后才能建 index),再建文件夹表,最后建复合索引。
+    // 注意 V29 会把 folders rename 成 projects,所以这里也要条件化。
+    let has_folders_v28: bool = tx
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='folders'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    let has_projects_v28: bool = tx
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    let has_projects_col: bool = tx
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='project_id'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    let has_folders_col: bool = tx
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='folder_id'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    // sessions 的文件夹列:优先用 project_id,旧库可能还是 folder_id
+    if !has_projects_col && !has_folders_col {
+        ensure_column(&tx, "sessions", "folder_id", "TEXT")?;
+    }
+    // folders/projects 表:如果两个都不存在,建 folders(V29 会 rename)
+    if !has_folders_v28 && !has_projects_v28 {
+        tx.execute_batch(MIGRATION_V28_FOLDERS)?;
+        ensure_column(&tx, "folders", "path", "TEXT NOT NULL DEFAULT ''")?;
+    }
+    // V29(P8.1 项目化升级):folders → projects,加 model_override + shared_context
+    // sessions.folder_id → sessions.project_id。
+    // 幂等:先检查表实际状态再决定执行哪条 DDL。
+    let has_folders: bool = tx
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='folders'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    let has_projects: bool = tx
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    let has_sessions_project_id: bool = tx
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='project_id'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    let has_sessions_folder_id: bool = tx
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='folder_id'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    // 1) folders 表存在 + projects 表不存在 → rename
+    if has_folders && !has_projects {
+        tx.execute_batch("ALTER TABLE folders RENAME TO projects;")?;
+    }
+    // 2) sessions.folder_id 存在 + project_id 不存在 → rename column
+    if has_sessions_folder_id && !has_sessions_project_id {
+        tx.execute_batch(
+            "ALTER TABLE sessions RENAME COLUMN folder_id TO project_id;",
+        )?;
+    }
+    // 3) projects 表存在且缺 model_override / shared_context → 加列
+    if has_projects {
+        let cols: Vec<String> = tx
+            .prepare("SELECT name FROM pragma_table_info('projects')")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|c| c.ok())
+            .collect();
+        if !cols.contains(&"model_override".to_string()) {
+            tx.execute_batch(
+                "ALTER TABLE projects ADD COLUMN model_override TEXT;",
+            )?;
+        }
+        if !cols.contains(&"shared_context".to_string()) {
+            tx.execute_batch(
+                "ALTER TABLE projects ADD COLUMN shared_context TEXT;",
+            )?;
+        }
+    }
+    // 4) 索引:projects 存在就建新的,sessions 上就建
+    tx.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, updated);",
+    )?;
+    tx.execute_batch("DROP INDEX IF EXISTS idx_sessions_folder;")?;
     // 旧数据回填:main 分支内按 id 顺序形成线性链。
     // 仅回填 main:其他分支首条消息的 parent_id 可能合法为 NULL(从会话开头分叉),
     // 且 fork 消息的 parent 在写入时已显式设置,不在此 touched。
@@ -238,6 +428,21 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
            SELECT MAX(m2.id) FROM messages m2
            WHERE m2.session_id = messages.session_id AND m2.id < messages.id
          ) WHERE parent_id IS NULL AND branch_id = 'main';",
+    )?;
+    // V30(P8.2 审计日志):MCP 工具调用审计表(写入/执行类工具每次调用记录一条)。
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS tool_call_log (
+           id           INTEGER PRIMARY KEY AUTOINCREMENT,
+           session_id   TEXT NOT NULL,
+           project_id   TEXT,
+           tool_name    TEXT NOT NULL,
+           target_path  TEXT,
+           args_preview TEXT,
+           result       TEXT,
+           created      TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+         );
+         CREATE INDEX IF NOT EXISTS idx_tool_call_log_session ON tool_call_log(session_id, created);
+         CREATE INDEX IF NOT EXISTS idx_tool_call_log_project ON tool_call_log(project_id, created);",
     )?;
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

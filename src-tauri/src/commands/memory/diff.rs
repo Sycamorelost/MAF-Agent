@@ -11,7 +11,7 @@ use crate::memory::{self, watcher::WatcherState};
 
 /// 读取 memory.md(frontmatter + body)。
 #[tauri::command]
-pub fn read_memory(session_id: String) -> Result<MemoryDto, String> {
+pub async fn read_memory(session_id: String) -> Result<MemoryDto, String> {
     let (fm, body) = memory::read_memory(&session_id)?;
     Ok(MemoryDto {
         frontmatter: fm,
@@ -21,7 +21,7 @@ pub fn read_memory(session_id: String) -> Result<MemoryDto, String> {
 
 /// 写入 memory.md(自动快照旧版到 memory.versions/ 并写表)。
 #[tauri::command]
-pub fn write_memory(
+pub async fn write_memory(
     session_id: String,
     content: String,
     note: Option<String>,
@@ -32,7 +32,7 @@ pub fn write_memory(
 /// 追加文本到 memory.md 指定节(缺省「资料」,节名限定 KNOWN_SECTIONS 白名单;自动补标题)。
 /// note 统一记为 pin_message(消息钉入 / 来源存入 / 研究报告存入均属钉入行为)。
 #[tauri::command]
-pub fn append_memory(
+pub async fn append_memory(
     session_id: String,
     text: String,
     section: Option<String>,
@@ -105,13 +105,13 @@ pub(crate) fn append_to_section(body: &str, heading: &str, text: &str) -> String
 
 /// 手动触发一次版本快照,返回该版本的数字 id(可直接用于 rollback/read_version)。
 #[tauri::command]
-pub fn snapshot_memory(session_id: String, note: Option<String>) -> Result<i64, String> {
+pub async fn snapshot_memory(session_id: String, note: Option<String>) -> Result<i64, String> {
     memory::snapshot_version(&session_id, note.as_deref().unwrap_or("manual"))
 }
 
 /// 列出会话的历史版本(倒序)。
 #[tauri::command]
-pub fn list_memory_versions(session_id: String) -> Result<Vec<VersionItem>, String> {
+pub async fn list_memory_versions(session_id: String) -> Result<Vec<VersionItem>, String> {
     let rows = memory::list_versions(&session_id)?;
     Ok(rows
         .into_iter()
@@ -121,18 +121,18 @@ pub fn list_memory_versions(session_id: String) -> Result<Vec<VersionItem>, Stri
 
 /// 回滚到指定版本。
 #[tauri::command]
-pub fn rollback_memory(session_id: String, version_id: i64) -> Result<(), String> {
+pub async fn rollback_memory(session_id: String, version_id: i64) -> Result<(), String> {
     memory::rollback_to(&session_id, version_id)
 }
 
 /// 读取指定历史版本的完整快照内容(迭代 D3.3 版本 diff 用)。
 #[tauri::command]
-pub fn read_memory_version(session_id: String, version_id: i64) -> Result<String, String> {
+pub async fn read_memory_version(session_id: String, version_id: i64) -> Result<String, String> {
     memory::read_version(&session_id, version_id)
 }
 
 #[tauri::command]
-pub fn memory_budget_status(session_id: String) -> Result<BudgetStatus, String> {
+pub async fn memory_budget_status(session_id: String) -> Result<BudgetStatus, String> {
     let (_fm, body) = memory::read_memory(&session_id)?;
     let tokens = memory::budget::estimate_tokens(&body);
     Ok(BudgetStatus {
@@ -144,7 +144,7 @@ pub fn memory_budget_status(session_id: String) -> Result<BudgetStatus, String> 
 
 /// 开始监听 memory.md 外部改动(前端拿到 `memory_changed` 事件)。
 #[tauri::command]
-pub fn watch_memory(
+pub async fn watch_memory(
     session_id: String,
     app: tauri::AppHandle,
     state: State<'_, WatcherState>,
@@ -155,14 +155,14 @@ pub fn watch_memory(
 
 /// 停止监听。
 #[tauri::command]
-pub fn unwatch_memory(session_id: String, state: State<'_, WatcherState>) -> Result<(), String> {
+pub async fn unwatch_memory(session_id: String, state: State<'_, WatcherState>) -> Result<(), String> {
     memory::validate_id(&session_id)?;
     state.registry.unwatch(&session_id)
 }
 
 /// 判断是否需要提炼(规则:距上次 N 轮 / token 超阈值)。
 #[tauri::command]
-pub fn needs_summarize(
+pub async fn needs_summarize(
     session_id: String,
     every_n_rounds: Option<i64>,
     token_threshold: Option<i64>,
@@ -177,7 +177,7 @@ pub fn needs_summarize(
 // ---------- summarize ----------
 
 /// 提炼器系统提示(对应 idea/03-memory-flow.md §2.2 增量提炼)。
-const SUMMARIZE_SYSTEM: &str = r#"你是 MAF Agent 的记忆提炼器。根据「现有 memory.md 正文」和「新增对话消息」,输出**更新后的完整 memory.md 正文**。
+const SUMMARIZE_SYSTEM: &str = r#"你是 myAgent 的记忆提炼器。根据「现有 memory.md 正文」和「新增对话消息」,输出**更新后的完整 memory.md 正文**。
 
 规则:
 1. 只输出 Markdown 正文本身——不要 frontmatter(--- 标记)、不要代码块包裹、不要任何解释性前言。

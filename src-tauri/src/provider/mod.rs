@@ -17,6 +17,7 @@ pub mod model_cards;
 pub mod model_config;
 pub mod openai;
 pub mod reasoning;
+pub mod rebuild;
 pub mod rotation;
 pub mod templates;
 
@@ -204,6 +205,12 @@ pub enum StreamChunk {
         server_name: String,
         content: String,
         ok: bool,
+        /// 实际执行参数(JSON 摘要,已截断;P6 工具流水用)
+        #[serde(default)]
+        arguments: Option<String>,
+        /// 执行耗时毫秒(P6 工具流水用;审批等待不计入)
+        #[serde(default)]
+        elapsed_ms: Option<u64>,
     },
 }
 

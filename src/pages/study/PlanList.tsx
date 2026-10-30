@@ -4,7 +4,12 @@ import { IconGraduation, IconPlay, IconTrash } from '../../components/icons';
 import { useStudyStore } from '../../stores/study';
 import { useProvidersStore } from '../../stores/providers';
 import type { PlanRow, StudyIntent } from '../../lib/ipc/study';
-import { fmtDate } from '../research/helpers';
+
+/** 本地日期时间格式化(无效值原样返回)。 */
+const fmtDate = (s: string) => {
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? s : d.toLocaleString('zh-CN');
+};
 
 export const STATUS_LABEL: Record<string, string> = {
   generating: '生成中',

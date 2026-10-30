@@ -12,7 +12,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TutorialDoc {
     pub id: String,
-    /// 所属页面:chat / research / draw / translate
+    /// 所属页面:chat / draw / translate
     pub page: String,
     pub title: String,
     #[serde(default)]
@@ -93,7 +93,7 @@ pub fn load_tutorials_from(dir: &PathBuf, page: &str) -> Vec<TutorialDoc> {
 
 /// 列出某页面的全部教程卡。
 #[tauri::command]
-pub fn list_tutorials(page: String) -> Vec<TutorialDoc> {
+pub async fn list_tutorials(page: String) -> Vec<TutorialDoc> {
     load_tutorials_from(&tutorials_dir(), &page)
 }
 
@@ -103,10 +103,10 @@ mod tests {
 
     #[test]
     fn parse_valid_tutorial() {
-        let raw = "---\nid: t1\npage: research\ntitle: 标题\nsummary: 一句话\norder: 2\n---\n\n正文 **md**\n";
+        let raw = "---\nid: t1\npage: chat\ntitle: 标题\nsummary: 一句话\norder: 2\n---\n\n正文 **md**\n";
         let doc = parse_tutorial("t1.md", raw).unwrap();
         assert_eq!(doc.id, "t1");
-        assert_eq!(doc.page, "research");
+        assert_eq!(doc.page, "chat");
         assert_eq!(doc.order, 2);
         assert_eq!(doc.content, "正文 **md**\n");
     }
@@ -119,13 +119,13 @@ mod tests {
 
     #[test]
     fn load_repo_tutorials_sorted_and_filtered() {
-        // 仓库自带 tutorials/,至少含 research 页教程
-        let docs = load_tutorials_from(&tutorials_dir(), "research");
+        // 仓库自带 tutorials/,至少含 chat 页教程
+        let docs = load_tutorials_from(&tutorials_dir(), "chat");
         assert!(
             !docs.is_empty(),
-            "repo tutorials/ should contain research docs"
+            "repo tutorials/ should contain chat docs"
         );
-        assert!(docs.iter().all(|d| d.page == "research"));
+        assert!(docs.iter().all(|d| d.page == "chat"));
         let orders: Vec<i64> = docs.iter().map(|d| d.order).collect();
         let mut sorted = orders.clone();
         sorted.sort();

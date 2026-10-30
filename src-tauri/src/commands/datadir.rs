@@ -29,7 +29,7 @@ pub struct DataDirInfo {
 
 /// 读取当前数据目录状态。
 #[tauri::command]
-pub fn get_data_dir() -> DataDirInfo {
+pub async fn get_data_dir() -> DataDirInfo {
     let dir = paths::data_dir();
     DataDirInfo {
         has_data: dir.join("metaagent.db").exists(),
@@ -60,13 +60,13 @@ pub async fn pick_data_dir(app: tauri::AppHandle) -> Option<String> {
 
 /// 切换数据目录:写引导配置;数据迁移在下次启动、无文件句柄时执行。
 #[tauri::command]
-pub fn set_data_dir(path: String, migrate: bool) -> Result<paths::SetDirResult, String> {
+pub async fn set_data_dir(path: String, migrate: bool) -> Result<paths::SetDirResult, String> {
     paths::set_data_dir(std::path::Path::new(&path), migrate)
 }
 
 /// 在资源管理器中打开当前数据目录。
 #[tauri::command]
-pub fn open_data_dir() -> Result<(), String> {
+pub async fn open_data_dir() -> Result<(), String> {
     let dir = paths::data_dir();
     if !dir.exists() {
         return Err(format!("目录不存在:{}", dir.display()));
@@ -81,6 +81,6 @@ pub fn open_data_dir() -> Result<(), String> {
 
 /// 重启应用(迁移与目录切换需要新进程才能生效)。
 #[tauri::command]
-pub fn restart_app(app: tauri::AppHandle) {
+pub async fn restart_app(app: tauri::AppHandle) {
     app.restart();
 }

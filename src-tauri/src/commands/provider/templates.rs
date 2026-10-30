@@ -15,7 +15,7 @@ use super::keys::rotation_group;
 /// 其 models 以厂家返回为唯一来源(预置列表作废)。
 /// 最后统一应用单模型配置(启用过滤 + 排序覆盖)。
 #[tauri::command]
-pub fn list_provider_templates() -> Vec<ProviderTemplate> {
+pub async fn list_provider_templates() -> Vec<ProviderTemplate> {
     let mut tpls = templates::load_all();
     let cache = load_model_cache();
     let model_cfg = model_config::load();
@@ -37,7 +37,7 @@ pub fn list_provider_templates() -> Vec<ProviderTemplate> {
 
 /// 新增或更新一个 Provider 模板(id 为空时自动生成),返回落盘后的模板。
 #[tauri::command]
-pub fn save_provider_template(
+pub async fn save_provider_template(
     app: tauri::AppHandle,
     mut template: ProviderTemplate,
 ) -> Result<ProviderTemplate, String> {
@@ -72,7 +72,7 @@ pub fn save_provider_template(
 
 /// 删除一个 Provider 模板(内置/用户新增一视同仁),并清理其 Key、单模型配置与厂家模型缓存。
 #[tauri::command]
-pub fn delete_provider_template(
+pub async fn delete_provider_template(
     app: tauri::AppHandle,
     state: tauri::State<'_, RotationState>,
     provider_id: String,
@@ -109,7 +109,7 @@ pub fn delete_provider_template(
 
 /// 补回被删除的内置模板(仅补缺失项,不改动用户已编辑/新增的模板)。
 #[tauri::command]
-pub fn restore_builtin_templates(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn restore_builtin_templates(app: tauri::AppHandle) -> Result<(), String> {
     let mut list = templates::load_all();
     for b in templates::builtin_templates() {
         if !list.iter().any(|t| t.id == b.id) {

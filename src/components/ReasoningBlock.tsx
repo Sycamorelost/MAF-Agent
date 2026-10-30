@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { IconBrain, IconChevronDown, IconChevronRight } from './icons';
+import { IconBrain, IconChevronDown } from './icons';
 
 /** 思考 token 估算:CJK 约 1 字/token,ASCII 约 4 字符/token(仅用于无端点上报时的「约 N」展示)。 */
 export function estimateReasoningTokens(text: string): number {
@@ -16,31 +16,6 @@ export function estimateReasoningTokens(text: string): number {
 function fmtSecs(ms: number | null | undefined): string {
   if (ms == null || ms < 0) return '';
   return ms < 1000 ? '<1s' : `${Math.round(ms / 1000)}s`;
-}
-
-/** 折叠条头部文案。 */
-function headerLabel(opts: {
-  streaming: boolean;
-  hasText: boolean;
-  tokens: number | null;
-  exact: boolean;
-  elapsedMs: number | null;
-}): string {
-  const { streaming, hasText, tokens, exact, elapsedMs } = opts;
-  const t = tokens == null ? '' : `${exact ? '' : '约 '}${tokens} tokens`;
-  if (streaming && !hasText) return '思考中…';
-  if (streaming && hasText) {
-    // 思考已结束、正文输出中
-    const parts = ['思考完成'];
-    if (t) parts.push(t);
-    const secs = fmtSecs(elapsedMs);
-    if (secs) parts.push(`耗时 ${secs}`);
-    return parts.join(' · ');
-  }
-  // 历史 / 已结束
-  const parts = ['思考过程'];
-  if (t) parts.push(t);
-  return parts.join(' · ');
 }
 
 interface Props {
@@ -76,32 +51,30 @@ export default memo(function ReasoningBlock({
 
   const exact = tokens != null && tokens > 0;
   const shown = exact ? tokens : estimateReasoningTokens(text);
+  const tok = `${exact ? '' : '约 '}${shown} tokens`;
+  const secs = fmtSecs(elapsedMs);
   // 仅计数无明文思考(OpenAI 官方端点):展示消耗,不提供展开
   if (countOnly) {
     return (
-      <div className="reasoning-block collapsed count-only">
-        <span className="reasoning-head">
+      <div className="reasoning-block count-only">
+        <div className="reasoning-head">
           <IconBrain size={14} />
-          <span>{`其中思考 ${tokens} tokens(已含在输出内)`}</span>
-        </span>
+          <b>思考 · 已含在输出内</b>
+          <span className="sp" />
+          <span className="reasoning-tok">{tok}</span>
+        </div>
       </div>
     );
   }
 
-  const label = headerLabel({
-    streaming,
-    hasText: !!text,
-    tokens: shown,
-    exact,
-    elapsedMs,
-  });
-
+  const state = open ? '已展开' : streaming && !text ? '进行中' : '已折叠';
   return (
-    <div className={`reasoning-block ${open ? 'open' : 'collapsed'}`}>
+    <div className={`reasoning-block${open ? ' open' : ''}`}>
       <button
         type="button"
-        className="reasoning-head as-button"
+        className="reasoning-head"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
         title={open ? '收起思考过程' : '展开思考过程'}
       >
         {streaming && !text ? (
@@ -109,8 +82,11 @@ export default memo(function ReasoningBlock({
         ) : (
           <IconBrain size={14} />
         )}
-        <span className={streaming && !text ? 'thinking-label' : ''}>{label}</span>
-        {open ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+        <b>思考 · {state}</b>
+        <span className="sp" />
+        {secs && <span className="reasoning-tok">{secs}</span>}
+        <span className="reasoning-tok">{tok}</span>
+        <IconChevronDown size={14} />
       </button>
       {open && (
         <div className="reasoning-body" ref={bodyRef}>

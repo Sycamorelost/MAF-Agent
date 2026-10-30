@@ -16,12 +16,15 @@ export function resolveReasoningEffort(
       : (thinkingSel?.level ?? DEFAULT_THINKING_LEVEL);
 }
 
-/** 收集本次可用的 MCP 工具定义(按智能体工具策略过滤;空则返回 undefined 表示不启用工具调用)。 */
-export async function collectSessionTools(agent: AgentTemplate | null): Promise<ToolDef[] | undefined> {
+/** 收集本次可用的 MCP 工具定义(后端按会话预设裁剪;再按智能体工具策略过滤;空则返回 undefined 表示不启用工具调用)。 */
+export async function collectSessionTools(
+  agent: AgentTemplate | null,
+  sessionId?: string,
+): Promise<ToolDef[] | undefined> {
   // Phase 5e:收集已启用 MCP server 的工具定义;空则不启用工具调用(行为不变)
   let tools: ToolDef[] | undefined;
   try {
-    let collected = await mcpCollectTools();
+    let collected = await mcpCollectTools(sessionId);
     // 智能体工具策略(R3 A6):null=继承全局;空数组=禁用工具;列表=仅允许名单内工具
     const allow = agent?.tool_policy ?? null;
     if (allow) {

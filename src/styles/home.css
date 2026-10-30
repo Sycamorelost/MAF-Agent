@@ -2,7 +2,6 @@
    .stage / .cards / .card / .card-dark / .composer / .composer-box 由 _tokens.css 提供。 */
 
 .greeting {
-  margin-top: var(--space-6);
   font-size: calc(var(--font-hero) * 1.2);
   font-weight: 650;
   letter-spacing: -.3px;
@@ -10,6 +9,18 @@
   text-align: center;
 }
 .sub { margin-top: var(--space-2); font-size: var(--font-body); color: var(--text-3); text-align: center; }
+/* 输入框下方提示行(对齐 ui-design 01:信息图标 + 操作说明) */
+.home-note {
+  width: 100%;
+  max-width: 820px;
+  margin: var(--space-5) auto 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-micro);
+  color: var(--text-4);
+}
+.home-note svg { flex: none; opacity: .7; }
 
 /* 主页:居中布局 */
 .home { justify-content: center; }
@@ -24,19 +35,24 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   padding: 0 var(--pad-x);
-  height: 46px;
+  height: calc(46px * var(--ui-scale));
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
 }
 .chat-title {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 340px;
   font-size: var(--font-h3);
   font-weight: 600;
   color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.chat-head .sp { flex: 1; }
 /* 会话标题改名入口(幽灵按钮,贴标题右侧) */
 .chat-title-btn {
   flex-shrink: 0;
@@ -89,23 +105,7 @@
   cursor: pointer;
 }
 .chat-title-edit button:hover { background: var(--bg-hover); color: var(--text-1); }
-/* 会话头部:记忆面板展开/收起开关 */
-.chat-panel-toggle {
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  background: var(--bg-main);
-  color: var(--text-3);
-  cursor: pointer;
-  transition: .15s;
-}
-.chat-panel-toggle:hover { background: var(--bg-hover); color: var(--text-1); }
-.chat-panel-toggle.on { color: var(--brand); border-color: var(--brand-line); background: var(--brand-soft); }
+/* 会话头部:记忆面板展开/收起开关(样式统一在 chat.css) */
 
 /* 极窄窗:会话头部让位,避免标题+模型+按钮溢出 */
 @media (max-width: 700px) {
@@ -126,7 +126,7 @@
   .chat-head { height: 42px; padding: 0 var(--space-2); gap: var(--space-1); }
   .model-switch { padding: 4px 8px; font-size: 0 !important; }
   .model-switch .stat-dot { display: inline-block; }
-  .model-switch svg { font-size: 13px; color: var(--text-3); }
+  .model-switch svg { font-size: var(--font-sub); color: var(--text-3); }
   .chat-panel-toggle { width: 26px; height: 26px; }
   .chat-title-btn { width: 22px; height: 22px; }
   .pg-hint { display: none; }

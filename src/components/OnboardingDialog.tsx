@@ -40,10 +40,10 @@ export default function OnboardingDialog({ onDone }: OnboardingDialogProps) {
       <div className="dialog" style={{ maxWidth: 640 }}>
         {step === 0 && (
           <>
-            <div className="dialog-head">欢迎使用 MAF Agent</div>
+            <div className="dialog-head">欢迎使用 myAgent</div>
             <div className="dialog-body">
               <p className="set-hint" style={{ lineHeight: 1.7 }}>
-                MAF Agent 是一款本地优先的智能体框架软件。你的数据只保存在本机,不上传任何服务器。
+                myAgent 是一款本地优先的智能体框架软件。你的数据只保存在本机,不上传任何服务器。
               </p>
               <p className="set-hint" style={{ marginTop: 'var(--space-2)', lineHeight: 1.7 }}>
                 系统内置了一套「底层物理契约」提示词,用于约束模型的工具调用行为。

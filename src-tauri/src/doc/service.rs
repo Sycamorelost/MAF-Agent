@@ -72,6 +72,12 @@ pub fn ingest(
 /// 会话级删除由 `doc_chunks` 的外键 `ON DELETE CASCADE` 负责,这里只处理
 /// 「同一会话内移除某个附件」的场景(重传覆盖也走同一条通道)。
 pub fn purge(conn: &Connection, session_id: &str, doc_id: &str) -> Result<usize, String> {
+    // FTS 不随外键级联,必须先按 rowid 清索引再删块(V27)
+    let _ = conn.execute(
+        "DELETE FROM doc_chunks_fts WHERE rowid IN
+           (SELECT id FROM doc_chunks WHERE session_id=?1 AND doc_id=?2)",
+        rusqlite::params![session_id, doc_id],
+    );
     conn.execute(
         "DELETE FROM doc_chunks WHERE session_id=?1 AND doc_id=?2",
         rusqlite::params![session_id, doc_id],

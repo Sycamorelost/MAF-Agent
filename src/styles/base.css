@@ -62,7 +62,7 @@ body.aside-open .main { padding-left: var(--aside-w); }
   position: fixed;
   top: calc(var(--titlebar-h) + 8px);
   left: calc(var(--aside-w) - 32px);
-  z-index: 10;
+  z-index: var(--z-base);
 }
 
 /* 抽屉内通用开合提示行(记忆/知识库/设置等无描述段的抽屉头部) */
@@ -76,14 +76,14 @@ body.aside-open .main { padding-left: var(--aside-w); }
 .tb-pop-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 25;
+  z-index: var(--z-pop);
 }
 /* 全局搜索玻璃卡片:挂在 pill 下方 */
 .tb-search-pop {
   position: absolute;
   top: calc(var(--titlebar-h) + 4px);
   left: var(--space-2);
-  z-index: 26;
+  z-index: var(--z-pop-card);
   width: 340px;
   padding: var(--space-2) var(--space-3) var(--space-3);
   background: rgba(var(--bg-main-rgb), var(--bg-glass-alpha));
@@ -276,6 +276,18 @@ body.aside-open .main { padding-left: var(--aside-w); }
   border-color: var(--brand);
   box-shadow: 0 0 0 2px var(--brand-line);
 }
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+select.input:hover { border-color: var(--border-strong); }
+select.input option { background: var(--bg-main); color: var(--text-1); }
 .lbl {
   display: block;
   font-size: var(--font-caption);
@@ -429,7 +441,7 @@ body.aside-open .main { padding-left: var(--aside-w); }
 /* 页面左栏玻璃抽屉(布局统一改造):默认收起,标题栏「面板」按钮释放;
    与会话抽屉同为玻璃浮层,300px 定宽,不占布局列 */
 .pg-aside.drawer, .memory-list.drawer, .notes-list.drawer, .set-nav.drawer {
-  position: fixed; top: var(--titlebar-h); left: 0; bottom: 0; z-index: 9;
+  position: fixed; top: var(--titlebar-h); left: 0; bottom: 0; z-index: var(--z-drawer);
   width: var(--aside-w); max-width: none; flex-shrink: 0;
   background: rgba(var(--bg-main-rgb), var(--bg-glass-alpha));
   backdrop-filter: blur(50px) saturate(1.8);
@@ -667,4 +679,55 @@ body.aside-open .main { padding-left: var(--aside-w); }
   background: var(--brand); animation: pblink 1s infinite; margin-left: 4px;
 }
 @keyframes pblink { 50% { opacity: 0 } }
+
+/* ============ ContextMenu(右键/上下文菜单) ============
+   严格匹配 .nav-pop 玻璃风格:backdrop-filter 模糊 + 低透明度背景 + border + shadow-card-h。
+   z-index:var(--z-menu)=40,与 .perm-menu 同层。 */
+.ctx-menu{
+  min-width:168px;padding:4px;
+  background:rgba(var(--bg-main-rgb),.94);
+  backdrop-filter:blur(50px) saturate(1.8);
+  -webkit-backdrop-filter:blur(50px) saturate(1.8);
+  border:1px solid var(--border);
+  border-radius:var(--radius-m);
+  box-shadow:var(--shadow-card-h);
+}
+/* 子菜单:inline 渲染,relative 容器内 absolute 定位在父项右侧 */
+.ctx-menu .ctx-sub{
+  position:absolute;top:-4px;left:100%;
+  margin-left:2px;
+}
+.ctx-menu .ctx-sub.flip-x,
+.ctx-menu.flip-x{left:auto;right:calc(100% + 2px);margin-left:0}
+.ctx-menu.flip-y{top:auto;bottom:calc(100% + 2px)}
+.ctx-item-wrap{position:relative}
+.ctx-item{
+  width:100%;display:flex;align-items:center;gap:var(--space-2);
+  padding:6px 10px;border:none;background:transparent;
+  border-radius:var(--radius-s);cursor:pointer;
+  font-size:var(--font-sub);color:var(--text-2);font-family:var(--font);text-align:left;
+  transition:.12s;
+}
+.ctx-item:hover:not(.disabled){background:var(--bg-hover);color:var(--text-1)}
+.ctx-item.disabled{opacity:.4;cursor:not-allowed}
+.ctx-item.danger{color:var(--err)}
+.ctx-item.danger:hover:not(.disabled){background:var(--err-soft);color:var(--err)}
+.ctx-item.open{background:var(--bg-hover);color:var(--text-1)}
+.ctx-item.checked .ctx-check{
+  font-size:var(--font-mini);color:var(--brand);
+  width:14px;text-align:center;flex:none;
+}
+.ctx-item-ico{
+  width:14px;height:14px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  color:var(--text-3);
+}
+.ctx-item:hover:not(.disabled) .ctx-item-ico{color:var(--text-1)}
+.ctx-item.danger:hover:not(.disabled) .ctx-item-ico{color:var(--err)}
+.ctx-item-label{flex:1;min-width:0}
+.ctx-short{
+  font-size:var(--font-mini);color:var(--text-4);flex:none;
+  font-family:var(--font-mono);
+}
+.ctx-arr{font-size:var(--font-h3);color:var(--text-4);flex:none;line-height:1}
+.ctx-sep{height:1px;margin:4px 8px;background:var(--border)}
 

@@ -3,6 +3,7 @@ import type { AgentTemplate, ReasoningCapability, SourceItem } from '../../lib/i
 import * as ipc from '../../lib/ipc';
 import type { ThinkingSelection } from '../../stores/thinking';
 import { useMessagesStore } from '../../stores/messages';
+import { runningTask, useTasksStore } from '../../stores/tasks';
 import { maybeAutoSummarize } from './memoryContext';
 import { collectSessionTools, resolveReasoningEffort } from './chatTools';
 import { createStreamChunks } from './chatStream';
@@ -56,11 +57,14 @@ export function useChatStream({
         startStreaming(sessionId);
         // 思考参数:模型不支持 → null(后端能力门控二次兜底);用户关闭 → 'off';否则档位
         const reasoningEffort = resolveReasoningEffort(thinkCap, thinkingSel);
-        // Phase 5e:收集已启用 MCP server 的工具定义;空则不启用工具调用(行为不变)
-        const tools = await collectSessionTools(agent);
-        const chunks = createStreamChunks(sessionId, {
-          pushStreamDelta, pushStreamReasoning, setStreamReasoningTokens,
-        });
+        // Phase 5e:收集已启用 MCP server 的工具定义(按会话预设裁剪;空则不启用工具调用)
+        const tools = await collectSessionTools(agent, sessionId);
+        const chunks = createStreamChunks(
+          sessionId,
+          { pushStreamDelta, pushStreamReasoning, setStreamReasoningTokens },
+          // 工具块打上当前进行中任务 id(val.md §5.4):检查器流水/产物按任务归集
+          () => runningTask(useTasksStore.getState().bySession[sessionId])?.id ?? null,
+        );
         const { done, cancel } = ipc.chatStream(
           {
             provider_id: eff.providerId, model: eff.model, messages: history,

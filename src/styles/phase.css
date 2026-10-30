@@ -18,6 +18,14 @@
   align-items: center;
   gap: var(--space-2);
 }
+.outline-head .panel-close-btn {
+  width: 24px; height: 24px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--radius-s); background: transparent;
+  color: var(--text-3); cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.outline-head .panel-close-btn:hover { background: var(--bg-hover); color: var(--text-1); }
 .outline-list {
   flex: 1;
   overflow-y: auto;
@@ -55,7 +63,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--font-mini);
   font-weight: 700;
   line-height: 1;
 }
@@ -107,7 +115,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9000;
+  z-index: var(--z-top);
   animation: fadeIn 0.15s ease-out;
 }
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }

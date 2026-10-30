@@ -11,14 +11,15 @@ import GlobalSearch from './GlobalSearch';
 import AgentPickerDialog from './AgentPickerDialog';
 import { IconEdit, IconSearch, IconX } from './icons';
 
-/** 会话历史抽屉可用的路由(其他页面无会话侧栏,隐藏历史开关)。 */
+/** 会话历史抽屉可用的路由(其他页面无会话侧栏,隐藏历史开关);
+ *  /work 宽窗为在流左栏不需要开关,仅在 ≤560 窄窗转抽屉时该按钮生效(workbench.css 控制显隐)。 */
 function sidebarAllowed(pathname: string) {
-  return pathname === '/' || pathname.startsWith('/chat');
+  return pathname === '/' || pathname.startsWith('/chat') || pathname.startsWith('/work');
 }
 
 /** 页面左栏抽屉可用的路由(标题栏显示「面板」开关)。 */
 function asideAllowed(pathname: string) {
-  return ['/research', '/plan', '/draw', '/translate', '/memory', '/notes', '/settings'].some((p) =>
+  return ['/plan', '/draw', '/translate', '/memory', '/notes', '/settings'].some((p) =>
     pathname.startsWith(p),
   );
 }
@@ -101,7 +102,12 @@ export default function Titlebar() {
       {/* 玻璃组件组:会话抽屉 / 全局搜索 / 新建对话(DeepSeek 式简洁模式) */}
       <div className="tb-pill">
         {sidebarAllowed(loc.pathname) && (
-          <button className="tb-pill-btn" title="会话历史" aria-label="会话历史" onClick={() => useUiStore.getState().setSidebarOpen(!useUiStore.getState().sidebarOpen)}>
+          <button
+            className={`tb-pill-btn${loc.pathname.startsWith('/work') ? ' wb-rail-btn' : ''}`}
+            title="会话历史"
+            aria-label="会话历史"
+            onClick={() => useUiStore.getState().setSidebarOpen(!useUiStore.getState().sidebarOpen)}
+          >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
               <rect x="1.8" y="2.5" width="12.4" height="11" rx="2" />
               <path d="M6 2.5v11" />

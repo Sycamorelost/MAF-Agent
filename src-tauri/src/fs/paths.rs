@@ -9,10 +9,10 @@
 
 use std::path::{Path, PathBuf};
 
-/// 工作区根目录:环境变量 `MAF_WORKSPACE` 优先,其次用户在设置里配的 `workspace_root`,
+/// 工作区根目录:环境变量 `MYAGENT_WORKSPACE` 优先,其次用户在设置里配的 `workspace_root`,
 /// 否则 `<数据目录>/workspace`。这是「相对路径」的默认基准目录(绝对路径不受其限制)。
 pub fn workspace_root() -> Result<PathBuf, String> {
-    let root = match std::env::var("MAF_WORKSPACE") {
+    let root = match std::env::var("MYAGENT_WORKSPACE") {
         Ok(v) if !v.trim().is_empty() => PathBuf::from(v.trim()),
         _ => {
             let s = crate::settings::load();
@@ -25,6 +25,83 @@ pub fn workspace_root() -> Result<PathBuf, String> {
     std::fs::create_dir_all(&root).map_err(|e| format!("创建工作区失败: {e}"))?;
     root.canonicalize()
         .map_err(|e| format!("工作区不可访问 `{}`: {e}", root.display()))
+}
+
+/// 智能工作区根 —— 如果 session 绑定了项目且项目 path 有效,返回项目路径;
+/// 否则回退全局 `workspace_root()`。MCP tool dispatch 时用这个替换硬编码 workspace_root。
+pub fn resolve_workspace_root(session_id: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(sid) = session_id {
+        if let Ok(Some(session)) = crate::db::sessions::get(sid) {
+            if let Some(ref pid) = session.project_id {
+                if let Ok(Some(proj)) = crate::db::projects::get(pid) {
+                    let p = PathBuf::from(&proj.path);
+                    if p.is_dir() {
+                        // Windows UNC 清理 + canonicalize
+                        let clean = proj
+                            .path
+                            .strip_prefix(r"\\?\")
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| proj.path.clone());
+                        let canonical = PathBuf::from(&clean).canonicalize();
+                        match canonical {
+                            Ok(c) => return Ok(c),
+                            Err(_) => return Ok(PathBuf::from(&clean)),
+                        }
+                    }
+                }
+            }
+        }
+    }
+    workspace_root()
+}
+
+/// 安全检查:目标路径必须在允许根目录下(canonicalize 后 starts_with 校验)。
+/// 用于项目绑定的写操作兜底,防止 Agent 通过绝对路径或 `..` 跳出项目目录。
+///
+/// `target` 可以是相对路径(会先 join 到 root)或绝对路径(直接校验)。
+/// 返回规范化后的目标路径;越界时返回错误。
+pub fn ensure_within(root: &Path, target: &Path) -> Result<PathBuf, String> {
+    let abs_root = root
+        .canonicalize()
+        .map_err(|e| format!("项目目录无效 `{}`: {e}", root.display()))?;
+    // 目标尚不存在(写新文件)时 canonicalize 会失败,退化到 canonicalize_for
+    let abs_target = if target.is_absolute() {
+        canonicalize_for(target)
+    } else {
+        let joined = abs_root.join(target);
+        canonicalize_for(&joined)
+    };
+    // Windows UNC 前缀统一后比较
+    let abs_root_str = display(&abs_root);
+    let abs_target_str = display(&abs_target);
+    if !abs_target_str.starts_with(&abs_root_str) {
+        return Err(format!(
+            "路径安全:目标 `{abs_target_str}` 不在项目工作区 `{abs_root_str}` 下"
+        ));
+    }
+    Ok(abs_target)
+}
+
+/// 路径规范化:存在则 canonicalize,不存在则规范化父目录再拼文件名。
+fn canonicalize_for(path: &Path) -> PathBuf {
+    if let Ok(c) = path.canonicalize() {
+        return c;
+    }
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => {
+            let pc = parent
+                .canonicalize()
+                .unwrap_or_else(|_| parent.to_path_buf());
+            pc.join(name)
+        }
+        _ => path.to_path_buf(),
+    }
+}
+
+/// 去掉 canonicalize 产生的 `\\?\` 前缀,便于跨平台比较与回显。
+fn display(p: &Path) -> String {
+    let s = p.display().to_string();
+    s.strip_prefix(r"\\?\").unwrap_or(&s).to_string()
 }
 
 /// 把路径解析为绝对路径:

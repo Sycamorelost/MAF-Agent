@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { BubbleMessage } from '../../components/MessageBubble';
 import { useMessagesStore } from '../../stores/messages';
@@ -8,6 +8,7 @@ import { useThinkingStore } from '../../stores/thinking';
 import type { AttachmentMeta, AgentTemplate, MessageRow, MemoryStrategy, SessionRow } from '../../lib/ipc';
 import * as ipc from '../../lib/ipc';
 import { composeSystemPrompt, compressMemoryIfOverBudget } from './memoryContext';
+import { CHAT_CANCEL_EVENT } from '../../lib/chatCancel';
 import { DEFAULT_SYSTEM_PROMPT, withBase } from '../../lib/systemPrompt';
 import { buildUserContent, buildSendHistory, rebuildSendHistory } from './attachments';
 import { useChatSettings } from './useChatSettings';
@@ -46,6 +47,14 @@ export function useChatSend({
   /** 记忆自动压缩提示(D3.5) */
   const [compressNotice, setCompressNotice] = useState<string | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
+  // 工作台运行状态条/底部状态栏的「停止」按钮通过窗口事件请求取消(与 Composer 停止同一入口)
+  useEffect(() => {
+    const onCancelReq = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === sessionId) cancelRef.current?.();
+    };
+    window.addEventListener(CHAT_CANCEL_EVENT, onCancelReq);
+    return () => window.removeEventListener(CHAT_CANCEL_EVENT, onCancelReq);
+  }, [sessionId]);
   /** F5:换模型重试的目标消息 */
   const [retryTarget, setRetryTarget] = useState<BubbleMessage | null>(null);
   /** F8:钉入记忆后的轻提示 */
@@ -58,6 +67,26 @@ export function useChatSend({
   }, []);
   // 模型能力 / 学习进度 / 上下文窗口 / 全裸模式 / 物理契约等设置
   const { ctxWindow, bareMode, customContract, thinkCap, studyDigest } = useChatSettings(current);
+  /** P5 / D19:会话生效预设的上下文条数上限(会话未单独设置时优先于全局滑窗;0 = 未解析/解析失败回落)。 */
+  const [presetCtxMax, setPresetCtxMax] = useState(0);
+  useEffect(() => {
+    if (!sessionId) {
+      setPresetCtxMax(0);
+      return;
+    }
+    let alive = true;
+    ipc
+      .resolveSessionPreset(sessionId)
+      .then((info) => {
+        if (alive) setPresetCtxMax(info.preset.context.max_messages);
+      })
+      .catch(() => {
+        if (alive) setPresetCtxMax(0);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [sessionId, session?.preset_id, session?.preset_version, agent?.agent_id]);
   /** 上次做过记忆预算检查的正文快照:内容没变就不重复检查(避免每轮同步等待提炼调用) */
   const lastBudgetMemRef = useRef<string | null>(null);
   /** 用指定记忆正文 + 策略组 system(交接确认时用最新值,不等 state 生效)。
@@ -88,7 +117,7 @@ export function useChatSend({
     const latest = useMessagesStore.getState().bySession[sessionId] ?? [];
     return rebuildSendHistory(
       latest,
-      session?.max_context_messages || ctxWindow,
+      session?.max_context_messages || presetCtxMax || ctxWindow,
       buildSystem(),
       // C2:doc_pipeline=resident 的智能体一律注入文档卡,细节交给 doc_search/doc_read
       { resident: agent?.doc_pipeline === 'resident' },
@@ -113,11 +142,11 @@ export function useChatSend({
     if (notice) setCompressNotice(notice);
   };
   /** 构建带滑窗与附件注入的历史(系统提示算 1 条;历史消息条数 = maxMsg,0=全部)。
-   *  会话未单独设置(0)= 跟随全局设置(默认 24 条),避免长会话全量重发。 */
+   *  条数优先级(D19):会话单独设置 > 会话生效预设 > 全局设置(默认 24 条)。 */
   const buildHistory = (extraUser: { content: string; images?: string[] } | null) =>
     buildSendHistory(
       messages,
-      session?.max_context_messages || ctxWindow,
+      session?.max_context_messages || presetCtxMax || ctxWindow,
       buildSystem(),
       extraUser,
       { resident: agent?.doc_pipeline === 'resident' },
@@ -153,12 +182,12 @@ export function useChatSend({
       const { llmContentBase: base, images } = buildUserContent(text, atts, imgs, {
         resident: agent?.doc_pipeline === 'resident',
       });
-      // R4:长文档本地预检索 —— 把与本次提问最相关的前 3 块直接注入,
+      // R4:长文档本地预检索 —— 把与本次提问最相关的若干块直接注入(块数随会话预设 top_k),
       // 不依赖「工具总开关」与「模型是否主动调 doc_search」。失败不影响发送。
       let llmContentBase = base;
       if (text) {
         try {
-          const hit = await ipc.docPrefetch(sessionId, text, undefined, 3);
+          const hit = await ipc.docPrefetch(sessionId, text);
           if (hit) llmContentBase = `${base}\n\n${hit}`;
         } catch {
           // 预检索失败时退回纯文档卡/全文注入

@@ -12,6 +12,9 @@
 
 pub mod service;
 
+#[cfg(test)]
+mod bench;
+
 use rusqlite::{Connection, params};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -201,6 +204,13 @@ pub fn index_document(
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     // 同一会话内:同 doc_id(内容相同)或同 doc_name(同名文件重新上传)都视为同一份文档,
     // 重建索引时先清旧块,避免"同名新版本"叠成两份(R14)。
+    // FTS 不随外键级联,必须先按 rowid 清旧索引再删块(V27)。
+    tx.execute(
+        "DELETE FROM doc_chunks_fts WHERE rowid IN
+           (SELECT id FROM doc_chunks WHERE session_id=?1 AND (doc_id=?2 OR doc_name=?3))",
+        params![session_id, doc_id, doc_name],
+    )
+    .map_err(|e| e.to_string())?;
     tx.execute(
         "DELETE FROM doc_chunks WHERE session_id=?1 AND (doc_id=?2 OR doc_name=?3)",
         params![session_id, doc_id, doc_name],
@@ -223,6 +233,13 @@ pub fn index_document(
                 c.content,
                 created,
             ],
+        )
+        .map_err(|e| e.to_string())?;
+        // 同步入 FTS 索引(rowid = doc_chunks.id;章节标题一并入索引,V27)
+        let rowid = tx.last_insert_rowid();
+        tx.execute(
+            "INSERT INTO doc_chunks_fts(rowid, content) VALUES (?1, ?2)",
+            params![rowid, format!("{} {}", c.section, c.content)],
         )
         .map_err(|e| e.to_string())?;
     }
@@ -306,60 +323,8 @@ fn kind_label(kind: &str) -> &str {
     }
 }
 
-/// 检索停用词:问句套话与高频虚词。只剔除 ≥2 字的短语,避免把「目的」「标的」等
-/// 内容词拆坏;单字虚词交给 n-gram 的权重机制自然降权。
-const QUERY_STOPWORDS: &[&str] = &[
-    "这篇",
-    "这份",
-    "这个",
-    "那个",
-    "这些",
-    "那些",
-    "请问",
-    "帮我",
-    "麻烦",
-    "一下",
-    "是什么",
-    "什么",
-    "怎么样",
-    "怎么",
-    "如何",
-    "哪些",
-    "哪里",
-    "关于",
-    "里面",
-    "是否",
-    "以及",
-    "可以",
-    "能够",
-    "告诉",
-    "总结",
-    "概括",
-    "内容",
-    "正文",
-    "文章",
-    "文档",
-    "文件",
-    "详细",
-    "具体",
-    "介绍",
-    "说明",
-    "看看",
-    "讲讲",
-    "说说",
-    "主要",
-];
-
-/// 去掉问句套话,保留内容词(长词优先,避免短词把长词切碎后残留噪声)。
-fn strip_stopwords(query: &str) -> String {
-    let mut q = query.to_lowercase();
-    let mut words: Vec<&str> = QUERY_STOPWORDS.to_vec();
-    words.sort_by_key(|w| std::cmp::Reverse(w.chars().count()));
-    for w in words {
-        q = q.replace(w, " ");
-    }
-    q
-}
+/// 检索停用词与剥离逻辑已上移至 `crate::retrieval`(全局搜索与文档检索共用,单一事实源)。
+use crate::retrieval::strip_stopwords;
 
 /// CJK 连续片段 → 2 字 / 3 字 n-gram(短片段保留整词)。
 /// 中文没有空格分词,按整句做字面匹配几乎不可能命中;n-gram 近似倒排索引。
@@ -466,29 +431,32 @@ fn snippet_of(content: &str, token: &str) -> String {
     )
 }
 
-/// 会话内关键词检索:SQL 层按 token 粗筛,再按「命中覆盖率 × 词长权重」排序。
-/// 中文查询先切 2~3 字 n-gram(见 `query_tokens`),避免整句字面匹配导致召回为零。
-pub fn search(
+/// 覆盖率打分候选块(路 B:LIKE 粗筛 + 「命中覆盖率 × 词长权重」打分)。
+struct Cand {
+    id: i64,
+    doc_name: String,
+    ord: i64,
+    page: Option<i64>,
+    section: String,
+    content: String,
+    cov_score: i64,
+    /// 命中的最长 token(用于截取片段)。
+    best: String,
+}
+
+/// 路 B:覆盖率候选。SQL 层按 token 粗筛,内存按覆盖率打分。
+fn coverage_candidates(
     conn: &Connection,
     session_id: &str,
-    query: &str,
+    tokens: &[String],
     doc_hint: Option<&str>,
-    limit: usize,
-) -> Result<SearchOutcome, String> {
-    let tokens = query_tokens(query);
-    if tokens.is_empty() {
-        return Ok(SearchOutcome {
-            hits: Vec::new(),
-            scanned: 0,
-        });
-    }
-    let hint = doc_hint.map(str::trim).filter(|s| !s.is_empty());
+) -> Result<Vec<Cand>, String> {
     let mut sql = String::from(
-        "SELECT doc_name, ord, page, section, content FROM doc_chunks WHERE session_id=?",
+        "SELECT id, doc_name, ord, page, section, content FROM doc_chunks WHERE session_id=?",
     );
     let mut values: Vec<rusqlite::types::Value> =
         vec![rusqlite::types::Value::Text(session_id.to_string())];
-    if let Some(h) = hint {
+    if let Some(h) = doc_hint {
         sql.push_str(" AND (doc_id=? OR doc_name LIKE '%'||?||'%')");
         values.push(rusqlite::types::Value::Text(h.to_string()));
         values.push(rusqlite::types::Value::Text(h.to_string()));
@@ -506,31 +474,30 @@ pub fn search(
     sql.push_str(" ORDER BY ord");
 
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
-    let map_row = |r: &rusqlite::Row| {
-        Ok((
-            r.get::<_, String>(0)?,
-            r.get::<_, i64>(1)?,
-            r.get::<_, Option<i64>>(2)?,
-            r.get::<_, String>(3)?,
-            r.get::<_, String>(4)?,
-        ))
-    };
-    let rows: Vec<(String, i64, Option<i64>, String, String)> = stmt
-        .query_map(rusqlite::params_from_iter(values.iter()), map_row)
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(values.iter()), |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, i64>(2)?,
+                r.get::<_, Option<i64>>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
+            ))
+        })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-    let scanned = rows.len();
 
-    let mut hits: Vec<SearchHit> = Vec::new();
-    for (doc_name, ord, page, section, content) in rows {
+    let mut cands: Vec<Cand> = Vec::new();
+    for (id, doc_name, ord, page, section, content) in rows {
         // 章节标题也参与打分:用户常问「第 3 章说了什么」,标题本身就是答案线索。
         let lower = format!("{section} {content}").to_lowercase();
         let mut matched = 0i64; // 命中 token 数:覆盖越多越相关
         let mut weight = 0i64; // 词长平方 × 出现次数(封顶 3):长词更具体
         let mut best = String::new();
         let mut best_len = 0usize;
-        for t in &tokens {
+        for t in tokens {
             let c = lower.matches(t.as_str()).count() as i64;
             if c > 0 {
                 matched += 1;
@@ -543,25 +510,258 @@ pub fn search(
             }
         }
         if matched > 0 {
-            // 命中词若只出现在章节标题里,片段也带上标题,方便模型定位。
-            let corpus = format!("{section} {content}");
-            let snippet = if content.to_lowercase().contains(&best) {
-                snippet_of(&content, &best)
-            } else {
-                snippet_of(&corpus, &best)
-            };
-            hits.push(SearchHit {
+            cands.push(Cand {
+                id,
                 doc_name,
                 ord,
                 page,
                 section,
-                snippet,
-                score: matched * 1000 + weight,
+                content,
+                cov_score: matched * 1000 + weight,
+                best,
             });
         }
     }
-    hits.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.ord.cmp(&b.ord)));
-    hits.truncate(limit.max(1));
+    cands.sort_by(|a, b| b.cov_score.cmp(&a.cov_score).then_with(|| a.ord.cmp(&b.ord)));
+    Ok(cands)
+}
+
+/// 路 A:FTS5 trigram 候选(V27)。返回 (chunk id, fts rank) 按相关度升序。
+/// 表不存在 / MATCH 报错时静默回退为空(旧库未迁移完成也能用)。
+fn fts_candidates(
+    conn: &Connection,
+    session_id: &str,
+    fts_q: &str,
+    doc_hint: Option<&str>,
+    recall_n: usize,
+) -> Vec<(i64, f64)> {
+    let mut sql = String::from(
+        "SELECT doc_chunks_fts.rowid, rank FROM doc_chunks_fts
+         JOIN doc_chunks c ON c.id = doc_chunks_fts.rowid
+         WHERE doc_chunks_fts MATCH ?1 AND c.session_id = ?2",
+    );
+    let mut values: Vec<rusqlite::types::Value> =
+        vec![
+            rusqlite::types::Value::Text(fts_q.to_string()),
+            rusqlite::types::Value::Text(session_id.to_string()),
+        ];
+    if let Some(h) = doc_hint {
+        sql.push_str(" AND (c.doc_id=?3 OR c.doc_name LIKE '%'||?4||'%')");
+        values.push(rusqlite::types::Value::Text(h.to_string()));
+        values.push(rusqlite::types::Value::Text(h.to_string()));
+    }
+    // LIMIT 占位符编号随是否有 hint 变化(? 编号按出现顺序从 1 计)
+    let limit_idx = values.len() + 1;
+    sql.push_str(&format!(" ORDER BY rank LIMIT ?{limit_idx}"));
+    values.push(rusqlite::types::Value::Integer(recall_n as i64));
+
+    let mut stmt = match conn.prepare(&sql) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(values.iter()), |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, f64>(1)?))
+        });
+    match rows {
+        Ok(m) => m.collect::<Result<Vec<_>, _>>().unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// 会话内关键词检索(默认标准档策略,等价 `search_with_policy` 的 standard)。
+/// 中文查询先切 2~3 字 n-gram(见 `query_tokens`),避免整句字面匹配导致召回为零。
+/// 生产路径已改走 `search_with_policy`(按会话预设);本包装保留给既有测试与外部兼容。
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn search(
+    conn: &Connection,
+    session_id: &str,
+    query: &str,
+    doc_hint: Option<&str>,
+    limit: usize,
+) -> Result<SearchOutcome, String> {
+    search_with_policy(conn, session_id, query, doc_hint, limit, &standard_policy())
+}
+
+/// 标准档默认策略(与内置预设 standard 的 retrieval 字段一致)。
+#[cfg_attr(not(test), allow(dead_code))]
+fn standard_policy() -> crate::presets::RetrievalPolicy {
+    crate::presets::RetrievalPolicy {
+        lexical: "trigram3".into(),
+        vector: true,
+        rerank: false,
+        top_k: 5,
+    }
+}
+
+/// 混合检索(P7):
+/// - 路 A = FTS5 trigram(`doc_chunks_fts`,3-gram OR 展开,见 `retrieval::fts_match_query`);
+/// - 路 B = 覆盖率打分(LIKE 粗筛 + 词长权重);
+/// - policy.vector=true 且两路皆非空 → RRF 融合;否则单路(A 优先,B 兜底);
+/// - policy.rerank=true → 融合后 top20 按覆盖率分 + 章节命中加成软重排,再截 top_k。
+pub fn search_with_policy(
+    conn: &Connection,
+    session_id: &str,
+    query: &str,
+    doc_hint: Option<&str>,
+    limit: usize,
+    policy: &crate::presets::RetrievalPolicy,
+) -> Result<SearchOutcome, String> {
+    let tokens = query_tokens(query);
+    if tokens.is_empty() {
+        return Ok(SearchOutcome {
+            hits: Vec::new(),
+            scanned: 0,
+        });
+    }
+    let hint = doc_hint.map(str::trim).filter(|s| !s.is_empty());
+    let fts_q = crate::retrieval::fts_match_query(query);
+    let recall_n = if policy.rerank {
+        20
+    } else {
+        (limit * 4).max(12)
+    };
+
+    // 路 A:FTS。查询无法展开(如 2 字词)时为空,必须靠路 B 兜底。
+    let fts_hits: Vec<(i64, f64)> = match &fts_q {
+        Some(q) => fts_candidates(conn, session_id, q, hint, recall_n),
+        None => Vec::new(),
+    };
+    // 路 B:覆盖率。policy.vector=true 才作为第二路参与融合;A 为空时强制跑 B 兜底。
+    let run_b = policy.vector || fts_hits.is_empty();
+    let cov = if run_b {
+        coverage_candidates(conn, session_id, &tokens, hint)?
+    } else {
+        Vec::new()
+    };
+    let scanned = cov.len();
+
+    // 组装:id → Cand(FTS 命中的块按 id 回表取内容)
+    // 注意:路 B 名次必须在移入 HashMap 前固定(HashMap 遍历顺序不定)。
+    let cov_rank: std::collections::HashMap<i64, usize> = cov
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (c.id, i))
+        .collect();
+    let mut by_id: std::collections::HashMap<i64, Cand> =
+        cov.into_iter().map(|c| (c.id, c)).collect();
+    let mut missing: Vec<i64> = Vec::new();
+    for (id, _) in &fts_hits {
+        if !by_id.contains_key(id) {
+            missing.push(*id);
+        }
+    }
+    if !missing.is_empty() {
+        let marks = vec!["?"; missing.len()].join(",");
+        let sql = format!(
+            "SELECT id, doc_name, ord, page, section, content FROM doc_chunks
+             WHERE session_id=? AND id IN ({marks})"
+        );
+        let mut values: Vec<rusqlite::types::Value> =
+            vec![rusqlite::types::Value::Text(session_id.to_string())];
+        values.extend(missing.iter().map(|id| rusqlite::types::Value::Integer(*id)));
+        if let Ok(mut stmt) = conn.prepare(&sql) {
+            let rows = stmt.query_map(rusqlite::params_from_iter(values.iter()), |r| {
+                Ok(Cand {
+                    id: r.get(0)?,
+                    doc_name: r.get(1)?,
+                    ord: r.get(2)?,
+                    page: r.get(3)?,
+                    section: r.get(4)?,
+                    content: r.get(5)?,
+                    cov_score: 0,
+                    best: String::new(),
+                })
+            });
+            if let Ok(m) = rows {
+                for c in m.flatten() {
+                    by_id.insert(c.id, c);
+                }
+            }
+        }
+    }
+
+    // 融合:两路皆非空 → RRF;否则按单路名次
+    let fts_rank: std::collections::HashMap<i64, usize> = fts_hits
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _))| (*id, i))
+        .collect();
+    let use_rrf = policy.vector && !fts_hits.is_empty() && !cov_rank.is_empty();
+    let mut fused: Vec<(i64, f64)> = by_id
+        .keys()
+        .map(|id| {
+            let ra = fts_rank.get(id).copied();
+            let rb = cov_rank.get(id).copied();
+            let s = if use_rrf {
+                crate::retrieval::rrf(ra, rb)
+            } else if let Some(ra) = ra {
+                crate::retrieval::rrf(Some(ra), None)
+            } else {
+                crate::retrieval::rrf(None, rb)
+            };
+            (*id, s)
+        })
+        .collect();
+    fused.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // 软重排(深度档):top20 内按覆盖率 + 章节命中微调。
+    // 覆盖率归一到 [0,1] 再缩小为「一档名次」级微调(RRF 相邻名次差约 0.001-0.017),
+    // 避免原始覆盖率分(数千)反过来淹没 RRF 名次。
+    if policy.rerank {
+        let mut top: Vec<(i64, f64)> = fused.into_iter().take(20).collect();
+        let max_cov = top
+            .iter()
+            .filter_map(|(id, _)| by_id.get(id))
+            .map(|c| c.cov_score)
+            .max()
+            .unwrap_or(1)
+            .max(1) as f64;
+        for (id, s) in top.iter_mut() {
+            if let Some(c) = by_id.get(id) {
+                let mut boost = 0.01 * (c.cov_score as f64 / max_cov);
+                if tokens
+                    .iter()
+                    .any(|t| t.chars().count() >= 3 && c.section.contains(t.as_str()))
+                {
+                    boost += 0.015;
+                }
+                *s += boost;
+            }
+        }
+        top.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        fused = top;
+    }
+
+    let mut hits: Vec<SearchHit> = Vec::new();
+    for (id, score) in fused.into_iter().take(limit.max(1)) {
+        let Some(c) = by_id.get(&id) else { continue };
+        let best = if c.best.is_empty() {
+            tokens
+                .iter()
+                .find(|t| c.content.to_lowercase().contains(t.as_str()))
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            c.best.clone()
+        };
+        let corpus = format!("{} {}", c.section, c.content);
+        let snippet = if !best.is_empty() && c.content.to_lowercase().contains(&best) {
+            snippet_of(&c.content, &best)
+        } else if !best.is_empty() {
+            snippet_of(&corpus, &best)
+        } else {
+            snippet_of(&c.content, &tokens[0])
+        };
+        hits.push(SearchHit {
+            doc_name: c.doc_name.clone(),
+            ord: c.ord,
+            page: c.page,
+            section: c.section.clone(),
+            snippet,
+            score: (score * 1_000_000.0) as i64,
+        });
+    }
     Ok(SearchOutcome { hits, scanned })
 }
 

@@ -15,10 +15,12 @@ use std::{
 use rusqlite::Connection;
 
 pub mod branches;
+pub mod projects;
 pub mod messages;
 pub mod schema;
 pub mod sessions;
 pub mod todos;
+pub mod tool_log;
 pub mod usage;
 
 /// 全局连接句柄(Mutex 串行化写;读多写少场景够用)。

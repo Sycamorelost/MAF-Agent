@@ -44,7 +44,7 @@ export function ToolCapabilityCard({
           checked={!!settings?.bare_mode}
           onChange={(e) => onToggleBareMode(e.target.checked)}
         />
-        <span>自由人格模式:不追加「你是 MAF Agent 助手」身份锚(物理契约仍保留)</span>
+        <span>自由人格模式:不追加「你是 myAgent 助手」身份锚(物理契约仍保留)</span>
       </label>
 
       <div className="mcp-cap-list">
@@ -84,6 +84,9 @@ export function ToolCapabilityCard({
       <div className="mcp-time-hint">
         当前底层提示词:{settings?.bare_mode ? '物理契约(身份锚已关闭)' : '身份锚 + 物理契约'}。
         正文由应用统一维护,此处不再重复展示。
+      </div>
+      <div className="mcp-time-hint">
+        工具总开关只控制是否随请求下发工具;审批档位(逐次审批 / 工作区 / 完全信任)独立控制执行前是否询问,两者互不影响。
       </div>
     </div>
   );

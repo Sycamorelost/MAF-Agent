@@ -14,33 +14,33 @@ export function AboutView({ appVersion }: AboutViewProps) {
 
       {/* 产品标识区:logo 原比例 + 名称 + 版本(读 tauri.conf.json)+ 定位语 */}
       <div className="set-card set-product">
-        <img className="set-product-logo" src={logoUrl} alt="MAF Agent" />
+        <img className="set-product-logo" src={logoUrl} alt="myAgent" />
         <div className="set-product-info">
-          <div className="set-product-name">MAF Agent</div>
+          <div className="set-product-name">myAgent</div>
           <div className="set-product-ver">
-            版本 {appVersion || '1.17.1'} · 桌面端 · Windows
+            版本 {appVersion || '2.0.1'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
-            一款专为学习、调研而创造的智能体框架软件。MAF 旗下完全免费且无广告的 AI
-            框架软件,开发者:梧桐吾桐及其团队。
+            MAF 团队旗下的 Agent 产品,一款专为学习、调研而创造的智能体框架软件。
+            完全免费且无广告,开发者:梧桐吾桐及其团队。
           </div>
         </div>
       </div>
 
       {/* 版本更新摘要:只列用户可感知的改动 */}
       <div className="set-card">
-        <div className="set-card-h">本次更新 · v1.17.1</div>
+        <div className="set-card-h">本次更新 · v2.0.1</div>
         <div className="set-card-b">
           <p>
-            输出：全局文档输出统一到同一套学术版式。新增版式单一数据源，研究报告的
-            Word / 自包含 HTML / 打印 PDF 三通道一致（宋体小四、1.5 倍行距、首行缩进、
-            三线表、A4 页边距）；研究导出新增「Word 文档(.docx)」，复用 docgen 模板；
-            修复打印导出不支持管道表格与有序列表的问题。
+            修复：修复设置页「联网搜索」「运行时预设」内容空白、会话任务面板加载失败、
+            搜索引擎调用失效等因模块重构导致的命令注册缺失问题，相关功能已全部恢复。
           </p>
           <p>
-            修复：研究报告导出 Word 时剥离与文档标题重复的正文首个一级标题，避免标题
-            在页眉与正文重复出现、并在自动目录中多出一条章级条目；移除从未被前端调用
-            的 export_bytes 二进制导出通道，收敛为唯一的 docx 产出路径（docgen）。
+            修复：修复新建会话后页面白屏、局部数据目录路径异常等问题，
+            会话创建与文件读写链路稳定性提升。
+          </p>
+          <p>
+            体验：新增全局渲染异常兜底，界面异常时显示错误摘要与一键重载，不再整页白屏。
           </p>
         </div>
       </div>
@@ -48,8 +48,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
       {/*
         开源引用与许可声明。
         来源项目与许可(全文见仓库根目录 LICENSE / NOTICE):
-        - MAF Agent 本体 · Apache-2.0 · https://github.com/Sycamorelost/MAF-Agent
-        - nature-skills · Apache-2.0 · 科研方法论文档中文重构
+        - myAgent 本体 · Apache-2.0 · https://github.com/Sycamorelost/MAF-Agent
         - Deep-tutor · Apache-2.0 · 学习规划流水线与交互重写
         - Cherry Studio · AGPL-3.0 · 仅架构/交互理念参考,未复制源码
       */}
@@ -57,35 +56,16 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-card-h">开源引用与许可</div>
         <div className="set-card-b set-terms">
           <section className="set-term">
-            <h3 className="set-term-h">MAF Agent 本项目 · Apache License 2.0</h3>
+            <h3 className="set-term-h">myAgent 本项目 · Apache License 2.0</h3>
             <div className="set-term-body">
               <p>
                 源码获取:
                 <span className="mono">https://github.com/Sycamorelost/MAF-Agent</span>
               </p>
-              <p>版权所有:Copyright (c) 2026 Sycamorelost / MAF Agent contributors。</p>
+              <p>版权所有:Copyright (c) 2026 Sycamorelost / myAgent contributors。</p>
               <p>
                 许可说明:本应用以 Apache License 2.0 开源发布,允许使用、修改与再分发(含商业用途);
                 分发时须保留仓库根目录 LICENSE 与 NOTICE 中的版权与许可声明,并标明修改内容。
-              </p>
-            </div>
-          </section>
-
-          <section className="set-term">
-            <h3 className="set-term-h">nature-skills · Apache License 2.0</h3>
-            <div className="set-term-body">
-              <p>
-                项目地址:<span className="mono">https://github.com/Yuan1z0825/nature-skills</span>
-              </p>
-              <p>版权所有:Copyright (c) Yuan1z0825 and contributors。</p>
-              <p>
-                引用范围:研究功能「科研增强」的内置方法论知识库
-                (<span className="mono">resources/skills/</span>)及其加载与渐进式注入逻辑
-                (<span className="mono">research/skills.rs</span>)。
-              </p>
-              <p>
-                修改说明:上游英文技能文档已译为中文并重排为六节结构,面向本应用的研究报告流程改写,
-                剔除了第三方服务端点与脚本引用;属衍生作品,并非原仓库文件原样复制。
               </p>
             </div>
           </section>
@@ -136,11 +116,11 @@ export function AboutView({ appVersion }: AboutViewProps) {
         </div>
       </div>
 
-      {/* 条款文档区:十五条,全部展开 */}
+      {/* 条款文档区:十四条,全部展开 */}
       <div className="set-card">
         <div className="set-card-h">
-          MAF Agent 使用条款
-          <span className="st date">最近更新日期:2026 年 10 月 26 日</span>
+          myAgent 使用条款
+          <span className="st date">最近更新日期:2026 年 10 月 31 日</span>
         </div>
         <div className="set-card-b set-terms">
           {TERMS.map((t) => (
@@ -168,7 +148,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
             </section>
           ))}
           <p className="set-term-foot">
-            本条款为软件使用协议文本。开发者并非专业法律服务机构,如您对条款有疑问,建议在使用前自行咨询专业人士。
+            本条款为软件使用协议文本。开发者并非专业法律服务机构人员,如您对条款有疑问,建议在使用本软件前自行咨询专业人士。
           </p>
         </div>
       </div>

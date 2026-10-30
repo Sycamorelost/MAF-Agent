@@ -11,6 +11,10 @@ import ModelSwitchDialog from '../../components/ModelSwitchDialog';
 import AgentPickerDialog from '../../components/AgentPickerDialog';
 import OutlinePanel from '../../components/OutlinePanel';
 import { IconChat, IconX, agentIconComponent } from '../../components/icons';
+import { PermissionChip } from '../../components/PermissionChip';
+import { resolveMode, useDefaultWorkbench } from '../../lib/workbench';
+import { useWorkbenchChrome } from '../../lib/workbenchChrome';
+import { memoryBudgetStatus } from '../../lib/ipc/memory';
 import { useMessagesStore } from '../../stores/messages';
 import { useSessionsStore } from '../../stores/sessions';
 import { useProvidersStore } from '../../stores/providers';
@@ -28,6 +32,8 @@ import { useDraftHandoff } from './useDraftHandoff';
 
 /** 稳定空数组:避免 `?? []` 每次渲染生成新引用导致 MessageList memo 失效。 */
 const EMPTY_MESSAGES: MessageRow[] = [];
+/** 长会话渲染窗口(P2 性能):默认只挂载最近 N 条,更早的分页/展开按需加载,控制 DOM 体量。 */
+const RENDER_WINDOW = 120;
 
 export default function ChatPage() {
   const { id: sessionId } = useParams<{ id: string }>();
@@ -63,11 +69,36 @@ export default function ChatPage() {
   const session = sessions.find((s) => s.id === sessionId);
   const messages = sessionId ? (bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
 
+  // ---------- D16 / val.md §5.8:工作台模式下,预设/权限 chip 落在 Composer 工具条内 ----------
+  const defaultWb = useDefaultWorkbench();
+  const isWork = resolveMode(session?.workbench_mode, defaultWb ?? 'chat') === 'work';
+  // 工作台外壳注入的运行状态条:插在会话头之下、消息区之上(ui-design b3)
+  const chrome = useWorkbenchChrome();
+
+  // ---------- P2:长会话渲染窗口(默认只渲染最近 RENDER_WINDOW 条,可手动展开全部) ----------
+  const [expandAll, setExpandAll] = useState(false);
+  useEffect(() => setExpandAll(false), [sessionId]);
+  const folded = !expandAll && messages.length > RENDER_WINDOW;
+  const visibleMessages = folded ? messages.slice(-RENDER_WINDOW) : messages;
+
+  // ---------- b3:记忆预算(自动压缩口径)用于 Composer hint 与预算护栏 ----------
+  const [memBudget, setMemBudget] = useState<{ tokens: number; limit: number } | null>(null);
+  useEffect(() => {
+    if (!sessionId) return;
+    memoryBudgetStatus(sessionId)
+      .then((b) => setMemBudget({ tokens: b.tokens, limit: b.limit }))
+      .catch(() => {});
+  }, [sessionId, hasStreaming, messages.length]);
+
+  /** 前插历史标记:加载更早一页时抑制「自动滚到底部」,避免把视口甩走 */
+  const prependingRef = useRef(false);
+
   /** 加载更早一页并保持视口位置(内容前插后补偿滚动高度差) */
   const onLoadOlder = async () => {
     if (!sessionId) return;
     const sc = scrollRef.current;
     const before = sc ? sc.scrollHeight : 0;
+    prependingRef.current = true;
     await loadOlder(sessionId);
     requestAnimationFrame(() => {
       if (sc) sc.scrollTop += sc.scrollHeight - before;
@@ -115,17 +146,38 @@ export default function ChatPage() {
 
   // 全局搜索跳转定位
   const [searchParams, setSearchParams] = useSearchParams();
+  const locatingRef = useRef(false);
+  useEffect(() => {
+    locatingRef.current = false;
+  }, [sessionId, searchParams]);
   useEffect(() => {
     const target = searchParams.get('msg');
     if (!target || messages.length === 0) return;
     const el = document.getElementById(`msg-${target}`);
-    if (!el) return;
+    if (!el) {
+      // 目标消息在折叠窗口外:先展开全部再定位
+      if (folded) {
+        setExpandAll(true);
+        return;
+      }
+      // 目标消息在更早分页里:继续向前加载,直到命中(或已无更早消息)
+      if (hasMore && sessionId) {
+        if (!locatingRef.current) {
+          locatingRef.current = true;
+          void loadOlder(sessionId);
+        }
+        return;
+      }
+      // 目标消息不存在(已被删除):清掉定位参数
+      setSearchParams({}, { replace: true });
+      return;
+    }
     el.scrollIntoView({ block: 'center' });
     el.classList.add('msg-flash');
     const t = window.setTimeout(() => el.classList.remove('msg-flash'), 1800);
     setSearchParams({}, { replace: true });
     return () => window.clearTimeout(t);
-  }, [searchParams, messages.length, setSearchParams]);
+  }, [searchParams, messages.length, setSearchParams, folded, hasMore, sessionId, loadOlder]);
 
   // 进入会话时加载消息和 memory
   useEffect(() => {
@@ -183,7 +235,16 @@ export default function ChatPage() {
   });
 
   // 新消息到达 / 切换会话时:平滑滚动到底部
+  // (?msg 定位期间不抢滚动,否则会把 scrollIntoView 的目标甩到底部;
+  //  用 ref 读取最新目标,避免定位完成后清空 query 触发本 effect 再次拉到底部)
+  const msgTargetRef = useRef<string | null>(null);
+  msgTargetRef.current = searchParams.get('msg');
   useEffect(() => {
+    if (prependingRef.current) {
+      prependingRef.current = false;
+      return;
+    }
+    if (msgTargetRef.current) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [sessionId, messages.length]);
 
@@ -206,12 +267,14 @@ export default function ChatPage() {
 
   return (
     <>
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+      {/* 作为 .wb-main / .main 的 flex 项:必须 minWidth:0,否则长代码行等内容的最小内容宽度会撑破中栏 */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, minWidth: 0 }}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* 会话头部:标题 + 右侧本会话模型选择(每个对话可自定义模型) */}
           <ChatHeader
             title={session?.title ?? '对话'}
             sessionId={sessionId}
+            mode={isWork ? 'work' : 'chat'}
             activeBranch={activeBranch}
             branchRefresh={branchRefresh}
             current={current}
@@ -222,6 +285,7 @@ export default function ChatPage() {
             onOpenModelSwitch={() => setModelSwitchOpen(true)}
             onError={chat.setError}
           />
+          {chrome?.runBar}
           <div className="chat-scroll" ref={scrollRef}>
             <div className="chat-inner">
               {switchBanner && (
@@ -260,7 +324,12 @@ export default function ChatPage() {
                   </button>
                 </div>
               )}
-              <ChatTodos sessionId={sessionId} onNotice={chat.setCompressNotice} />
+              {/* 工作台模式下任务清单已由左栏任务计划展示,列表隐藏但仍转发后端通知 */}
+              <ChatTodos
+                sessionId={sessionId}
+                onNotice={chat.setCompressNotice}
+                hidden={isWork}
+              />
               {messages.length === 0 && !hasStreaming && (
                 <div className="main-empty">
                   <div style={{ color: 'var(--text-4)' }}>
@@ -290,8 +359,19 @@ export default function ChatPage() {
                   </button>
                 </div>
               )}
+              {folded && (
+                <div className="load-older">
+                  <button
+                    type="button"
+                    className="load-older-btn"
+                    onClick={() => setExpandAll(true)}
+                  >
+                    已折叠 {messages.length - RENDER_WINDOW} 条(性能保护),点击展开全部
+                  </button>
+                </div>
+              )}
               <MessageList
-                messages={messages}
+                messages={visibleMessages}
                 lastAssistantId={lastAssistantId}
                 onQuote={chat.onQuote}
                 onTranslate={chat.onTranslate}
@@ -342,6 +422,7 @@ export default function ChatPage() {
             onRecall={chat.onRecall}
             webSearch={session?.web_search_enabled ?? false}
             onToggleWebSearch={chat.onToggleWebSearch}
+            compressInfo={memBudget}
             thinking={
               chat.thinkCap?.enabled && current
                 ? {
@@ -356,6 +437,9 @@ export default function ChatPage() {
                 : null
             }
           >
+            {/* D16 / §5.8:工作台模式下权限 chip 落在 composer-bar 内(靠近输入区);
+                预设 chip 已在会话头(ui-design b3),此处不重复 */}
+            {isWork && <PermissionChip sessionId={sessionId} onError={chat.setError} />}
             {/* B2:当前 Agent 指示,点击切换/解绑 */}
             <button
               type="button"
@@ -371,7 +455,7 @@ export default function ChatPage() {
             </button>
           </Composer>
         </div>
-        {!memPanel.collapsed && !outlineOpen && (
+        {!isWork && !memPanel.collapsed && !outlineOpen && (
           <>
             <ResizeHandle panel={memPanel} />
             <MemPanel
@@ -382,7 +466,7 @@ export default function ChatPage() {
             />
           </>
         )}
-        {outlineOpen && (
+        {!isWork && outlineOpen && (
           <OutlinePanel messages={messages} onClose={() => setOutlineOpen(false)} />
         )}
       </div>

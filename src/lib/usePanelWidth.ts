@@ -18,6 +18,7 @@ const COLLAPSED_PREFIX = 'panel-collapsed:';
 /** 面板宽度默认值对应的 CSS token(与 _tokens.css 一致);未登记的面板用传入的 def。 */
 const WIDTH_VARS: Record<string, string> = {
   mempanel: '--mempanel-w',
+  wbinspector: '--wb-inspector-w',
 };
 
 /** 单个面板最多占视口的比例:左右两侧同时展开时仍为主区留出空间。 */

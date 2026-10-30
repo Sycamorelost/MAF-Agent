@@ -62,8 +62,8 @@ describe('withBase(R3 分层)', () => {
     expect(BASE_IDENTITY).toContain('以当前智能体设定为准');
   });
 
-  it('Base 层规模受控:契约 ≤ 900 字符(R3 目标,原协议 ~1300)', () => {
-    expect(BASE_PHYSICAL_CONTRACT.length).toBeLessThanOrEqual(900);
+  it('Base 层规模受控:契约 ≤ 1000 字符(R3-D 加审批段后,原 900 已触顶)', () => {
+    expect(BASE_PHYSICAL_CONTRACT.length).toBeLessThanOrEqual(1000);
   });
 });
 

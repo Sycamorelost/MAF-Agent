@@ -1,5 +1,5 @@
 # ================================================================
-# MetaAgent Float · 开发环境激活脚本
+# myAgent · 开发环境激活脚本
 # 用法：在 PowerShell 中执行  . .\tools\activate-dev-env.ps1
 # 作用：把 D:\DevelopToolsEnv 下的工具链注入当前会话 PATH
 # 合规：所有路径均指向 D 盘，不修改注册表，不写 C 盘
@@ -44,7 +44,7 @@ $env:CARGO_HTTP_MULTIPLEXING = 'false'   # 国内网络更稳
 # ---- 打印激活结果 ----
 Write-Host ''
 Write-Host '===============================================' -ForegroundColor Cyan
-Write-Host '  MetaAgent Float 开发环境已激活' -ForegroundColor Green
+Write-Host '  myAgent 开发环境已激活' -ForegroundColor Green
 Write-Host '===============================================' -ForegroundColor Cyan
 Write-Host "  RUSTUP_HOME  = $env:RUSTUP_HOME"
 Write-Host "  CARGO_HOME   = $env:CARGO_HOME"

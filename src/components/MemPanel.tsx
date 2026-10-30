@@ -16,8 +16,8 @@ interface Props {
   onCollapse?: () => void;
 }
 
-/** 从 frontmatter+body 拼出 memory.md 完整文件内容 */
-function renderFull(fm: ipc.Frontmatter, body: string): string {
+/** 从 frontmatter+body 拼出 memory.md 完整文件内容(P6 起检查器 ContextTab 复用) */
+export function renderFull(fm: ipc.Frontmatter, body: string): string {
   const lines = ['---'];
   lines.push(`conversation: "${fm.conversation}"`);
   lines.push(`id: ${fm.id}`);

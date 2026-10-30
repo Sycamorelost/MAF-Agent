@@ -1,5 +1,5 @@
 /* ================================================================
- *  MAF Agent · UI Design Tokens
+ *  myAgent · UI Design Tokens
  *  唯一真源：所有 HTML 页面 <link> 本文件；禁止页面内硬编码颜色/圆角/间距/字号
  *  规范见 05-ui-design-system.md
  * ================================================================ */
@@ -13,28 +13,55 @@
        radius-s ( 8px) 容器 padding ≥ 4px  → 内部元素同圆角或更小
      ★ 嵌套容器的 padding 不得小于 (外圆角 - 内圆角) 的差值
   */
-  --radius-xl: 18px;  /* 大卡片 / 特色助手卡 */
-  --radius-l:  14px;  /* 面板 / 输入框外框 / 弹窗内卡 */
-  --radius-m:  10px;  /* 按钮 / 胶囊标签 / 主按钮 */
-  --radius-s:  8px;   /* 小组件 / 工具开关 / 次级按钮 */
+  /* 圆角随 --ui-scale 等比缩放:字体放大时整体视觉比例一致,不出现「字大框小」 */
+  --radius-xl: calc(18px * var(--ui-scale));  /* 大卡片 / 特色助手卡 */
+  --radius-l:  calc(14px * var(--ui-scale));  /* 面板 / 输入框外框 / 弹窗内卡 */
+  --radius-m:  calc(10px * var(--ui-scale));  /* 按钮 / 胶囊标签 / 主按钮 */
+  --radius-s:  calc( 8px * var(--ui-scale));  /* 小组件 / 工具开关 / 次级按钮 */
 
-  /* ---- 间距（4 的倍数网格，v3 明确使用场景） ----
+  /* ---- 间距（4 的倍数网格，v3 明确使用场景；随 --ui-scale 等比缩放，跟随字号） ----
      核心网格：8 / 16 / 24 / 32
      次网格  ：4 / 12 / 20 / 40
      同框 gap = 容器内边距的 1/2（容器 padding 16 → 内部 gap 8）
   */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10:40px;
+  --space-1:  calc(4px  * var(--ui-scale));
+  --space-2:  calc(8px  * var(--ui-scale));
+  --space-3:  calc(12px * var(--ui-scale));
+  --space-4:  calc(16px * var(--ui-scale));
+  --space-5:  calc(20px * var(--ui-scale));
+  --space-6:  calc(24px * var(--ui-scale));
+  --space-8:  calc(32px * var(--ui-scale));
+  --space-10: calc(40px * var(--ui-scale));
 
-  /* ---- 字号阶梯(全部乘以 --ui-scale:设置页「字体大小」按比例缩放全局字号,不动布局间距) ---- */
+  /* ---- 图层尺度（z-index，唯一真源；禁止在组件中硬编码） ----
+     base: 10    抽屉关闭按钮等固定控件
+     drawer: 20  会话/页面左栏抽屉
+     pop: 25     标题栏浮层遮罩
+     pop+1: 26   搜索/导航浮层卡片
+     tooltip: 35 hover 提示
+     menu: 40    钉入记忆/消息溢出菜单
+     modal: 50   审批弹窗/确认对话框
+     top: 99     全局加载与最高层通知
+  */
+  --z-base: 10;
+  --z-drawer: 20;
+  --z-pop: 25;
+  --z-pop-card: 26;
+  --z-tooltip: 35;
+  --z-menu: 40;
+  --z-modal: 50;
+  --z-top: 99;
+  /* 高层弹层:图片灯箱 / 全局 Toast,需凌驾于所有模态之上 */
+  --z-lightbox: 400;
+  --z-toast: 410;
+  /* 全屏打印/导出遮罩:必须凌驾于一切之上(含灯箱/Toast),使用 int32 最大值 */
+  --z-print: 2147483647;
+
+  /* ---- 字号阶梯(全部乘以 --ui-scale:设置页「字体大小」等比缩放字号/间距/圆角) ---- */
   --ui-scale: 1;
   --font-hero: calc(26px * var(--ui-scale));
+  --font-h1:   calc(19px * var(--ui-scale));   /* 大卡片标题 / AI检测页主标题 */
+  --font-display:calc(22px * var(--ui-scale));  /* 用量统计大数字 */
   --font-h2:   calc(16px * var(--ui-scale));
   --font-h3:   calc(15px * var(--ui-scale));
   --font-body: calc(14px * var(--ui-scale));
@@ -86,6 +113,12 @@
   --warn:         #C67A09;
   --err:          #C93B3B;
 
+  /* ---- 语义衍生色（由 token 混合得出，不引入新色值） ---- */
+  --brand-tint:   color-mix(in srgb, var(--brand) 8%, var(--bg-surface));
+  --ok-soft:      color-mix(in srgb, var(--ok) 10%, var(--bg-surface));
+  --warn-soft:    color-mix(in srgb, var(--warn) 10%, var(--bg-surface));
+  --err-soft:     color-mix(in srgb, var(--err) 10%, var(--bg-surface));
+
   /* ---- 阴影（v3 环境色 + 低透明度 + 大模糊，透气不脏） ----
      ambient 色基于 --bg-frame：rgba(40,50,80,...) 灰蓝环境，非纯黑
      透明度 ~12-18%，blur 40-80px，偏移压低
@@ -106,8 +139,8 @@
   --aside-w:      300px;   /* 页面左栏抽屉宽度(窄窗降档) */
   --titlebar-h:   38px;
   /* 对话页两档内容宽度:消息列更宽(间隔减半),输入框最宽(间隔≈原 2/5) */
-  --chat-max-w:      clamp(320px, 90%, 1120px);
-  --composer-max-w:  clamp(340px, 92%, 1200px);
+  --chat-max-w:      clamp(320px, 100%, 840px);
+  --composer-max-w:  clamp(340px, 100%, 840px);
 
   /* ---- 水平间距系统（v3 · 所有栏/块/版统一约束） ----
      --pad-x:         主内容栏内水平 padding（主区、记忆面板、弹窗主区）
@@ -187,6 +220,28 @@ body{
 }
 .btn-ghost:hover{background:var(--bg-hover);color:var(--text-1)}
 .btn-ghost.on{background:var(--brand-soft);color:var(--brand-deep);border-color:var(--brand-line)}
+.btn-ghost:disabled{opacity:.45;cursor:default}
+.btn-xs{padding:var(--space-1) var(--space-2);font-size:var(--font-micro);border-radius:var(--radius-s)}
+.btn-primary:disabled{opacity:.45;cursor:default;box-shadow:none}
+
+/* 图标按钮(方角、无字):会话头/面板头/计划头复用 */
+.icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:calc(26px * var(--ui-scale));height:calc(26px * var(--ui-scale));border-radius:var(--radius-s);
+  color:var(--text-3);background:transparent;transition:.15s;
+}
+.icon-btn:hover{background:var(--bg-hover);color:var(--text-1)}
+.icon-btn.on{background:var(--brand-soft);color:var(--brand-deep)}
+.icon-btn:disabled{opacity:.4;cursor:default}
+
+/* 轻量 chip:档位 / 权限 / 筛选项 */
+.chip{
+  display:inline-flex;align-items:center;gap:var(--space-1);flex:none;
+  height:calc(26px * var(--ui-scale));padding:0 var(--space-2);border-radius:var(--radius-s);
+  border:1px solid var(--border);background:var(--bg-surface);
+  font-size:var(--font-micro);color:var(--text-2);transition:.15s;
+}
+button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 
 /* 胶囊（快捷入口） */
 .pill{
@@ -214,7 +269,7 @@ body{
 }
 
 /* 遮罩 */
-.mask{position:absolute;inset:0;background:rgba(20,24,30,.35);z-index:10}
+.mask{position:absolute;inset:0;background:rgba(20,24,30,.35);z-index:var(--z-modal)}
 
 /* 窗口外框（唯一直角！· 固定铺满视口,不随内容漂移） */
 .window{
@@ -227,20 +282,20 @@ body{
 /* 标题栏 */
 .titlebar{
   height:var(--titlebar-h);flex-shrink:0;
-  position:relative;z-index:100;
+  position:relative;z-index:var(--z-top);
   display:flex;align-items:center;gap:var(--space-2);
   padding:0 var(--space-4);
   border-bottom:1px solid var(--border);
   background:var(--bg-main);
   user-select:none;
 }
-.titlebar .logo{width:20px;height:20px;flex-shrink:0}
+.titlebar .logo{width:calc(20px * var(--ui-scale));height:calc(20px * var(--ui-scale));flex-shrink:0}
 .titlebar .cname{font-size:var(--font-micro);color:var(--text-3)}
 .titlebar .spacer{flex:1}
 /* 窗口控制按钮紧凑排布:贴右侧、无多余留白;左侧导航区整体左移 */
 .titlebar{padding-right:0;padding-left:var(--space-2)}
 .win-btn{
-  width:30px;height:var(--titlebar-h);
+  width:calc(30px * var(--ui-scale));height:var(--titlebar-h);
   border:none;background:transparent;color:var(--text-3);
   cursor:pointer;display:flex;align-items:center;justify-content:center;
   transition:.1s;
@@ -252,14 +307,14 @@ body{
 /* 图标轨(Rail)已移除:主导航收进标题栏 ⋮ 下拉菜单(NavMenu) */
 .nav-menu{position:relative;flex-shrink:0}
 .menu-btn{
-  width:30px;height:30px;padding:0;flex-shrink:0;
+  width:calc(30px * var(--ui-scale));height:calc(30px * var(--ui-scale));padding:0;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   border:none;background:transparent;color:var(--text-2);
   border-radius:var(--radius-s);cursor:pointer;transition:.15s;
 }
 .menu-btn:hover,.menu-btn.on{background:var(--bg-hover);color:var(--text-1)}
 .nav-pop{
-  position:absolute;top:calc(100% + 6px);left:0;z-index:30;
+  position:absolute;top:calc(100% + 6px);left:0;z-index:var(--z-pop-card);
   min-width:168px;padding: 8px;
   display:flex;flex-direction:column;gap: 4px;
   background:rgba(var(--bg-main-rgb),var(--bg-glass-alpha-2));
@@ -294,7 +349,7 @@ body{
   box-shadow:var(--shadow-card);
 }
 .tb-pill-btn{
-  width:26px;height:24px;padding:0;flex-shrink:0;
+  width:calc(26px * var(--ui-scale));height:calc(24px * var(--ui-scale));padding:0;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   border:none;background:transparent;color:var(--text-3);
   border-radius:var(--radius-s);cursor:pointer;transition:.15s;
@@ -303,7 +358,7 @@ body{
 
 /* 会话历史抽屉(玻璃浮层,固定在标题栏下方左侧,不再占据布局列) */
 .sidebar{
-  position:fixed;top:var(--titlebar-h);left:0;bottom:0;z-index:9;
+  position:fixed;top:var(--titlebar-h);left:0;bottom:0;z-index:var(--z-drawer);
   width:var(--sidebar-w);flex-shrink:0;
   background:rgba(var(--bg-main-rgb),var(--bg-glass-alpha));
   backdrop-filter:blur(50px) saturate(1.8);
@@ -323,7 +378,7 @@ body{
 .side-head h1{font-size:var(--font-h3);font-weight:600;color:var(--text-1)}
 /* 面板折叠:统一的收起/展开小按钮与折叠后的窄条入口 */
 .panel-toggle{
-  width:22px;height:22px;padding:0;flex-shrink:0;
+  width:calc(22px * var(--ui-scale));height:calc(22px * var(--ui-scale));padding:0;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   border:none;background:transparent;color:var(--text-3);
   border-radius:var(--radius-s);cursor:pointer;transition:.15s;
@@ -360,6 +415,8 @@ body{
   transition:.15s;
 }
 .model-switch:hover{background:var(--bg-hover)}
+.model-switch{min-width:0}
+.model-switch .model-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .model-switch .tag{
   font-size:var(--font-mini);font-weight:600;color:var(--text-3);
   border:1px solid var(--border);border-radius:var(--radius-s);padding: 4px 4px;
@@ -376,7 +433,7 @@ body{
   width:44px;height:44px;background:var(--brand);
   clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
   display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:18px;font-weight:700;
+  color:#fff;font-size:calc(var(--font-h2) * 1.125);font-weight:700;
   box-shadow:0 10px 26px rgba(27,108,168,.35);
   animation:float 4.5s ease-in-out infinite;
 }
@@ -430,13 +487,25 @@ body{
 .composer-bar{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--pad-x) var(--space-3);flex-wrap:wrap;row-gap:var(--space-1)}
 .composer-bar .spacer{flex:1}
 
+/* 状态标签(设计稿 04 · 通用组件):会话头 / 分支 / 子任务共用 */
+.tag{
+  display:inline-flex;align-items:center;gap:var(--space-1);
+  padding:var(--space-1) var(--space-2);border-radius:var(--radius-s);
+  background:var(--bg-side);border:1px solid var(--border);
+  font-size:var(--font-micro);color:var(--text-2);white-space:nowrap;
+}
+.tag.brand{background:var(--brand-soft);border-color:var(--brand-line);color:var(--brand-deep)}
+.tag.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
+.tag.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+.tag.err{background:var(--err-soft);border-color:transparent;color:var(--err)}
+
 /* 工具胶囊小按钮 */
 .tool-chip{
   display:inline-flex;align-items:center;gap:var(--space-1);
   border:1px solid var(--border);background:var(--bg-surface);
   border-radius:var(--radius-s);
   font-size:var(--font-micro);color:var(--text-2);
-  padding:var(--space-1) var(--space-3);cursor:pointer;font-family:var(--font);
+  padding:var(--space-1) var(--space-2);cursor:pointer;font-family:var(--font);
   transition:.15s;
 }
 .tool-chip:hover{background:var(--bg-hover)}
@@ -568,6 +637,8 @@ body{
     --sidebar-w:200px;
     --aside-w:220px;
     --titlebar-h:32px;
+    --font-h1:calc(16px * var(--ui-scale));
+    --font-display:calc(19px * var(--ui-scale));
     --font-h3:calc(13px * var(--ui-scale));
     --font-body:calc(12.5px * var(--ui-scale));
     --font-sub:calc(11.5px * var(--ui-scale));
@@ -575,11 +646,11 @@ body{
     --font-micro:calc(9.5px * var(--ui-scale));
   }
   .titlebar{gap:var(--space-1)}
-  .menu-btn{width:28px;height:28px}
+  .menu-btn{width:calc(28px * var(--ui-scale));height:calc(28px * var(--ui-scale))}
   .tb-pill{padding: 4px;gap: 4px}
-  .tb-pill-btn{width:24px;height:22px}
+  .tb-pill-btn{width:calc(24px * var(--ui-scale));height:calc(22px * var(--ui-scale))}
   .tb-pill-btn svg{width:13px;height:13px}
-  .win-btn{width:28px}
+  .win-btn{width:calc(28px * var(--ui-scale))}
 }
 /* 宽窗:栏宽升档,避免大屏下内容仍被限制在窄列 */
 @media (min-width:1600px){
@@ -592,7 +663,7 @@ body{
 @media (max-width:1100px){
   :root{
     /* 窄窗口基准字号下移,仍乘以用户设置的 --ui-scale */
-    --font-hero:calc(23px * var(--ui-scale)); --font-h2:calc(15px * var(--ui-scale)); --font-h3:calc(14px * var(--ui-scale));
+    --font-hero:calc(23px * var(--ui-scale)); --font-h1:calc(17px * var(--ui-scale)); --font-display:calc(20px * var(--ui-scale)); --font-h2:calc(15px * var(--ui-scale)); --font-h3:calc(14px * var(--ui-scale));
     --font-body:calc(13px * var(--ui-scale)); --font-body-em:calc(13px * var(--ui-scale)); --font-sub:calc(12px * var(--ui-scale));
     --font-caption:calc(11px * var(--ui-scale)); --font-micro:calc(10px * var(--ui-scale));
     --titlebar-h:34px;
@@ -606,7 +677,7 @@ body{
 @media (min-width:1600px){
   :root{
     /* 宽窗口基准字号上移,仍乘以用户设置的 --ui-scale */
-    --font-hero:calc(30px * var(--ui-scale)); --font-h2:calc(18px * var(--ui-scale)); --font-h3:calc(16px * var(--ui-scale));
+    --font-hero:calc(30px * var(--ui-scale)); --font-h1:calc(21px * var(--ui-scale)); --font-display:calc(26px * var(--ui-scale)); --font-h2:calc(18px * var(--ui-scale)); --font-h3:calc(16px * var(--ui-scale));
     --font-body:calc(15px * var(--ui-scale)); --font-body-em:calc(15px * var(--ui-scale)); --font-sub:calc(14px * var(--ui-scale));
     --font-caption:calc(13px * var(--ui-scale)); --font-micro:calc(12px * var(--ui-scale)); --font-mini:calc(11px * var(--ui-scale));
     --titlebar-h:42px;

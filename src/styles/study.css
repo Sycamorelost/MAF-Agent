@@ -1,0 +1,205 @@
+/* ============================================================
+ * 学习规划页专属样式(PlanDetail / StudyPage / PlanList / LearnView)
+ * 所有 .rp- 前缀、.pg- 前缀(已在 base.css)、.mode-tag / .tt / .dd 等
+ * ============================================================ */
+
+/* ---------- 运行页容器 ---------- */
+.rp-run {
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0;
+}
+
+.rp-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+.rp-head .topic {
+  flex: 1; min-width: 0;
+  font-size: var(--font-h3); font-weight: 650; color: var(--text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 状态标签(生成中 / 进行中 / 已完成 / 失败 / 已终止 / 降级结构) */
+.mode-tag {
+  font-size: var(--font-micro); font-weight: 600;
+  padding: 3px 10px; border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-3);
+  flex-shrink: 0;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.mode-tag.staged { border-color: var(--brand-line); background: var(--brand-soft); color: var(--brand-deep); }
+.mode-tag.concise { border-color: rgba(198, 122, 9, .35); background: color-mix(in srgb, var(--err) 10%, transparent); color: var(--err); }
+.mode-tag.legacy { border-color: var(--border); }
+
+/* ---------- 主体区域 ---------- */
+.rp-body {
+  flex: 1; min-height: 0;
+  overflow: auto;
+  background: var(--bg-main);
+}
+.rp-main {
+  padding: var(--space-4) var(--pad-x) var(--space-8);
+}
+
+/* ---------- 时间线 / 阶段卡 ---------- */
+.rp-timeline {
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+.rp-empty {
+  padding: var(--space-6) var(--space-3);
+  text-align: center; color: var(--text-4); font-size: var(--font-caption);
+}
+
+/* 阶段条目 / 时间线节点 */
+.rp-tl {
+  border: 1px solid var(--border); border-radius: var(--radius-m);
+  background: var(--bg-surface);
+  padding: var(--space-3) var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  box-shadow: var(--shadow-card);
+}
+.rp-tl.ok { border-left: 3px solid var(--ok); }
+.rp-tl.doing { border-left: 3px solid var(--brand); background: color-mix(in srgb, var(--brand-soft) 30%, var(--bg-surface)); }
+.rp-tl .tt {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  font-size: var(--font-sub); font-weight: 650; color: var(--text-1);
+  line-height: 1.5;
+}
+.rp-tl .tt .pill { font-size: var(--font-mini); font-weight: 500; }
+.rp-tl .tt .pill.warn { border-color: var(--brand-line); color: var(--brand-deep); background: var(--brand-soft); }
+
+/* 描述 / 里程碑 */
+.rp-tl .dd {
+  font-size: var(--font-caption); color: var(--text-3); line-height: 1.65;
+  overflow-wrap: anywhere; word-break: break-word;
+}
+.rp-tl .dd b { color: var(--text-1); font-weight: 600; margin-right: 4px; }
+
+/* ---------- 内联行:今日待办 / 阶段主题 / 复习 ---------- */
+/* 每行主题名 + D难度 + 学习/测验/深挖 按钮,允许自动换行 */
+.rp-queries {
+  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+.rp-queries > span {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.rp-queries b {
+  font-size: var(--font-caption); color: var(--text-1);
+  font-weight: 600;
+  overflow-wrap: anywhere; word-break: break-word;
+}
+.rp-queries i {
+  font-size: var(--font-mini); font-style: normal; color: var(--text-4);
+  font-family: var(--font-mono);
+}
+
+/* ---------- 徽章 pill(base 已有,补宽度/换行) ---------- */
+.pill { flex-shrink: 0; font-size: var(--font-mini); font-weight: 500; }
+
+/* ---------- 芯片行(.pg-chips 已在 base.css,补窄面板允许换行) ---------- */
+.pg-chips { row-gap: var(--space-1); }
+
+/* ---------- 今日待办周徽标 ---------- */
+/* 让「第 N / M 周」徽标在 chips 行里视觉突出 */
+.pg-chip.on { font-weight: 600; }
+
+/* ---------- 响应式:窄窗下列表更紧凑 ---------- */
+@media (max-width: 640px) {
+  .rp-main { padding: var(--space-2); }
+  .rp-head { padding: var(--space-2); }
+  .rp-tl { padding: var(--space-2); }
+  .rp-queries { gap: var(--space-1); }
+}
+
+/* ============================================================
+ * 首页 PlanList(历史列表) + PlanPanel 左抽屉
+ * ============================================================ */
+
+/* 页面头:标题 + 副提示 */
+.pg-main-head {
+  display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-4) var(--pad-x);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+.pg-main-head .topic {
+  font-size: var(--font-h2); font-weight: 650; color: var(--text-1);
+  flex: 1; min-width: 0;
+}
+
+/* ---------- 历史列表容器 ---------- */
+.rp-hist {
+  display: flex; flex-direction: column;
+  min-height: 100%;
+}
+.rp-hist-list {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3) var(--pad-x);
+  flex: 1;
+}
+
+/* 单条历史项 */
+.rp-hist-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-m);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  box-shadow: var(--shadow-card);
+}
+.rp-hist-item:hover { border-color: var(--brand-line); background: var(--brand-soft); }
+.rp-hist-item:active { background: var(--bg-surface); }
+
+.rp-hist-main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.rp-hist-topic {
+  font-size: var(--font-caption); font-weight: 600; color: var(--text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rp-hist-meta {
+  font-size: var(--font-mini); color: var(--text-3);
+  display: flex; flex-wrap: wrap; gap: 4px 8px;
+  overflow-wrap: anywhere;
+}
+
+/* 状态小圆点(左侧指示) */
+.stat-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  background: var(--text-4);
+}
+.stat-dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+.stat-dot.err { background: var(--err); box-shadow: 0 0 0 3px color-mix(in srgb, var(--err) 20%, transparent); }
+.stat-dot.warn { background: rgba(198, 122, 9, .9); box-shadow: 0 0 0 3px rgba(198, 122, 9, .2); }
+.stat-dot.info { background: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent); }
+
+/* ---------- 左抽屉 PlanPanel ---------- */
+.pg-aside.rp-config {
+  padding-bottom: var(--space-6);
+  display: flex; flex-direction: column;
+}
+.pg-aside.rp-config .pg-aside-head { padding-bottom: var(--space-2); }
+.pg-aside.rp-config textarea.pg-field {
+  /* 学习主题 textarea 需要完整的 block 级宽度 */
+  box-sizing: border-box;
+}
+
+/* 抽屉内基础信息表单 —— 让 label 和 input 各占一行更清爽 */
+.pg-aside.rp-config .pg-row {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: var(--space-1) 0;
+}
+.pg-aside.rp-config .pg-row > span {
+  font-size: var(--font-mini); color: var(--text-3); font-weight: 500;
+}
+.pg-aside.rp-config .pg-row .pg-field { width: 100%; box-sizing: border-box; }

@@ -2,10 +2,10 @@ import type { ThinkingLevel } from '../stores/thinking';
 
 /** 档位显示名。 */
 export const THINKING_LEVEL_LABEL: Record<ThinkingLevel, string> = {
-  light: 'Light',
-  medium: 'Medium',
-  high: 'High',
-  ultra: 'Ultra',
+  light: '轻量',
+  medium: '标准',
+  high: '深入',
+  ultra: '极限',
 };
 
 /**

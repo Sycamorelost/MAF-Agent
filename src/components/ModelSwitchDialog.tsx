@@ -47,7 +47,7 @@ function SummarizeModelSection() {
       <div className="summarize-title">记忆提炼模型(可选,缺省使用当前会话模型)</div>
       <div className="summarize-row">
         <select
-          className="key-input"
+          className="input"
           value={providerId}
           onChange={(e) => {
             const pid = e.target.value;
@@ -67,7 +67,7 @@ function SummarizeModelSection() {
         </select>
         {providerId && tpl && (
           <select
-            className="key-input"
+            className="input"
             value={model}
             onChange={(e) => {
               setModel(e.target.value);

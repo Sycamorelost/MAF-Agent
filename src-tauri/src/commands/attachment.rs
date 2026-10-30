@@ -195,7 +195,7 @@ pub async fn save_attachment(
 /// 只提取文本、不落盘:供「去 AI 味」工作台等页面把拖入的文件直接填进输入区。
 /// 写临时文件后复用统一提取管线(编码/格式处理一致),用完即删。
 #[tauri::command]
-pub fn extract_text_preview(file_name: String, data_base64: String) -> Result<String, String> {
+pub async fn extract_text_preview(file_name: String, data_base64: String) -> Result<String, String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&data_base64)
         .map_err(|e| format!("base64 解码失败: {e}"))?;
@@ -238,7 +238,7 @@ pub fn extract_text_preview(file_name: String, data_base64: String) -> Result<St
 
 /// 读取附件字节并返回 data URL(前端渲染历史图片附件用)。
 #[tauri::command]
-pub fn read_attachment_data(path: String) -> Result<String, String> {
+pub async fn read_attachment_data(path: String) -> Result<String, String> {
     let p = std::path::Path::new(&path);
     // 白名单校验:只允许读 attachments 目录内的文件(防任意文件读取)
     ensure_in_attachments_dir(p)?;
@@ -324,7 +324,7 @@ fn list_all_on(conn: &rusqlite::Connection) -> Result<Vec<AttachmentEntry>, Stri
 
 /// 列出全部历史附件(附件中心数据源)。
 #[tauri::command]
-pub fn list_all_attachments() -> Result<Vec<AttachmentEntry>, String> {
+pub async fn list_all_attachments() -> Result<Vec<AttachmentEntry>, String> {
     let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
     list_all_on(&conn)
 }
@@ -350,7 +350,7 @@ fn display_name_from_path(p: &std::path::Path) -> String {
 /// 把附件中心已有文件再次引入某会话:复用磁盘文件(不复制),重新生成元数据。
 /// 文件可能被外部改动过,文本类重新提取保证注入内容新鲜。
 #[tauri::command]
-pub fn insert_attachment_to_session(
+pub async fn insert_attachment_to_session(
     session_id: String,
     path: String,
 ) -> Result<AttachmentMeta, String> {
@@ -453,7 +453,7 @@ fn count_doc_id_refs_on(
 /// 删除附件:从来源消息 JSON 移除条目;全库无其他引用时一并删除磁盘文件,
 /// 并级联清理该文档的检索块(R13:删附件后 doc_search 不应再返回旧内容)。
 #[tauri::command]
-pub fn delete_attachment(message_id: i64, path: String) -> Result<(), String> {
+pub async fn delete_attachment(message_id: i64, path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     ensure_in_attachments_dir(p)?;
     let refs = {

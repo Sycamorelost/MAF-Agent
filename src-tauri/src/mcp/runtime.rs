@@ -167,6 +167,12 @@ impl McpRuntime {
         let mut args = cfg.args.clone();
         args.extend(dirs.iter().map(|d| d.display().to_string()));
         let mut env = crate::mcp::config::memory_env(&args, data_dir);
+        // 用户显式配置的环境变量(如 TAVILY_API_KEY)优先;预置注入只补空缺
+        for (k, v) in &cfg.env {
+            env.retain(|(ek, _)| ek != k);
+            env.push((k.clone(), v.clone()));
+        }
+        env.extend(crate::mcp::config::preset_env(&args, &cfg.env));
         // 国内镜像:npx 首次下载 npm 包走 npmmirror,uvx/pip 走清华 PyPI(默认开,设置页可关)
         if crate::mcp::load_or_init(data_dir).china_mirror {
             env.extend(crate::mcp::config::mirror_env(&cfg.command));

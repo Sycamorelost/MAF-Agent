@@ -70,13 +70,13 @@ pub(crate) fn glossary_hints(text: &str) -> Option<String> {
 }
 
 #[tauri::command]
-pub fn glossary_list() -> Vec<GlossaryEntry> {
+pub async fn glossary_list() -> Vec<GlossaryEntry> {
     load_glossary()
 }
 
 /// 全量覆盖保存术语表(设置页增删改后整体提交)。
 #[tauri::command]
-pub fn glossary_save(entries: Vec<GlossaryEntry>) -> Result<(), String> {
+pub async fn glossary_save(entries: Vec<GlossaryEntry>) -> Result<(), String> {
     let p = glossary_path();
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("mkdir data failed: {e}"))?;
@@ -117,7 +117,7 @@ const HISTORY_MAX: usize = 100;
 
 /// 保存一条翻译记录(前端流式完成后调用)。
 #[tauri::command]
-pub fn save_translation(rec: TranslationRecord) -> Result<String, String> {
+pub async fn save_translation(rec: TranslationRecord) -> Result<String, String> {
     let dir = translations_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建 translations 目录失败: {e}"))?;
     let ts = chrono::Local::now().format("%Y%m%d-%H%M%S%3f");
@@ -152,7 +152,7 @@ fn list_history_names(dir: &std::path::Path) -> Vec<String> {
 
 /// 列出翻译历史(新 → 旧,最多 100 条)。
 #[tauri::command]
-pub fn list_translations() -> Vec<TranslationRecord> {
+pub async fn list_translations() -> Vec<TranslationRecord> {
     let dir = translations_dir();
     let mut names = list_history_names(&dir);
     names.reverse();
@@ -170,7 +170,7 @@ pub fn list_translations() -> Vec<TranslationRecord> {
 
 /// 删除单条历史(仅允许简单文件名,防路径穿越)。
 #[tauri::command]
-pub fn delete_translation(file_name: String) -> Result<(), String> {
+pub async fn delete_translation(file_name: String) -> Result<(), String> {
     if file_name.contains(['/', '\\']) || !file_name.ends_with(".json") {
         return Err("非法文件名".into());
     }
@@ -210,7 +210,7 @@ mod tests {
         let entries = vec![
             GlossaryEntry {
                 src: "元代理".into(),
-                dst: "MAF Agent".into(),
+                dst: "myAgent".into(),
                 note: None,
             },
             GlossaryEntry {
@@ -221,7 +221,7 @@ mod tests {
         ];
         // CJK 命中
         let h = hint_of("元代理是一个本地助手", &entries).unwrap();
-        assert!(h.contains("元代理 → MAF Agent"));
+        assert!(h.contains("元代理 → myAgent"));
         // 拉丁忽略大小写命中
         let h2 = hint_of("the MEMORY.MD file", &entries).unwrap();
         assert!(h2.contains("memory.md"));

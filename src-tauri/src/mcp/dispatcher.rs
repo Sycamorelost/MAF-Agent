@@ -77,6 +77,7 @@ pub async fn dispatch_tool_calls(
                     "builtin",
                     &tool_name,
                     args.clone(),
+                    session_id,
                 )
                 .await
                 {
@@ -95,11 +96,15 @@ pub async fn dispatch_tool_calls(
                 args.clone()
             };
             // 审批通过后才真正执行(顺序不可颠倒:shell_exec 有副作用);
-            // 完全信任(策略=完全访问)时 shell_exec 放开白名单,由用户明示授权
+            // shell_exec 的放开白名单只看全局「完全信任」,会话级 full 覆盖不解锁 shell/GUI
+            // (避免单会话静默提权系统级能力;会话覆盖只管「问不问」)。
             let trust_shell =
                 crate::mcp::approval::load_policy(&data_dir).mode == crate::mcp::ApprovalMode::Full;
+            let started = std::time::Instant::now();
             let (content, ok) =
                 execute_builtin(&tool_name, &exec_args, trust_shell, session_id, sub_llm).await;
+            let elapsed_ms = Some(started.elapsed().as_millis() as u64);
+            let arguments = args_summary(&exec_args);
             // 任务清单变更 → 通知前端刷新对应会话的 todo 面板
             if ok
                 && tool_name == "todo_write"
@@ -113,6 +118,8 @@ pub async fn dispatch_tool_calls(
                 server_name: "builtin".into(),
                 content: content.clone(),
                 ok,
+                arguments,
+                elapsed_ms,
             });
             if !ok {
                 all_ok = false;
@@ -133,6 +140,8 @@ pub async fn dispatch_tool_calls(
                     server_name: "(unknown)".into(),
                     content: msg.clone(),
                     ok: false,
+                    arguments: None,
+                    elapsed_ms: None,
                 });
                 tool_messages.push(tool_message(&tc.id, msg));
                 continue;
@@ -141,7 +150,7 @@ pub async fn dispatch_tool_calls(
 
         // 2. 审批(会话内已放行的工具直接跳过弹窗);AllowEdited 用用户改后的参数
         let exec_args = match ask_approval(
-            app, approval, capability, &data_dir, &server, &tool_name, args,
+            app, approval, capability, &data_dir, &server, &tool_name, args, session_id,
         )
         .await
         {
@@ -159,6 +168,8 @@ pub async fn dispatch_tool_calls(
                     server_name: server.clone(),
                     content: msg.clone(),
                     ok: false,
+                    arguments: None,
+                    elapsed_ms: None,
                 });
                 tool_messages.push(tool_message(&tc.id, msg));
                 continue;
@@ -182,22 +193,27 @@ pub async fn dispatch_tool_calls(
                 server_name: server.clone(),
                 content: msg.clone(),
                 ok: false,
+                arguments: None,
+                elapsed_ms: None,
             });
             tool_messages.push(tool_message(&tc.id, msg));
             continue;
         }
 
         // 4. 执行
+        let started = std::time::Instant::now();
         let result = runtime
             .call_tool(
                 McpToolCall {
                     server_name: server.clone(),
                     tool_name: tool_name.clone(),
-                    arguments: exec_args,
+                    arguments: exec_args.clone(),
                 },
                 data_dir.clone(),
             )
             .await;
+        let elapsed_ms = Some(started.elapsed().as_millis() as u64);
+        let arguments = args_summary(&exec_args);
 
         let content = if result.ok {
             result.content
@@ -218,6 +234,8 @@ pub async fn dispatch_tool_calls(
             server_name: server,
             content: content.clone(),
             ok: result.ok,
+            arguments,
+            elapsed_ms,
         });
 
         // 6. 回填 tool 消息
@@ -233,6 +251,15 @@ pub async fn dispatch_tool_calls(
     }
 }
 
+/// 工具流水(P6):实际执行参数的紧凑摘要,截断到 500 字符,避免撑爆 maf-tool 块。
+fn args_summary(args: &Value) -> Option<String> {
+    let s = serde_json::to_string(args).unwrap_or_default();
+    if s.is_empty() || s == "{}" || s == "null" {
+        return None;
+    }
+    Some(s.chars().take(500).collect())
+}
+
 fn tool_message(tool_call_id: &str, content: String) -> ChatMessage {
     ChatMessage {
         role: "tool".into(),
@@ -246,8 +273,8 @@ fn tool_message(tool_call_id: &str, content: String) -> ChatMessage {
 /// 以下四种情况直接放行(「解放双手」):
 ///   1. 会话内已点过「始终允许」
 ///   2. 命中有效的能力令牌(且作用域覆盖该工具)
-///   3. 审批模式为「完全访问」
-///   4. 「自动审批」下判定为只读,或「自定义」下命中白名单
+///   3. 审批档为「完全信任」(全局或会话级覆盖,D11)
+///   4. 「工作区」档下判定为只读 / 工作区内写,或命中附加白名单
 async fn ask_approval(
     app: &tauri::AppHandle,
     approval: &ApprovalStore,
@@ -256,14 +283,26 @@ async fn ask_approval(
     server: &str,
     tool: &str,
     args: Value,
+    session_id: Option<&str>,
 ) -> Option<Value> {
     if approval.is_session_allowed(server, tool).await {
         return Some(args);
     }
-    let policy = super::approval::load_policy(data_dir);
+    let mut policy = super::approval::load_policy(data_dir);
+    // 会话级权限档覆盖(D11/V25):非 inherit 时替换全局档位;
+    // allow 白名单沿用全局配置(它只在 workspace 档生效,与档位正交)。
+    if let Some(sid) = session_id
+        && let Some(mode) = crate::db::sessions::permission_mode_override(sid)
+    {
+        policy.mode = match mode.as_str() {
+            "ask" => super::approval::ApprovalMode::Ask,
+            "full" => super::approval::ApprovalMode::Full,
+            _ => super::approval::ApprovalMode::Workspace,
+        };
+    }
     let risk = super::approval::assess_risk(server, tool, &args);
     // 能力令牌:已并入「完全信任」总开关 —— 仅完全信任模式下才消费令牌,
-    // 避免 full 期间签发的残留令牌在切回手动/自动后继续免审批
+    // 避免 full 期间签发的残留令牌在切回逐次/工作区档后继续免审批
     if policy.mode == super::approval::ApprovalMode::Full
         && let Some(cap) = capability.consume(capability_scope(server, tool, risk))
     {
@@ -282,7 +321,7 @@ async fn ask_approval(
         );
         return Some(args);
     }
-    if !policy.requires_approval(server, tool, risk) {
+    if !policy.requires_approval(server, tool, risk, &args) {
         crate::mcp::audit(
             data_dir,
             "approval_skip",

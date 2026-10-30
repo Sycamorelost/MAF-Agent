@@ -150,7 +150,7 @@ fn read_note_file(path: &PathBuf) -> Option<(NoteFrontmatter, String)> {
 
 /// 列出全部笔记(扫盘 + 重建索引,返回按更新时间倒序的元数据)。
 #[tauri::command]
-pub fn notes_list() -> Result<Vec<NoteMeta>, String> {
+pub async fn notes_list() -> Result<Vec<NoteMeta>, String> {
     let dir = notes_dir();
     fs::create_dir_all(&dir).map_err(|e| format!("mkdir {} failed: {e}", dir.display()))?;
 
@@ -240,7 +240,7 @@ fn purge_missing(found: &HashSet<String>) -> Result<(), String> {
 
 /// 读取单条笔记完整内容(以文件为准)。
 #[tauri::command]
-pub fn notes_get(id: String) -> Result<NoteDoc, String> {
+pub async fn notes_get(id: String) -> Result<NoteDoc, String> {
     crate::memory::validate_id(&id)?;
     let path = notes_dir().join(format!("{id}.md"));
     let (fm, body) = read_note_file(&path).ok_or_else(|| format!("笔记不存在: {id}"))?;
@@ -256,7 +256,7 @@ pub fn notes_get(id: String) -> Result<NoteDoc, String> {
 
 /// 新建或覆盖保存笔记(id 为空 = 新建)。返回保存后的完整内容。
 #[tauri::command]
-pub fn notes_save(
+pub async fn notes_save(
     id: Option<String>,
     title: String,
     tags: Vec<String>,
@@ -322,7 +322,7 @@ pub fn notes_save(
 
 /// 删除笔记(同时清理 md 文件与 FTS 索引)。
 #[tauri::command]
-pub fn notes_delete(id: String) -> Result<(), String> {
+pub async fn notes_delete(id: String) -> Result<(), String> {
     crate::memory::validate_id(&id)?;
     let path = notes_dir().join(format!("{id}.md"));
     if path.exists() {

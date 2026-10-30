@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+﻿import { useState, type Dispatch, type SetStateAction } from 'react';
 import {
   mcpSaveConfig,
   mcpRemoveServer,
@@ -51,9 +51,9 @@ export function useMcpServerActions({
       // 启动后立即 list_tools 测试
       const tools = await mcpListTools(s.name);
       setStatus((prev) => ({ ...prev, [s.name]: { running: true, tools } }));
-      setMsg(`✅ ${s.name} 启动成功,共 ${tools.length} 个工具`);
+      setMsg(`成功: ${s.name} 启动成功,共 ${tools.length} 个工具`);
     } catch (e: any) {
-      setMsg(`❌ 启动失败: ${e}`);
+      setMsg(`失败: 启动失败: ${e}`);
       setStatus((prev) => ({ ...prev, [s.name]: { running: false } }));
     }
   };
@@ -70,9 +70,9 @@ export function useMcpServerActions({
     try {
       const [ok, fail, errors] = await mcpStartAllEnabled();
       if (fail === 0) {
-        setMsg(`✅ 一键启动完成:${ok} 个 server 全部启动成功`);
+        setMsg(`成功: 一键启动完成:${ok} 个 server 全部启动成功`);
       } else {
-        setMsg(`⚠️ 一键启动完成:${ok} 成功,${fail} 失败${errors.length ? `(${errors.join("; ")})` : ""}`);
+        setMsg(`警告: 一键启动完成:${ok} 成功,${fail} 失败${errors.length ? `(${errors.join("; ")})` : ""}`);
       }
       // 刷新状态
       const newStatus: Record<string, McpServerStatus> = {};
@@ -86,7 +86,7 @@ export function useMcpServerActions({
       }
       setStatus((prev) => ({ ...prev, ...newStatus }));
     } catch (e: any) {
-      setMsg(`❌ 一键启动失败: ${e}`);
+      setMsg(`失败: 一键启动失败: ${e}`);
     } finally {
       setStartingAll(false);
     }

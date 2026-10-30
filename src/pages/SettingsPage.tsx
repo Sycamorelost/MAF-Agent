@@ -17,6 +17,8 @@ import { AboutView } from './settings/AboutView';
 import { SelectionView } from './settings/SelectionView';
 import { NavMenuView } from './settings/NavMenuView';
 import { AppearanceView } from './settings/AppearanceView';
+import { WorkbenchView } from './settings/WorkbenchView';
+import { PresetsView } from './settings/PresetsView';
 import { McpView } from './settings/McpView';
 
 export default function SettingsPage() {
@@ -91,6 +93,7 @@ export default function SettingsPage() {
     importRef,
     engineLabel,
     engineReady,
+    mcpServerNames,
     hiddenNav,
     navOrder,
     onSaveSettings,
@@ -106,6 +109,8 @@ export default function SettingsPage() {
     onSaveSelection,
     toggleNavItem,
     reorderNavItem,
+    setDefaultWorkbench,
+    setDefaultPreset,
   } = useGeneralSettings();
 
   const providersView = (
@@ -163,6 +168,7 @@ export default function SettingsPage() {
       savingSearch={savingSearch}
       searchTestStatus={searchTestStatus}
       searchTesting={searchTesting}
+      mcpServerNames={mcpServerNames}
       onDraftChange={patchSearchDraft}
       onSaveSearch={onSaveSearch}
       onTestSearch={onTestSearch}
@@ -226,6 +232,18 @@ export default function SettingsPage() {
     selection: selectionView,
     appearance: <AppearanceView />,
     navmenu: navmenuView,
+    workbench: (
+      <WorkbenchView
+        current={settings ? (settings.default_workbench === 'work' ? 'work' : 'chat') : null}
+        onSelect={setDefaultWorkbench}
+      />
+    ),
+    presets: (
+      <PresetsView
+        current={settings?.default_preset ?? null}
+        onSelect={setDefaultPreset}
+      />
+    ),
     usage: usageView,
     storage: storageView,
     mcp: <McpView />,

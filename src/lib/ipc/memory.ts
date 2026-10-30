@@ -87,12 +87,18 @@ export interface AppSettings {
   first_run_completed: boolean;
   /** 用户自定义底层 Prompt(空 = 使用内置默认) */
   custom_base_prompt: string | null;
-  /** 用户自定义应用名称(空 = 使用 "MAF Agent",仅影响窗口标题/托盘/快捷方式) */
+  /** 用户自定义应用名称(空 = 使用 "myAgent",仅影响窗口标题/托盘/快捷方式) */
   custom_app_name: string | null;
   /** 用户自定义应用图标路径(空 = 使用内置图标,仅影响窗口/托盘/快捷方式) */
   custom_app_icon: string | null;
-  /** 默认工作区根目录(空 = <数据目录>/workspace;环境变量 MAF_WORKSPACE 仍优先) */
+  /** 用户自定义首页提示语(空 = 使用默认「myAgent | 向更美好的生活出发！」) */
+  home_prompt: string | null;
+  /** 默认工作区根目录(空 = <数据目录>/workspace;环境变量 MYAGENT_WORKSPACE 仍优先) */
   workspace_root: string | null;
+  /** 默认工作台模式(D16):chat = 普通会话首页;work = 专业 Agent 工作台首页 */
+  default_workbench: 'chat' | 'work';
+  /** 全局默认运行时预设(D19):economy / standard / deep / code */
+  default_preset: string;
 }
 
 export const getSettings = () => invoke<AppSettings>('get_settings');

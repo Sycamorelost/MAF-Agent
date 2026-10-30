@@ -173,7 +173,7 @@ export default function ToolBar({
         </button>
       ) : (
         <button className="send" onClick={onSend} disabled={!canSend} title="发送">
-          <IconSend size={14} />
+          <IconSend size={18} />
         </button>
       )}
     </div>

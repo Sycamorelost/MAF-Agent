@@ -1,6 +1,6 @@
 import { type ComponentType } from 'react';
 import * as ipc from '../../lib/ipc';
-import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconTranslate, IconQuote, IconChart, IconPlus, IconFileText } from '../../components/icons';
+import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconTranslate, IconQuote, IconChart, IconPlus, IconFileText, IconLayers, IconGauge } from '../../components/icons';
 
 export const ENGINES = [
   { id: 'bocha', name: '博查 Bocha' },
@@ -32,8 +32,10 @@ export const NAV: NavGroup[] = [
   {
     grp: '界面',
     items: [
-      { id: 'appearance', label: '主题与字体大小', icon: IconFileText },
+      { id: 'appearance', label: '外观与首页', icon: IconFileText },
       { id: 'navmenu', label: '导航菜单', icon: IconChat },
+      { id: 'workbench', label: '工作台模式', icon: IconLayers },
+      { id: 'presets', label: '运行时预设', icon: IconGauge },
     ],
   },
   {
@@ -52,7 +54,7 @@ export const NAV: NavGroup[] = [
 
 /** 导航菜单可见性开关项(对话/设置固定保留,不在此列)。 */
 export const NAV_VISIBILITY: { key: string; label: string }[] = [
-  { key: 'research', label: '研究' },
+  { key: 'work', label: '专业工作台' },
   { key: 'plan', label: '学习规划' },
   { key: 'draw', label: '绘图' },
   { key: 'translate', label: '翻译' },
@@ -111,7 +113,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
     name: '条款的接受与修订',
     items: [
       {
-        text: '1.1 本使用条款(以下简称"本条款")是您(以下简称"用户"或"您")与 MAF Agent 开发者梧桐吾桐及其团队(以下简称"开发者")之间,就 MAF Agent 软件(以下简称"本软件")的安装、运行与使用所订立的协议。',
+        text: '1.1 本使用条款(以下简称"本条款")是您(以下简称"用户"或"您")与 myAgent 开发者梧桐吾桐及其团队(以下简称"开发者")之间,就 myAgent 软件(以下简称"本软件")的安装、运行与使用所订立的协议。',
       },
       {
         text: '1.2 您在安装、运行或以任何方式使用本软件前,应完整阅读本条款。您安装、运行或继续使用本软件,即视为您已阅读、理解并同意受本条款约束。若您不同意本条款的任何内容,请勿安装或使用本软件,并应将其卸载。',
@@ -125,7 +127,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
     no: 2,
     name: '定义',
     items: [
-      { text: '2.1 "本软件"指 MAF Agent 桌面应用程序,及其附带的界面、文档与本地功能模块。' },
+      { text: '2.1 "本软件"指 myAgent 桌面应用程序,及其附带的界面、文档与本地功能模块。' },
       {
         text: '2.2 "模型服务商"指由用户自行配置、凭 API Key 接入的第三方大模型服务提供方,包括用户自行添加的兼容接口。',
       },
@@ -140,10 +142,10 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
     name: '软件描述与授权范围',
     items: [
       {
-        text: '3.1 本软件是一款专为学习、调研而创造的智能体框架软件,提供本地会话、文件即记忆、专项研究、知识库、翻译、绘画、划词提问等框架功能。本软件自身不生产、不持有大模型内容,模型能力由用户自行配置的模型服务商提供。',
+        text: '3.1 本软件（myAgent）是 MAF 团队旗下的 Agent 产品，一款专为学习、调研而创造的智能体框架软件，提供本地会话、文件即记忆、学习规划、知识库、翻译、绘画、划词提问等框架功能。本软件自身不生产、不持有大模型内容,模型能力由用户自行配置的模型服务商提供。',
       },
       {
-        text: '3.2 本软件以 Apache License 2.0 开源发布，源码见 https://github.com/Sycamorelost/MAF-Agent 。您对本软件的安装、运行、修改、分发以及商业使用，均以仓库根目录 LICENSE 授予的权利为准；本条款仅作补充说明，与 LICENSE 冲突时以 LICENSE 为准。(免费与无广告承诺见第十五条。)',
+        text: '3.2 本软件以 Apache License 2.0 开源发布，源码见 https://github.com/Sycamorelost/MAF-Agent 。您对本软件的安装、运行、修改、分发以及商业使用，均以仓库根目录 LICENSE 授予的权利为准；本条款仅作补充说明，与 LICENSE 冲突时以 LICENSE 为准。(免费与无广告承诺见第十四条。)',
       },
       {
         text: '3.3 依据开源许可证，您可将本软件用于商业用途(含商业转售、有偿托管、捆绑销售等)，但须遵守 LICENSE 与 NOTICE 中关于署名、许可与免责声明的要求，不得以开发者名义对修改后的版本作出担保或背书。许可证未授予的商标等权利仍由开发者保留。',
@@ -303,40 +305,28 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
   },
   {
     no: 13,
-    name: '科研增强功能与技能来源',
+    name: '输出格式边界',
     items: [
       {
-        text: '13.1 本软件研究功能中的「科研增强」能力,其方法论基于开源项目 nature-skills(作者 Yuan1z0825,项目地址:https://github.com/Yuan1z0825/nature-skills ,本功能对应其「其他 agent 场景」章节:https://github.com/Yuan1z0825/nature-skills#55-%E5%85%B6%E4%BB%96-agent-%E5%9C%BA%E6%99%AF )。上述技能方法论文档经本地化重构后随本软件内置,仅供本软件本地运行使用;其著作权归原作者所有。',
+        text: '13.1 本软件的会话、学习计划与文档导出(Markdown / HTML / Word / PDF 打印)全部在本机生成;可用格式以应用内实际提供的导出入口为准。',
       },
       {
-        text: '13.2 科研增强功能的检索、生成、审计与导出全部在本机完成;本软件未移植、未启用该项目文档中面向任何第三方服务的路由,亦不为其建立任何网络连接。',
+        text: '13.2 本软件图示能力包括本地矢量图渲染与用户自行配置的模型服务图像生成;AI 生成图像仅作为概念草稿,不构成实验证据。',
       },
     ],
   },
   {
     no: 14,
-    name: '输出格式边界',
-    items: [
-      {
-        text: '14.1 研究报告导出仅提供 Markdown 与 HTML 两种格式,全部在本机生成。本软件不提供 PPTX、DOCX、PDF 等其他格式的导出,以保障输出的稳定性与质量。',
-      },
-      {
-        text: '14.2 本软件图示能力包括本地矢量图渲染与用户自行配置的模型服务图像生成;AI 生成图像仅作为概念草稿,不构成实验证据。',
-      },
-    ],
-  },
-  {
-    no: 15,
     name: '无广告与去商业化声明',
     items: [
       {
-        text: '15.1 本软件完全免费,不提供任何第三方广告服务,不包含任何原生广告、推广位或赞助内容,亦无内购项目。',
+        text: '14.1 本软件完全免费,不提供任何第三方广告服务,不包含任何原生广告、推广位或赞助内容,亦无内购项目。',
       },
       {
-        text: '15.2 本软件现在不会、将来也不会参与任何商业化内容或商业化运作,将持续坚持开源免费的发展方向。',
+        text: '14.2 本软件现在不会、将来也不会参与任何商业化内容或商业化运作,将持续坚持开源免费的发展方向。',
       },
       {
-        text: '15.3 本软件源码公开于 https://github.com/Sycamorelost/MAF-Agent ，无需申请即可自行获取；获取、修改与分发须遵循仓库根目录的 LICENSE 与 NOTICE。',
+        text: '14.3 本软件源码公开于 https://github.com/Sycamorelost/MAF-Agent ，无需申请即可自行获取；获取、修改与分发须遵循仓库根目录的 LICENSE 与 NOTICE。',
       },
     ],
   },

@@ -100,17 +100,31 @@ fn decrypt_headers(cfg: &mut McpConfig) {
 
 /// 把新增的预置 server 补进配置;返回是否发生变更。
 /// v1→v2:开箱即用迁移 —— 已存在的预置 server 一次性置为启用(用户之后仍可手动关闭)。
+/// v4→v5:「联网搜索」从 tavily-mcp(需 Key)换为 agent-search-mcp(零 Key);
+///       仅在未被用户显式改过时自动替换(即 args 仍含 tavily-mcp 或已被我们自动换过的 agent-search-mcp);
+///       用户若自行改过 server 配置则不动。
 fn merge_presets(cfg: &mut McpConfig) -> bool {
     if cfg.presets_version >= config::PRESETS_VERSION {
         return false;
     }
     let upgrading_to_v2 = cfg.presets_version < 2;
     let upgrading_to_v3 = cfg.presets_version < 3;
+    let upgrading_to_v5 = cfg.presets_version < 5;
     for preset in config::preset_servers() {
         match cfg.servers.iter_mut().find(|s| s.name == preset.name) {
             Some(existing) => {
                 if upgrading_to_v2 {
                     existing.enabled = true;
+                }
+                // v5:联网搜索从 tavily-mcp 零 Key 升级 agent-search-mcp
+                if upgrading_to_v5 && existing.name == "联网搜索" {
+                    let args_str = existing.args.join(" ");
+                    let auto_managed = args_str.contains("tavily-mcp")
+                        || args_str.contains("agent-search-mcp");
+                    if auto_managed {
+                        existing.args = preset.args.clone();
+                        existing.command = preset.command.clone();
+                    }
                 }
             }
             None => cfg.servers.push(preset),

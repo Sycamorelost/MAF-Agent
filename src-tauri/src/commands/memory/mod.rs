@@ -41,7 +41,8 @@ pub use crud::{
     delete_message, delete_messages_from, delete_session, delete_session_if_empty, fork_branch,
     get_session, list_branches, list_messages, list_sessions, prune_empty_sessions, rename_branch,
     rename_session, set_active_branch, set_session_memory_strategy, set_session_model,
-    set_session_web_search, update_message, update_session_settings,
+    set_session_permission_mode, set_session_web_search, set_session_workbench_mode,
+    update_message, update_session_settings,
 };
 pub use diff::{
     SummarizeMemoryInput, append_memory, list_memory_versions, memory_budget_status,

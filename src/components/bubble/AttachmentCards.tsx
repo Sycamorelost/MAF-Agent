@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import * as ipc from '../../lib/ipc';
 import type { AttachmentMeta } from '../../lib/ipc';
-import { IconDoc } from '../icons';
+import { IconDoc, IconInfo } from '../icons';
 
 /** 单张图片附件:按需读 data URL 渲染缩略图,点击放大。 */
 function ImageAttachment({ meta }: { meta: AttachmentMeta }) {
@@ -57,12 +57,9 @@ export function AttachmentCards({ attachments }: { attachments: string | null })
             className={`attach-card${m.extract_note ? ' attach-card-warn' : ''}`}
             title={m.extract_note ?? m.path}
           >
-            <IconDoc size={16} />
+            {m.extract_note ? <IconInfo size={16} /> : <IconDoc size={16} />}
             <div className="attach-card-info">
-              <div className="attach-card-name">
-                {m.extract_note ? '⚠ ' : ''}
-                {m.name}
-              </div>
+              <div className="attach-card-name">{m.name}</div>
               <div className="attach-card-kind">
                 {m.kind.toUpperCase()}
                 {m.chunk_count

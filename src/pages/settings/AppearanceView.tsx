@@ -1,6 +1,6 @@
-//! 设置 · 外观 —— 字体大小缩放 + 预制主题切换 + 应用标识自定义。
+//! 设置 · 外观 —— 字体大小缩放 + 预制主题切换 + 应用标识自定义 + 首页提示语。
 //! 字体大小只缩放字号 token(-font-*),不改布局间距;主题切换通过 data-theme 覆盖 CSS 变量。
-//! 应用标识仅影响窗口标题/任务栏/托盘,不影响关于页(关于页固定 "MAF Agent")。
+//! 应用标识仅影响窗口标题/任务栏/托盘,不影响关于页(关于页固定 "myAgent")。
 
 import { useEffect, useState } from 'react';
 import {
@@ -11,6 +11,7 @@ import {
   UI_SCALE_MIN,
 } from '../../lib/uiScale';
 import { useThemeStore, THEMES, type ThemeKey } from '../../stores/theme';
+import { IconCheck } from '../../components/icons';
 import * as ipc from '../../lib/ipc';
 
 /** 预设档位(百分比)。 */
@@ -30,9 +31,16 @@ export function AppearanceView() {
   const [appName, setAppName] = useState('');
   const [nameSaved, setNameSaved] = useState(false);
 
+  // 首页提示语:留空 = 使用默认「myAgent | 向更美好的生活出发！」
+  const [homePrompt, setHomePrompt] = useState('');
+  const [promptSaved, setPromptSaved] = useState(false);
+
   useEffect(() => {
     ipc.getSettings()
-      .then((s) => setAppName(s.custom_app_name ?? ''))
+      .then((s) => {
+        setAppName(s.custom_app_name ?? '');
+        setHomePrompt(s.home_prompt ?? '');
+      })
       .catch(() => {});
   }, []);
 
@@ -53,12 +61,27 @@ export function AppearanceView() {
     setTimeout(() => setNameSaved(false), 2000);
   };
 
+  const onSaveHomePrompt = async () => {
+    const settings = await ipc.getSettings();
+    await ipc.saveSettings({ ...settings, home_prompt: homePrompt.trim() || null });
+    setPromptSaved(true);
+    setTimeout(() => setPromptSaved(false), 2000);
+  };
+
+  const onResetHomePrompt = async () => {
+    setHomePrompt('');
+    const settings = await ipc.getSettings();
+    await ipc.saveSettings({ ...settings, home_prompt: null });
+    setPromptSaved(true);
+    setTimeout(() => setPromptSaved(false), 2000);
+  };
+
   return (
     <>
       <h2>字体大小</h2>
       <p className="set-desc">
-        按比例调整整个界面的字号(含对话正文、设置页、侧栏等)。只放大文字,不改变布局间距,
-        因此不会出现排版错位;调整立即生效并记住,下次启动沿用。
+        按比例调整整个界面(含对话正文、设置页、侧栏等)的字号、间距与圆角,
+        整体等比缩放,不会出现「字大框小」或排版错位;调整立即生效并记住,下次启动沿用。
       </p>
 
       <div className="set-card">
@@ -116,7 +139,7 @@ export function AppearanceView() {
               lineHeight: 1.7,
             }}
           >
-            正文示例 · MAF Agent 会在这里输出回答。字号随上方设置实时变化。
+            正文示例 · myAgent 会在这里输出回答。字号随上方设置实时变化。
             <div className="set-hint" style={{ marginTop: 'var(--space-1)' }}>
               次要说明文字示例(--font-caption)
             </div>
@@ -168,7 +191,7 @@ export function AppearanceView() {
                       transition: 'color .15s',
                     }}
                   >
-                    ✓
+                    {active && <IconCheck size={18} />}
                   </span>
                   <span
                     style={{
@@ -189,7 +212,7 @@ export function AppearanceView() {
       <h2 style={{ marginTop: 'var(--space-6)' }}>应用标识</h2>
       <p className="set-desc">
         自定义应用在窗口标题、任务栏和系统托盘中显示的名称。
-        注意:关于页始终显示「MAF Agent」,不可修改(版权归属)。
+        注意:关于页始终显示「myAgent」,不可修改(版权归属)。
       </p>
 
       <div className="set-card">
@@ -201,7 +224,7 @@ export function AppearanceView() {
               type="text"
               value={appName}
               onChange={(e) => setAppName(e.target.value)}
-              placeholder="留空则使用默认名 MAF Agent"
+              placeholder="留空则使用默认名 myAgent"
               style={{ flex: 1, maxWidth: 320 }}
             />
             <button className="btn btn-xs" onClick={onSaveAppName} disabled={!appName.trim() && !appName}>
@@ -219,6 +242,37 @@ export function AppearanceView() {
             <li>系统托盘:菜单项「显示 …」与悬停提示在应用启动时读取一次,改名后需重启应用才更新。</li>
             <li>exe 文件名、开始菜单快捷方式与安装包名称:来自构建配置,改名不生效,需重新构建安装包。</li>
           </ul>
+        </div>
+      </div>
+
+      <h2 style={{ marginTop: 'var(--space-6)' }}>首页</h2>
+      <p className="set-desc">
+        自定义首页中央的品牌提示语,保存后首页立即生效,无需重启。
+      </p>
+
+      <div className="set-card">
+        <div className="set-card-h">首页提示语</div>
+        <div className="set-card-b">
+          <div className="set-row">
+            <label className="lbl">提示语</label>
+            <input
+              type="text"
+              value={homePrompt}
+              onChange={(e) => setHomePrompt(e.target.value)}
+              placeholder="留空则使用默认:myAgent | 向更美好的生活出发！"
+              style={{ flex: 1, maxWidth: 420 }}
+            />
+            <button className="btn btn-xs" onClick={onSaveHomePrompt}>
+              保存
+            </button>
+            <button className="btn btn-xs" onClick={onResetHomePrompt} disabled={!homePrompt}>
+              恢复默认
+            </button>
+            {promptSaved && <span className="set-hint" style={{ color: 'var(--brand)' }}>已保存</span>}
+          </div>
+          <div className="set-hint" style={{ marginTop: 'var(--space-2)' }}>
+            仅影响首页文案,不改变系统提示词,也不影响关于页。
+          </div>
         </div>
       </div>
 

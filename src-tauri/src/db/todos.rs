@@ -5,6 +5,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 /// 单条任务。status / priority 的合法值在 builtin 层校验,这里只做存储。
+/// task_id(V25)可空:关联到 tasks 表的目标级任务;旧数据为 NULL,按会话维度工作。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TodoItem {
     pub id: String,
@@ -13,6 +14,8 @@ pub struct TodoItem {
     pub status: String,
     /// high | medium | low
     pub priority: String,
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 /// 整表替换:先清后写,顺序即展示顺序。
@@ -25,8 +28,8 @@ pub fn replace(conn: &Connection, session_id: &str, items: &[TodoItem]) -> Resul
     let now = chrono::Utc::now().timestamp();
     for (i, it) in items.iter().enumerate() {
         tx.execute(
-            "INSERT INTO todos(session_id, item_id, content, status, priority, ord, updated)
-             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO todos(session_id, item_id, content, status, priority, ord, updated, task_id)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
                 session_id,
                 it.id,
@@ -34,7 +37,8 @@ pub fn replace(conn: &Connection, session_id: &str, items: &[TodoItem]) -> Resul
                 it.status,
                 it.priority,
                 i as i64,
-                now
+                now,
+                it.task_id,
             ],
         )
         .map_err(|e| format!("todo 写入失败: {e}"))?;
@@ -46,7 +50,7 @@ pub fn replace(conn: &Connection, session_id: &str, items: &[TodoItem]) -> Resul
 pub fn list(conn: &Connection, session_id: &str) -> Result<Vec<TodoItem>, String> {
     let mut st = conn
         .prepare(
-            "SELECT item_id, content, status, priority FROM todos
+            "SELECT item_id, content, status, priority, task_id FROM todos
              WHERE session_id = ?1 ORDER BY ord ASC",
         )
         .map_err(|e| format!("todo 查询失败: {e}"))?;
@@ -57,6 +61,7 @@ pub fn list(conn: &Connection, session_id: &str) -> Result<Vec<TodoItem>, String
                 content: r.get(1)?,
                 status: r.get(2)?,
                 priority: r.get(3)?,
+                task_id: r.get(4)?,
             })
         })
         .map_err(|e| format!("todo 读取失败: {e}"))?;
@@ -84,6 +89,7 @@ mod tests {
             content: format!("任务 {id}"),
             status: status.into(),
             priority: "medium".into(),
+            task_id: None,
         }
     }
 

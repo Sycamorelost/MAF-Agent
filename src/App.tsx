@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
@@ -8,25 +8,30 @@ import DataDirSetupDialog from './components/DataDirSetupDialog';
 import OnboardingDialog from './components/OnboardingDialog';
 import * as ipc from './lib/ipc';
 import McpApprovalDialog from './components/McpApprovalDialog';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useSessionsStore } from './stores/sessions';
 import { useProvidersStore } from './stores/providers';
 import { useThemeStore } from './stores/theme';
+import { resolveMode, useDefaultWorkbench } from './lib/workbench';
 import './styles/base.css';
 import './styles/dialog.css';
 import './styles/home.css';
 import './styles/chat.css';
 import './styles/phase.css';
-import './styles/research.css';
 import './styles/tools.css';
 import './styles/memory.css';
 import './styles/settings.css';
 import './styles/aiflavor.css';
+import './styles/workbench.css';
+import './styles/preset.css';
+import './styles/study.css';
 import 'katex/dist/katex.min.css';
 
 // PERF-4:页面按路由懒加载,首屏只加载布局与当前页,避免 8 MB+ 单包一次性解析。
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
-const ResearchPage = lazy(() => import('./pages/ResearchPage'));
+const WorkbenchHome = lazy(() => import('./pages/workbench/WorkbenchHome'));
+const WorkbenchPage = lazy(() => import('./pages/workbench/WorkbenchPage'));
 const StudyPage = lazy(() => import('./pages/StudyPage'));
 const DrawPage = lazy(() => import('./pages/DrawPage'));
 const TranslatePage = lazy(() => import('./pages/TranslatePage'));
@@ -36,13 +41,49 @@ const AttachmentsPage = lazy(() => import('./pages/AttachmentsPage'));
 const AiFlavorPage = lazy(() => import('./pages/aiflavor/AiFlavorPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
-/** 深度研究/绘画/翻译/记忆/设置页自带布局,隐藏会话侧栏(条件挂载,抽屉 body class 随卸载清理)。 */
+/** 学习规划/绘画/翻译/记忆/设置页自带布局,隐藏会话侧栏(条件挂载,抽屉 body class 随卸载清理)。 */
 function MaybeSidebar() {
   const loc = useLocation();
-  const bare = ['/research', '/plan', '/draw', '/translate', '/memory', '/notes', '/attachments', '/aiflavor', '/settings'];
+  const bare = ['/plan', '/draw', '/translate', '/memory', '/notes', '/attachments', '/aiflavor', '/settings', '/work'];
   const hidden = bare.some((p) => loc.pathname.startsWith(p));
   if (hidden) return null;
   return <Sidebar />;
+}
+
+/** 首页门(D7):全局默认模式为 work 时落到专业首页 /work,否则普通首页。 */
+function HomeGate() {
+  const def = useDefaultWorkbench();
+  if (def === null) return null;
+  return def === 'work' ? <Navigate to="/work" replace /> : <HomePage />;
+}
+
+/** 会话模式门(D16):会话覆盖 > 全局默认;与目标路由不一致时重定向到对应形态。 */
+function SessionModeGate({ mode }: { mode: 'chat' | 'work' }) {
+  const { id } = useParams<{ id: string }>();
+  const { search } = useLocation();
+  const sessions = useSessionsStore((s) => s.sessions);
+  const loaded = useSessionsStore((s) => s.loaded);
+  const def = useDefaultWorkbench();
+  if (!id) return <Navigate to="/" replace />;
+  if (def === null) return null;
+  const session = sessions.find((s) => s.id === id);
+  // 会话不存在且列表已加载完成(如删除后从历史栈返回):回首页,避免落在空白会话页
+  if (!session && loaded) return <Navigate to="/" replace />;
+  if (session) {
+    const eff = resolveMode(session.workbench_mode, def);
+    if (eff !== mode) {
+      // 保留 query(全局搜索/附件页的 ?msg=<id> 定位;模式重定向不能把它丢掉)
+      const path = eff === 'work' ? `/work/${id}` : `/chat/${id}`;
+      return <Navigate to={{ pathname: path, search }} replace />;
+    }
+  }
+  return mode === 'work' ? (
+    <WorkbenchPage>
+      <ChatPage />
+    </WorkbenchPage>
+  ) : (
+    <ChatPage />
+  );
 }
 
 /** 数据目录引导门:未配置数据目录且非开发构建时,强制先选目录才能使用。 */
@@ -76,7 +117,12 @@ function MainApp() {
   const nav = useNavigate();
   useEffect(() => {
     const unlistenSession = listen<{ sessionId: string }>('navigate-to-session', (e) => {
-      nav(`/chat/${e.payload.sessionId}`);
+      // 先刷新会话列表:目标会话可能由其它窗口刚创建,否则模式门会因「本地不存在」而回首页
+      void useSessionsStore
+        .getState()
+        .refresh()
+        .catch(() => {})
+        .finally(() => nav(`/chat/${e.payload.sessionId}`));
     });
     const unlistenSettings = listen<{ tab?: string }>('navigate-to-settings', (e) => {
       nav(e.payload.tab ? `/settings?tab=${e.payload.tab}` : '/settings');
@@ -137,9 +183,10 @@ function MainApp() {
         <div className="main">
           <Suspense fallback={null}>
             <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/chat/:id" element={<ChatPage />} />
-              <Route path="/research" element={<ResearchPage />} />
+              <Route path="/" element={<HomeGate />} />
+              <Route path="/chat/:id" element={<SessionModeGate mode="chat" />} />
+              <Route path="/work" element={<WorkbenchHome />} />
+              <Route path="/work/:id" element={<SessionModeGate mode="work" />} />
               <Route path="/plan" element={<StudyPage />} />
               <Route path="/draw" element={<DrawPage />} />
               <Route path="/translate" element={<TranslatePage />} />
@@ -164,21 +211,21 @@ export default function App() {
 
   useEffect(() => {
     // 每个窗口独立 document.title:避免任务栏/Alt-Tab 显示 dev server 地址(localhost:1420)
-    // 读取用户自定义应用名称(空 = "MAF Agent")
+    // 读取用户自定义应用名称(空 = "myAgent")
     ipc.getSettings()
       .then((s) => {
-        const name = s.custom_app_name?.trim() || 'MAF Agent';
+        const name = s.custom_app_name?.trim() || 'myAgent';
         document.title = name;
         // document.title 不会同步到原生标题栏,需显式 setTitle(改名后即时生效)
         void getCurrentWindow().setTitle(name);
       })
       .catch(() => {
-        document.title = 'MAF Agent';
+        document.title = 'myAgent';
       });
     // 监听设置变化,实时更新窗口标题
     const unTitle = listen('settings_changed', (e) => {
       const s = e.payload as ipc.AppSettings;
-      const name = s.custom_app_name?.trim() || 'MAF Agent';
+      const name = s.custom_app_name?.trim() || 'myAgent';
       document.title = name;
       void getCurrentWindow().setTitle(name);
     });
@@ -208,7 +255,9 @@ export default function App() {
     <HashRouter>
       <DataDirGate />
       <OnboardingGate />
-      <MainApp />
+      <ErrorBoundary>
+        <MainApp />
+      </ErrorBoundary>
       <McpApprovalDialog />
     </HashRouter>
   );

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { IconX } from './icons';
 import { jumpToMessage } from '../lib/jumpToMessage';
 import { useActiveMessageId } from '../lib/useActiveMessageId';
 import { estimateReasoningTokens } from './ReasoningBlock';
@@ -83,7 +84,7 @@ export default function OutlinePanel({ messages, onClose }: Props) {
           onClick={onClose}
           title="关闭纲要面板"
         >
-          ✕
+          <IconX size={14} />
         </button>
       </div>
       {messages.length > 0 && (

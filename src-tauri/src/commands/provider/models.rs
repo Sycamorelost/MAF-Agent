@@ -19,13 +19,13 @@ use super::templates::notify_providers_changed;
 
 /// 读取单模型配置(provider_id -> model_id -> 覆盖项)。
 #[tauri::command]
-pub fn get_provider_model_config() -> ProviderModelConfig {
+pub async fn get_provider_model_config() -> ProviderModelConfig {
     model_config::load()
 }
 
 /// 保存单模型配置(整体覆盖写)。
 #[tauri::command]
-pub fn save_provider_model_config(
+pub async fn save_provider_model_config(
     app: tauri::AppHandle,
     config: ProviderModelConfig,
 ) -> Result<(), String> {
@@ -38,7 +38,7 @@ pub fn save_provider_model_config(
 
 /// 列出全部模型卡:内置 13 张 + data/model_cards.json 用户覆盖/追加。
 #[tauri::command]
-pub fn list_model_cards() -> Vec<crate::provider::model_cards::ModelCard> {
+pub async fn list_model_cards() -> Vec<crate::provider::model_cards::ModelCard> {
     crate::provider::model_cards::list_model_cards()
 }
 
@@ -46,7 +46,7 @@ pub fn list_model_cards() -> Vec<crate::provider::model_cards::ModelCard> {
 
 /// 手动新增/覆盖一张模型卡(价格/上下文等元数据),写入 data/model_cards.json。
 #[tauri::command]
-pub fn save_model_card(card: model_cards::ModelCard) -> Result<(), String> {
+pub async fn save_model_card(card: model_cards::ModelCard) -> Result<(), String> {
     model_cards::save_user_card(&card)
 }
 
@@ -121,7 +121,7 @@ pub async fn fetch_provider_models(
 /// 查询某模型的思考能力(手动修正 > 内置规则表推断 > 不支持)。
 /// 前端据此决定是否渲染思考控件、是否允许关闭/选择档位。
 #[tauri::command]
-pub fn get_reasoning_capability(
+pub async fn get_reasoning_capability(
     provider_id: String,
     model: String,
 ) -> reasoning::ReasoningCapability {
@@ -131,7 +131,7 @@ pub fn get_reasoning_capability(
 /// 读取某模型的手动思考能力修正原始值(未修正返回 None)。
 /// 与 get_reasoning_capability 的「解析后能力」区分:设置页据此展示「自动推断」还是「手动修正」。
 #[tauri::command]
-pub fn get_reasoning_override(
+pub async fn get_reasoning_override(
     provider_id: String,
     model: String,
 ) -> Option<reasoning::ReasoningCapability> {
@@ -144,7 +144,7 @@ pub fn get_reasoning_override(
 /// 手动修正模型思考能力(写 provider_models.json 缓存条目的 reasoning 字段)。
 /// cap = None 表示清除修正,回到内置推断。
 #[tauri::command]
-pub fn save_reasoning_override(
+pub async fn save_reasoning_override(
     provider_id: String,
     model: String,
     cap: Option<reasoning::ReasoningCapability>,

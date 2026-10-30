@@ -5,12 +5,15 @@
  *   Interaction flow derived from Deep-tutor — https://github.com/hershate/Deep-tutor
  *   Copyright (c) hershate and contributors
  *   Licensed under the Apache License, Version 2.0 (see LICENSE / NOTICE).
- *   Re-implemented with MAF Agent's component system; no upstream CSS/assets copied.
+ *   Re-implemented with myAgent's component system; no upstream CSS/assets copied.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IconArrowLeft, IconPause, IconPlay, IconStop } from '../../components/icons';
 import { useStudyStore } from '../../stores/study';
+import { useSessionsStore } from '../../stores/sessions';
+import { useProvidersStore } from '../../stores/providers';
+import * as ipc from '../../lib/ipc';
 import type { NodeState, StudyEvent, StudyStats, TodayPlan } from '../../lib/ipc/study';
 import * as studyIpc from '../../lib/ipc/study';
 import { PlanList, PlanPanel, STATUS_LABEL } from './PlanList';
@@ -18,10 +21,7 @@ import { ExportBtn, PlanDetail } from './PlanDetail';
 import { LearnView } from './LearnView';
 import { QuizDialog } from './QuizDialog';
 
-/** 研究页草稿接手约定(见 ResearchPage 挂载逻辑) */
-const RESEARCH_DRAFT_KEY = 'metaagent.research.draft';
-
-/** 时间线事件 → 节点(同研究页 buildTimeline 思路:start 开节点,note/retry 追加内容) */
+/** 时间线事件 → 节点(start 开节点,note/retry 追加内容) */
 function buildStudyTimeline(trail: StudyEvent[], paused: boolean) {
   const nodes: { key: number; step: string; title: string; state: 'doing' | 'ok'; lines: string[] }[] =
     [];
@@ -130,11 +130,19 @@ function PlanView() {
 
   const warn = (e: unknown) => alert(e instanceof Error ? e.message : String(e));
 
+  // 「深入研究」:研究页已移除,改为新建普通会话并把主题预填进输入框(同划词提问路径)
   const deepDig = async (nodeName: string) => {
     try {
       const prefill = await studyIpc.studyDeepDig(active.id, nodeName);
-      sessionStorage.setItem(RESEARCH_DRAFT_KEY, JSON.stringify({ topic: prefill }));
-      nav('/research');
+      const current = useProvidersStore.getState().current;
+      const { id } = await ipc.createSession(
+        `深入学习 ${nodeName}`,
+        current ? `${current.providerId}/${current.model}` : '',
+        null,
+      );
+      await useSessionsStore.getState().refresh();
+      useSessionsStore.getState().setPendingComposer({ sessionId: id, text: prefill });
+      nav(`/chat/${id}`);
     } catch (e) {
       warn(e);
     }

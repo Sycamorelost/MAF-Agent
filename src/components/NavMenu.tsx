@@ -10,15 +10,15 @@ import {
   IconGraduation,
   IconImage,
   IconNote,
-  IconResearch,
   IconSettings,
   IconTranslate,
+  IconLayers,
 } from './icons';
 
 /** 原图标轨(Rail)的导航项,收进标题栏 ⋮ 下拉菜单。 */
 const MAIN_ITEMS = [
   { key: 'chat', Icon: IconChat, label: '对话', path: '/' },
-  { key: 'research', Icon: IconResearch, label: '研究', path: '/research' },
+  { key: 'work', Icon: IconLayers, label: '专业工作台', path: '/work' },
   { key: 'plan', Icon: IconGraduation, label: '学习规划', path: '/plan' },
   { key: 'draw', Icon: IconImage, label: '绘图', path: '/draw' },
   { key: 'translate', Icon: IconTranslate, label: '翻译', path: '/translate' },

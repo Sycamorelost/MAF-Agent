@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { resolveProvider } from '../../stores/study';
 import type { QuizResult, StudyQuiz } from '../../lib/ipc/study';
+import { IconX } from '../../components/icons';
 import * as studyIpc from '../../lib/ipc/study';
 
 /* ---------------- 测验弹窗(P1) ---------------- */
@@ -100,7 +101,7 @@ export function QuizDialog({
           </h2>
           <span className="sp" />
           <button className="btn-ghost" onClick={onClose}>
-            ✕
+            <IconX size={14} />
           </button>
         </div>
         <div className="dialog-body" style={{ overflowY: 'auto', padding: '12px 16px' }}>

@@ -1,0 +1,46 @@
+/* ================================================================
+ * 运行时预设(P5 / D18 / D19):PresetChip / PresetDiffDialog / 设置页 PresetsView
+ * 只新增样式;色值与间距全部走 _tokens.css。
+ * ================================================================ */
+
+/* 预设 chip(与 .perm-chip 同形,色彩走品牌色) */
+.preset-chip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-1) var(--space-2); border-radius: var(--radius-s);
+  border: 1px solid var(--border); background: var(--bg-surface);
+  font-size: var(--font-micro); color: var(--text-2); cursor: pointer;
+}
+.preset-chip:hover { border-color: var(--border-strong); color: var(--text-1); }
+
+/* 切换差异弹窗 */
+.preset-diff-mask {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  background: rgba(20, 20, 20, 0.32);
+  display: flex; align-items: center; justify-content: center;
+}
+.preset-diff {
+  width: 520px; max-width: calc(100vw - 64px);
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-l); box-shadow: var(--shadow-soft);
+  padding: var(--space-4);
+}
+.preset-diff-h { font-size: var(--font-body); font-weight: 600; color: var(--text-1); }
+.preset-diff-desc {
+  margin: var(--space-1) 0 var(--space-3); font-size: var(--font-caption); color: var(--text-3);
+}
+.preset-diff-t { width: 100%; border-collapse: collapse; font-size: var(--font-caption); }
+.preset-diff-t th, .preset-diff-t td {
+  text-align: left; padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border); color: var(--text-2);
+}
+.preset-diff-t th { font-size: var(--font-micro); color: var(--text-3); font-weight: 600; }
+.preset-diff-t td.k { color: var(--text-3); white-space: nowrap; }
+.preset-diff-t tr.chg td { color: var(--text-1); }
+.preset-diff-t tr.chg td:last-child { color: var(--brand-deep); font-weight: 600; }
+.preset-diff-note {
+  margin: var(--space-3) 0; font-size: var(--font-micro); color: var(--text-4); line-height: 1.7;
+}
+.preset-diff-f { display: flex; justify-content: flex-end; gap: var(--space-2); }
+
+/* 设置页「运行时预设」的卡片样式见 settings.css(.preset-grid / .preset-card),
+   本文件只放预设 chip 与差异弹窗(val.md §5.8)。 */
