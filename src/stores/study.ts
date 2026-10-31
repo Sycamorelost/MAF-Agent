@@ -37,6 +37,10 @@ interface StudyState {
     dailyMinutes: number | null;
     deadline: string | null;
     lang: string;
+    /** 生成每日任务(默认开) */
+    dailyTasks?: boolean;
+    /** 预生成每个知识点的完整教学内容(默认关) */
+    fullContent?: boolean;
     modelOverride?: { providerId: string; model: string } | null;
   }) => Promise<void>;
   pause: () => Promise<void>;
@@ -124,7 +128,7 @@ export const useStudyStore = create<StudyState>((set, get) => ({
 
   clearIntent: () => set({ intent: null }),
 
-  start: async ({ topic, intentJson, dailyMinutes, deadline, lang, modelOverride }) => {
+  start: async ({ topic, intentJson, dailyMinutes, deadline, lang, dailyTasks, fullContent, modelOverride }) => {
     const prov = resolveProvider(modelOverride);
 
     const myToken = ++runToken;
@@ -141,6 +145,8 @@ export const useStudyStore = create<StudyState>((set, get) => ({
         daily_minutes: dailyMinutes,
         deadline,
         lang,
+        daily_tasks: dailyTasks ?? true,
+        full_content: fullContent ?? false,
         ...prov,
       },
       (ev) => {

@@ -41,6 +41,8 @@ pub(crate) fn upsert_review_conn(
         rusqlite::params![plan_id, node_id, due, interval_days, last_result],
     )
     .map_err(|e| format!("upsert review failed: {e}"))?;
+    // P2 每日任务:复习排期变化 → 同步复习任务(日期跟随排期,算法不动)
+    super::tasks::sync_review_task_conn(conn, plan_id, node_id, due)?;
     Ok(())
 }
 
@@ -146,6 +148,8 @@ pub(crate) fn review_done_conn(
         rusqlite::params![due, next, correct as i64, plan_id, node_id],
     )
     .map_err(|e| e.to_string())?;
+    // P2 每日任务:复习打卡推进排期 → 同步下一条复习任务
+    super::tasks::sync_review_task_conn(conn, plan_id, node_id, &due)?;
     store::add_log(conn, plan_id, Some(node_id), "review", 0)?;
     let id: i64 = conn
         .query_row(

@@ -1,7 +1,7 @@
 //! SQLite schema 定义与迁移。
 //!
 //! 对应 plan/01-phase1-mvp.md §3.1。
-//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION(27)。
+//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION(35)。
 //!
 //! 拆分(§10.2.1):`migrate_v1` 收敛 V1–V15 的迁移 SQL 与自愈式加列助手,
 //! `v16` 收敛 V16–V22 的迁移 SQL;版本执行顺序仍由本文件统一编排。
@@ -24,7 +24,7 @@ use v16::{
 };
 
 /// 当前 schema 版本。每次结构变更 +1 并追加迁移 SQL。
-pub const SCHEMA_VERSION: i32 = 30;
+pub const SCHEMA_VERSION: i32 = 35;
 
 /// V29(P8.1 项目化升级):folders → projects,加字段对齐 Cursor Projects 设计。
 /// - 重命名 folders → projects(SQLite ALTER TABLE RENAME)
@@ -99,6 +99,7 @@ fn is_schema_ready(conn: &Connection) -> rusqlite::Result<bool> {
         "quizzes",
         "quiz_attempts",
         "reviews",
+        "study_tasks",
         "todos",
         "doc_chunks",
         "doc_chunks_fts",
@@ -444,6 +445,51 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
          CREATE INDEX IF NOT EXISTS idx_tool_call_log_session ON tool_call_log(session_id, created);
          CREATE INDEX IF NOT EXISTS idx_tool_call_log_project ON tool_call_log(project_id, created);",
     )?;
+    // V31(学习规划学科感知 P1):plans 加学科三列。NULL = 旧计划/未识别 → 通用模板。
+    //   - subject:归一后的附录 key(math/english/physics/chinese/programming/other);
+    //   - grade_band:primary/junior/senior/university/adult;
+    //   - exam_target:中考/高考/四六级/考研/兴趣等自由文本。
+    ensure_column(&tx, "plans", "subject", "TEXT")?;
+    ensure_column(&tx, "plans", "grade_band", "TEXT")?;
+    ensure_column(&tx, "plans", "exam_target", "TEXT")?;
+    // V32(学习规划 P2 每日任务):study_tasks 表 —— 阶段 topics × daily_minutes 的确定性切分。
+    //   - kind:learn(学新材料) / quiz(检索练习) / redo(错题重做) / review(间隔复习);
+    //   - status:pending / done;node_id 关联知识点(review/redo 必有,learn 可为 NULL 兜底);
+    //   - date 为本地日期 YYYY-MM-DD,复习任务日期由现有 review 排期给出。
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS study_tasks (
+           id         INTEGER PRIMARY KEY AUTOINCREMENT,
+           plan_id    TEXT NOT NULL,
+           date       TEXT NOT NULL,
+           kind       TEXT NOT NULL DEFAULT 'learn',
+           node_id    INTEGER,
+           node       TEXT NOT NULL DEFAULT '',
+           minutes    INTEGER NOT NULL DEFAULT 25,
+           status     TEXT NOT NULL DEFAULT 'pending',
+           created    TEXT NOT NULL DEFAULT '',
+           done_at    TEXT
+         );
+         CREATE INDEX IF NOT EXISTS idx_study_tasks_plan_date ON study_tasks(plan_id, date, status);",
+    )?;
+    // V33(学习规划 P3 修订):
+    //   - plans.preferences:用户明确的内容/格式要求(NULL = 按模板默认);
+    //   - study_units.title 与 node_name 恒等,属冗余字段,删除(API 不再暴露)。
+    ensure_column(&tx, "plans", "preferences", "TEXT")?;
+    let has_unit_title: i64 = tx
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('study_units') WHERE name='title'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    if has_unit_title > 0 {
+        tx.execute_batch("ALTER TABLE study_units DROP COLUMN title;")?;
+    }
+    // V34→V35(学习中心文件化):题库与试卷不再使用 db 表,数据落在
+    //   <data_dir>/learningcenter/(bank/<scope>/<id>.json、papers/<id>.json)。
+    // 旧三表(question_bank / study_papers / study_paper_items)由
+    //   study::learn::export_legacy_tables 在 migrate 之前导出为文件并 DROP;
+    // 此处不再建表,新装环境天然无此三表。
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
     Ok(())

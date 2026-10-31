@@ -13,8 +13,7 @@ import OutlinePanel from '../../components/OutlinePanel';
 import { IconChat, IconX, agentIconComponent } from '../../components/icons';
 import { PermissionChip } from '../../components/PermissionChip';
 import { resolveMode, useDefaultWorkbench } from '../../lib/workbench';
-import { useWorkbenchChrome } from '../../lib/workbenchChrome';
-import { memoryBudgetStatus } from '../../lib/ipc/memory';
+
 import { useMessagesStore } from '../../stores/messages';
 import { useSessionsStore } from '../../stores/sessions';
 import { useProvidersStore } from '../../stores/providers';
@@ -72,23 +71,11 @@ export default function ChatPage() {
   // ---------- D16 / val.md §5.8:工作台模式下,预设/权限 chip 落在 Composer 工具条内 ----------
   const defaultWb = useDefaultWorkbench();
   const isWork = resolveMode(session?.workbench_mode, defaultWb ?? 'chat') === 'work';
-  // 工作台外壳注入的运行状态条:插在会话头之下、消息区之上(ui-design b3)
-  const chrome = useWorkbenchChrome();
-
   // ---------- P2:长会话渲染窗口(默认只渲染最近 RENDER_WINDOW 条,可手动展开全部) ----------
   const [expandAll, setExpandAll] = useState(false);
   useEffect(() => setExpandAll(false), [sessionId]);
   const folded = !expandAll && messages.length > RENDER_WINDOW;
   const visibleMessages = folded ? messages.slice(-RENDER_WINDOW) : messages;
-
-  // ---------- b3:记忆预算(自动压缩口径)用于 Composer hint 与预算护栏 ----------
-  const [memBudget, setMemBudget] = useState<{ tokens: number; limit: number } | null>(null);
-  useEffect(() => {
-    if (!sessionId) return;
-    memoryBudgetStatus(sessionId)
-      .then((b) => setMemBudget({ tokens: b.tokens, limit: b.limit }))
-      .catch(() => {});
-  }, [sessionId, hasStreaming, messages.length]);
 
   /** 前插历史标记:加载更早一页时抑制「自动滚到底部」,避免把视口甩走 */
   const prependingRef = useRef(false);
@@ -285,7 +272,6 @@ export default function ChatPage() {
             onOpenModelSwitch={() => setModelSwitchOpen(true)}
             onError={chat.setError}
           />
-          {chrome?.runBar}
           <div className="chat-scroll" ref={scrollRef}>
             <div className="chat-inner">
               {switchBanner && (
@@ -409,20 +395,12 @@ export default function ChatPage() {
             variant="docked"
             sending={chat.sending}
             onStop={chat.onCancel}
-            placeholder={
-              chat.searching
-                ? '正在联网搜索…'
-                : chat.sending
-                  ? 'AI 正在回复…'
-                  : agent?.input_hints?.[0]
-            }
             attachments={pendingAttachments}
             onPickFiles={handlePickFiles}
             onRemoveAttachment={handleRemoveAttachment}
             onRecall={chat.onRecall}
             webSearch={session?.web_search_enabled ?? false}
             onToggleWebSearch={chat.onToggleWebSearch}
-            compressInfo={memBudget}
             thinking={
               chat.thinkCap?.enabled && current
                 ? {

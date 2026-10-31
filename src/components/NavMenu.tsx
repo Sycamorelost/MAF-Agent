@@ -19,7 +19,7 @@ import {
 const MAIN_ITEMS = [
   { key: 'chat', Icon: IconChat, label: '对话', path: '/' },
   { key: 'work', Icon: IconLayers, label: '专业工作台', path: '/work' },
-  { key: 'plan', Icon: IconGraduation, label: '学习规划', path: '/plan' },
+  { key: 'plan', Icon: IconGraduation, label: '学习中心', path: '/plan' },
   { key: 'draw', Icon: IconImage, label: '绘图', path: '/draw' },
   { key: 'translate', Icon: IconTranslate, label: '翻译', path: '/translate' },
   { key: 'memory', Icon: IconBrain, label: '记忆', path: '/memory' },

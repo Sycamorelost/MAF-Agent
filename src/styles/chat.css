@@ -1,4 +1,4 @@
-/* ============ 消息渲染(对齐 ui-design 03/12:头像 + 内容列 + 气泡) ============ */
+/* ============ 消息渲染(用户 = 右侧气泡;助手 = 无头像通栏矩形平铺) ============ */
 
 .msg {
   display: flex;
@@ -6,23 +6,8 @@
   gap: var(--space-2);
   width: 100%;
 }
-.msg.user { flex-direction: row-reverse; }
-/* 头像:助手为墨色圆,用户为品牌浅底;32px,无 emoji */
-.avatar {
-  width: calc(32px * var(--ui-scale));
-  height: calc(32px * var(--ui-scale));
-  flex: none;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-caption);
-  font-weight: 600;
-  border: 1px solid var(--border);
-  user-select: none;
-}
-.avatar.bot { background: var(--ink); color: #fff; border-color: var(--ink); }
-.avatar.me { background: var(--brand-soft); color: var(--brand-deep); border-color: var(--brand-line); }
+.msg.user { justify-content: flex-end; }
+.msg.assistant { display: block; }
 .msg-col {
   min-width: 0;
   max-width: 660px;
@@ -32,6 +17,7 @@
   gap: var(--space-2);
 }
 .msg.user .msg-col { align-items: flex-end; max-width: 560px; }
+.msg.assistant .msg-col { max-width: none; width: 100%; }
 .msg .bubble {
   max-width: 100%;
   padding: var(--space-3) var(--space-4);
@@ -47,6 +33,14 @@
 .msg.user .bubble {
   background: var(--brand-soft);
   border-color: var(--brand-line);
+}
+/* 助手消息:平铺矩形(通栏、直角、无边框无底色,与阅读流齐平) */
+.msg.assistant .bubble {
+  width: 100%;
+  padding: var(--space-1) 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 /* 气泡内 Markdown 排版对齐设计稿 03:段间距 8,列表缩进 16 */
 .msg .bubble .md p { margin: 0; }
@@ -89,13 +83,15 @@
 }
 .mermaid-svg {
   width: 100%;
-  display: flex;
-  justify-content: center;
+  /* 超宽图原生尺寸展示,横向滚动阅读 */
+  overflow-x: auto;
 }
 .mermaid-svg svg {
-  max-width: 100%;
+  /* 宽度由 MermaidBlock 按 自然宽/容器宽 决策后写内联;此处只管等比与居中 */
+  max-width: none;
   height: auto;
   display: block;
+  margin: 0 auto;
 }
 /* mermaid.run 会把 <pre class="mermaid"> 就地换成 <svg>,pre 仍在 DOM 里,
    必须清掉 .bubble .md pre 的深色代码块底色/内边距,否则图表套一层黑框 */
@@ -116,31 +112,20 @@
 }
 .mermaid-error { color: #c44; }
 
-/* ============ Composer(对齐 ui-design 03:停靠式 + 提示行 + 白底输入卡) ============
+/* ============ Composer(停靠式 + 白底输入卡) ============
    基础样式 .composer / .composer-box / .composer-bar / .tool-chip 由 _tokens.css 提供;
-   对话页底部使用 .composer-docked(与消息区以分隔线切开)。 */
+   对话页底部使用 .composer-docked(无分隔线,靠留白与输入卡边框区分)。 */
 
 .composer.composer-docked {
   max-width: none;
   margin-top: 0;
   padding: var(--space-2) var(--pad-x) var(--space-3);
   background: var(--bg-main);
-  border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
-.composer-docked .composer-hint {
-  max-width: 840px;
-  margin: 0 auto var(--space-1);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-mini);
-  color: var(--text-4);
-}
-.composer-docked .composer-hint .sp { flex: 1; }
 .composer-docked .composer-box {
-  /* 白底输入卡:与消息区之间靠分隔线 + 圆角边框区分 */
-  max-width: 840px;
+  /* 白底输入卡:与文字栏同轴居中,宽度 = 文字栏 ×1.2(左右各多 1/10,不足则贴齐 100%) */
+  max-width: min(100%, calc(var(--chat-max-w) * 1.2));
   margin: 0 auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
@@ -866,6 +851,24 @@
 .tstat.ok { color: var(--ok); }
 .tstat.err { color: var(--err); }
 .tool-trace.err .tname { color: var(--err); }
+/* 连续工具调用组:默认折叠为一行汇总行,展开后逐条堆叠 */
+.tool-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  font-size: var(--font-micro);
+  line-height: 1.5;
+  border-radius: var(--radius-s);
+}
+.tool-group.err .tool-group-row .tname { color: var(--err); }
+.tool-group-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border);
+  margin-left: var(--space-2);
+}
 .tool-out {
   margin: 0 0 var(--space-2);
   padding: var(--space-2) var(--space-3);

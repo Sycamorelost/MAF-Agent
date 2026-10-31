@@ -233,16 +233,8 @@ export function ChatHeader({
           </button>
         </>
       )}
-      {/* b3:工作台模式下头部出示模式徽标与预设 chip(预设唯一入口,composer 只保留权限 chip) */}
-      {mode === 'work' && (
-        <>
-          <span className="mode-badge" title="当前会话使用专业 Agent 工作台">
-            <IconLayers size={12} />
-            专业
-          </span>
-          <PresetChip sessionId={sessionId} onError={onError} />
-        </>
-      )}
+      {/* b3:工作台模式下头部出示预设 chip(预设唯一入口,composer 只保留权限 chip) */}
+      {mode === 'work' && <PresetChip sessionId={sessionId} onError={onError} />}
       {/* F4:分支指示条(仅多分支或激活分支非 main 时显示) */}
       {(branches.length > 1 || activeBranch !== 'main') && (
         <div className="branch-chip-wrap">
@@ -357,6 +349,16 @@ export function ChatHeader({
             <IconChat size={12} />
             切到普通对话
           </button>
+          {chrome && (
+            <button
+              type="button"
+              className={`chat-panel-toggle${chrome.sidebarOpen ? ' on' : ''}`}
+              title={chrome.sidebarOpen ? '收起会话栏' : '展开会话栏'}
+              onClick={chrome.onToggleSidebar}
+            >
+              <IconPanel size={15} className="flip" />
+            </button>
+          )}
           {chrome && (
             <button
               type="button"

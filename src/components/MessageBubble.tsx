@@ -6,10 +6,10 @@ import 'highlight.js/styles/vs2015.css';
 import type { MessageRow, SourceItem } from '../lib/ipc';
 import { MemoMarkdown, CodeBlock } from './MemoMarkdown';
 import ReasoningBlock from './ReasoningBlock';
-import { ToolTrace } from './ToolTrace';
+import { ToolTrace, ToolTraceGroup } from './ToolTrace';
 import { AttachmentCards } from './bubble/AttachmentCards';
 import { SourceCards } from './bubble/SourceCards';
-import { splitTraceSegments } from '../lib/toolTrace';
+import { groupTraceSegments, splitTraceSegments } from '../lib/toolTrace';
 import { IconCheck, IconCopy, IconEdit, IconMore, IconPin, IconQuote, IconRefresh, IconSwap, IconTranslate, IconTrash } from './icons';
 
 /** 记忆 6 个标准节(与后端 KNOWN_SECTIONS 严格一致)。 */
@@ -90,14 +90,11 @@ function MessageBubbleInner({
   const hasActions =
     onQuote || onEditResend || onDelete || onRegenerate || onRetryModel || onTranslate || onPin;
 
-  // 工具块提到气泡外(对齐设计稿:思考块 / 工具行 / 子任务卡片与正文平级)
-  const segments = isUser ? [] : splitTraceSegments(msg.content);
+  // 工具块提到气泡外(对齐设计稿:思考块 / 工具行 / 子任务卡片与正文平级);相邻工具块成组折叠
+  const segments = isUser ? [] : groupTraceSegments(splitTraceSegments(msg.content));
 
   return (
     <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
-      <div className={`avatar ${isUser ? 'me' : 'bot'}`} aria-hidden="true">
-        {isUser ? '我' : 'M'}
-      </div>
       <div className="msg-col">
         <AttachmentCards attachments={msg.attachments} />
         {reasoning && <ReasoningBlock text={reasoning} />}
@@ -110,8 +107,12 @@ function MessageBubbleInner({
               </div>
             )
           : segments.map((seg, i) =>
-              seg.kind === 'trace' ? (
-                <ToolTrace key={`t${i}`} raw={seg.raw} />
+              seg.kind === 'traces' ? (
+                seg.raws.length === 1 ? (
+                  <ToolTrace key={`t${i}`} raw={seg.raws[0]} />
+                ) : (
+                  <ToolTraceGroup key={`t${i}`} raws={seg.raws} />
+                )
               ) : (
                 <div className="bubble" key={`m${i}`}>
                   <div className="md">

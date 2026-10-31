@@ -14,10 +14,14 @@
 //!
 //! 纯逻辑(判分/加权/间隔/周推算)与 DB 操作(conn 入参)分离,便于单测。
 
+pub mod bank;
+pub mod bank_store;
 pub mod mastery;
+pub mod paper;
 pub mod quiz;
 pub mod review;
 pub mod stats;
+pub mod tasks;
 pub mod units;
 
 use chrono::{Duration, Local};
@@ -36,7 +40,29 @@ pub use review::{
 #[allow(unused_imports)]
 pub use stats::{DayStat, StudyStats, focus_log, memory_digest, stats};
 #[allow(unused_imports)]
+pub use tasks::{StudyTask, generate_for_plan, split_day, task_done, tasks_today};
+#[allow(unused_imports)]
 pub use units::{UnitRow, generate_unit, new_quiz, strip_outer_fence};
+#[allow(unused_imports)]
+pub use bank::{
+    BankAddInput, BankListResult, BankQuestion, BankUpdateInput, normalize_qtype,
+};
+#[allow(unused_imports)]
+pub use paper::{
+    GradeOutcome, PaperAnswerIn, PaperDetail, PaperItemResult, PaperResult, PaperRow,
+    create_auto as paper_create_auto, create_manual as paper_create_manual,
+    delete as paper_delete, detail as paper_detail, is_objective, list as paper_list,
+    question_grade, submit as paper_submit,
+};
+
+/// 学习中心文件化迁移:把 db 旧三表(question_bank / study_papers / study_paper_items)
+/// 一次性导出为 learningcenter 下的文件后删表。须在 schema::migrate 之前调用(此时旧表仍在);
+/// 导出失败由调用方记录并保留旧表,下次启动重试(导出幂等)。
+pub(crate) fn export_legacy_tables(conn: &rusqlite::Connection) -> Result<(), String> {
+    bank::export_legacy(conn, bank_store::default_fs())?;
+    paper::export_legacy(conn, paper::default_fs())?;
+    Ok(())
+}
 
 fn now_str() -> String {
     Local::now().to_rfc3339()

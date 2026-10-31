@@ -1,11 +1,19 @@
 import { useMemo, useState } from 'react';
 import { IconCheck, IconDownload, IconResearch } from '../../components/icons';
-import type { NodeState, PlanPayload, StudyStats, TodayPlan } from '../../lib/ipc/study';
+import type { NodeState, PlanPayload, StudyStats, StudyTask, TodayPlan } from '../../lib/ipc/study';
 import * as studyIpc from '../../lib/ipc/study';
 import { EXPORT_TARGET_EXISTS, pickSavePath } from '../../lib/ipc/export';
 import { safeExportName } from '../../lib/export/names';
 import { levelText } from './PlanList';
 import { StatsSec } from './StatsSec';
+
+/** 每日任务类型徽标。 */
+const TASK_KIND_LABEL: Record<string, string> = {
+  learn: '学新',
+  quiz: '小测',
+  redo: '错题重做',
+  review: '复习',
+};
 
 /* ---------------- 导出按钮 ---------------- */
 
@@ -13,7 +21,7 @@ export function ExportBtn({ id, topic }: { id: string; topic: string }) {
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   return (
-    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+    <span className="st-inline">
       {hint && <span className="pg-hint ellipsis">{hint}</span>}
       <button
         className="btn-ghost"
@@ -60,6 +68,8 @@ export function PlanDetail({
   states,
   today,
   stats,
+  tasks,
+  onTaskToggle,
   onLearn,
   onQuiz,
   onDeepDig,
@@ -70,6 +80,9 @@ export function PlanDetail({
   states: NodeState[];
   today: TodayPlan | null;
   stats: StudyStats | null;
+  /** 今日任务(P2;空数组 = 未生成或全部过期完成) */
+  tasks: StudyTask[];
+  onTaskToggle: (taskId: number, done: boolean) => void;
   onLearn: (nodeId: number, name: string) => void;
   onQuiz: (nodeId: number, name: string) => void;
   onDeepDig: (node: string) => void;
@@ -89,17 +102,68 @@ export function PlanDetail({
           <span className="pg-chip">{payload.nodes.length} 个知识点</span>
         </div>
         {payload.goal && <div className="pg-hint">学习目标:{payload.goal}</div>}
+        {payload.preferences && (
+          <div className="pg-hint">已按你的要求生成:{payload.preferences}</div>
+        )}
         {payload.repaired && (
           <div className="pg-warn">本计划为校验未通过后的降级结构,建议人工复核阶段划分。</div>
         )}
       </div>
 
-      {/* 今日待办(P1):当前排期周应学知识点 + 到期复习 */}
+      {/* 今日待办:每日任务(可勾选)+ 到期复习打卡 + 本周排期 */}
       <div className="pg-sec">
         <div className="pg-lab">今日待办</div>
+        {tasks.length > 0 && (
+          <div className="rp-queries">
+            {tasks.map((t) => (
+              <span key={t.id}>
+                <label className="st-check">
+                  <input
+                    type="checkbox"
+                    checked={t.status === 'done'}
+                    onChange={(e) => onTaskToggle(t.id, e.target.checked)}
+                  />
+                  <b className={`st-task${t.status === 'done' ? ' done' : ''}`}>{t.node}</b>
+                </label>
+                <i>
+                  {TASK_KIND_LABEL[t.kind] ?? t.kind} · {t.minutes} 分钟{t.overdue ? ' · 过期' : ''}
+                </i>
+                {t.status !== 'done' && t.node_id != null && t.kind === 'review' && (
+                  <>
+                    <button
+                      className="pg-chip"
+                      title="还记得:间隔晋级"
+                      onClick={() => onReview(t.node_id!, true)}
+                    >
+                      <IconCheck size={12} />
+                      记得
+                    </button>
+                    <button
+                      className="pg-chip"
+                      title="忘了:回到 1 天后再复习"
+                      onClick={() => onReview(t.node_id!, false)}
+                    >
+                      忘了
+                    </button>
+                  </>
+                )}
+                {t.status !== 'done' && t.node_id != null && (t.kind === 'quiz' || t.kind === 'redo') && (
+                  <button className="pg-chip" onClick={() => onQuiz(t.node_id!, t.node)}>
+                    {t.kind === 'redo' ? '重做' : '测验'}
+                  </button>
+                )}
+                {t.status !== 'done' && t.node_id != null && t.kind === 'learn' && (
+                  <button className="pg-chip" onClick={() => onLearn(t.node_id!, t.node)}>
+                    学习
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
         {today && today.week > 0 ? (
           <>
-            <div className="pg-chips">
+            <div className={`pg-chips${tasks.length > 0 ? ' st-mt-2' : ''}`}>
               <span className="pg-chip on">
                 第 {today.week} / {today.total_weeks} 周
               </span>
@@ -109,43 +173,48 @@ export function PlanDetail({
                 </span>
               ))}
             </div>
-            {today.reviews.length > 0 && (
-              <div className="rp-queries" style={{ marginTop: 8 }}>
-                {today.reviews.map((r) => (
-                  <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <b style={{ fontWeight: 500 }}>复习:{r.node_name}</b>
-                    <i style={{ fontStyle: 'normal', color: 'var(--text-4)' }}>
-                      {r.overdue ? '已过期' : '今日到期'} · 隔 {r.interval_days} 天
-                    </i>
-                    <button className="pg-chip" title="还记得:间隔晋级" onClick={() => onReview(r.node_id, true)}>
-                      <IconCheck size={12} />
-                      记得
-                    </button>
-                    <button className="pg-chip" title="忘了:回到 1 天后再复习" onClick={() => onReview(r.node_id, false)}>
-                      忘了
-                    </button>
-                  </span>
-                ))}
+            {today.reviews.filter((r) => !tasks.some((t) => t.node === r.node_name)).length > 0 && (
+              <div className="rp-queries st-mt-2">
+                {today.reviews
+                  .filter((r) => !tasks.some((t) => t.node === r.node_name))
+                  .map((r) => (
+                    <span key={r.id}>
+                      <b className="st-fw">复习:{r.node_name}</b>
+                      <i>
+                        {r.overdue ? '已过期' : '今日到期'} · 隔 {r.interval_days} 天
+                      </i>
+                      <button className="pg-chip" title="还记得:间隔晋级" onClick={() => onReview(r.node_id, true)}>
+                        <IconCheck size={12} />
+                        记得
+                      </button>
+                      <button className="pg-chip" title="忘了:回到 1 天后再复习" onClick={() => onReview(r.node_id, false)}>
+                        忘了
+                      </button>
+                    </span>
+                  ))}
               </div>
             )}
-            {today.nodes.length > 0 ? (
-              <div className="rp-queries" style={{ marginTop: 8 }}>
-                {today.nodes.map((n) => (
-                  <span key={n.node_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <b style={{ fontWeight: 500 }}>{n.node_name}</b>
-                    <i style={{ fontStyle: 'normal', color: 'var(--text-4)' }}>D{n.difficulty}</i>
-                    <button className="pg-chip" onClick={() => onLearn(n.node_id, n.node_name)}>
-                      学习
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div className="pg-hint">本周排期知识点都已完成;可提前学习后面阶段,或等复习到期。</div>
-            )}
+            {tasks.length === 0 &&
+              (today.nodes.length > 0 ? (
+                <div className="rp-queries st-mt-2">
+                  {today.nodes.map((n) => (
+                    <span key={n.node_id}>
+                      <b className="st-fw">{n.node_name}</b>
+                      <i>D{n.difficulty}</i>
+                      <button className="pg-chip" onClick={() => onLearn(n.node_id, n.node_name)}>
+                        学习
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="pg-hint">本周排期知识点都已完成;可提前学习后面阶段,或等复习到期。</div>
+              ))}
           </>
         ) : (
-          <div className="pg-hint">暂无排期:计划生成后按周展开,此处显示当日应学与到期复习。</div>
+          tasks.length === 0 && (
+            <div className="pg-hint">暂无排期:计划生成后按周展开,此处显示当日应学与到期复习。</div>
+          )
         )}
       </div>
 
@@ -167,16 +236,9 @@ export function PlanDetail({
                 const node = payload.nodes.find((n) => n.name === t);
                 const st = stateMap.get(t);
                 return (
-                  <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <b
-                      style={{
-                        fontWeight: node?.must_learn ? 600 : 400,
-                        color: node?.must_learn ? 'var(--text-1)' : 'var(--text-3)',
-                      }}
-                    >
-                      {t}
-                    </b>
-                    <i style={{ fontStyle: 'normal', color: 'var(--text-4)' }}>D{node?.difficulty ?? '-'}</i>
+                  <span key={t}>
+                    <b className={`st-topic${node?.must_learn ? '' : ' dim'}`}>{t}</b>
+                    <i>D{node?.difficulty ?? '-'}</i>
                     {st?.done ? (
                       <span className="pill">已完成</span>
                     ) : st && st.mastery > 0 ? (

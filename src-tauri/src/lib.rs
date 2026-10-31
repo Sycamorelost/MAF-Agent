@@ -34,7 +34,7 @@ mod websearch;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// 从托盘恢复主窗口:show + unminimize + focus。
 fn show_main_window(app: &AppHandle) {
@@ -139,6 +139,8 @@ pub fn run() {
                     if servers.is_empty() {
                         return;
                     }
+                    // 初始化开始:前端轮询到 running 后显示「正在初始化组件…」(首启 npx 拉包阶段的卡死感来源)
+                    mcp::set_bootstrap_state(1);
                     let rt = handle.state::<mcp::McpRuntime>();
                     for s in servers {
                         let name = s.name.clone();
@@ -148,6 +150,8 @@ pub fn run() {
                             log::info!("MCP server `{name}` 已随应用启动");
                         }
                     }
+                    mcp::set_bootstrap_state(2);
+                    let _ = handle.emit("bootstrap_done", ());
                 });
             }
 
@@ -169,6 +173,9 @@ pub fn run() {
                 }
                 Err(e) => log::error!("db lock failed: {e}"),
             }
+
+            // 学习中心目录迁移:data/study/* → learningcenter/*(幂等;目标已存在则并集合并,不覆盖)
+            study::lc::migrate_legacy_dirs();
 
             // 迭代 D9:启动全局输入监听(划词提问)
             selection::spawn_listener(app.handle().clone());

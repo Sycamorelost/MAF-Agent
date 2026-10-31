@@ -137,7 +137,7 @@ pub(crate) fn level_label(level: &str) -> &'static str {
 
 // ---------------- 意图兜底(确定性修复) ----------------
 
-/// 意图修复:clamp 分钟数、goal 兜底、deadline 格式兜底。
+/// 意图修复:clamp 分钟数、goal 兜底、deadline 格式兜底;学科三字段清洗(不参与追问)。
 pub(crate) fn fix_intent(mut i: Intent, fb_minutes: u32, fb_deadline: Option<String>) -> Intent {
     i.topic = i.topic.trim().to_string();
     if i.daily_minutes == 0 {
@@ -158,11 +158,26 @@ pub(crate) fn fix_intent(mut i: Intent, fb_minutes: u32, fb_deadline: Option<Str
     if i.lang != "en" {
         i.lang = "zh".into();
     }
+    // 学科三字段:trim + 归一,非法值归空(不触发追问,识别不出即走通用模板)
+    i.subject = i.subject.trim().to_string();
+    if i.subject == "null" {
+        i.subject.clear();
+    }
+    i.grade_band = super::subject::normalize_grade_band(&i.grade_band);
+    if let Some(t) = &i.exam_target
+        && (t.trim().is_empty() || t.trim() == "null")
+    {
+        i.exam_target = None;
+    }
+    if let Some(t) = i.exam_target.take() {
+        i.exam_target = Some(t.trim().to_string());
+    }
     i
 }
 
 /// 从残破/截断的模型输出中打捞 `"key"` 的原始值 token(字符串含引号;number/bool/null 为裸 token)。
-/// 只用于意图的 6 个标量字段,容忍数组断裂、尾随闲话与未闭合字符串。
+/// 只用于意图的标量字段(topic/level/goal/daily_minutes/deadline/subject/grade_band/exam_target),
+/// 容忍数组断裂、尾随闲话与未闭合字符串。
 fn salvage_field<'a>(text: &'a str, key: &str) -> Option<&'a str> {
     let pat = format!("\"{key}\"");
     let mut from = 0usize;
@@ -212,6 +227,8 @@ pub(crate) fn salvage_intent(text: &str) -> Intent {
         topic: salvage_str(text, "topic"),
         level: salvage_str(text, "level"),
         goal: salvage_str(text, "goal"),
+        subject: salvage_str(text, "subject"),
+        grade_band: salvage_str(text, "grade_band"),
         ..Default::default()
     };
     if let Some(m) = salvage_field(text, "daily_minutes") {
@@ -220,6 +237,10 @@ pub(crate) fn salvage_intent(text: &str) -> Intent {
     let dl = salvage_str(text, "deadline");
     if !dl.is_empty() && dl != "null" {
         i.deadline = Some(dl);
+    }
+    let et = salvage_str(text, "exam_target");
+    if !et.is_empty() && et != "null" {
+        i.exam_target = Some(et);
     }
     i
 }
@@ -276,6 +297,37 @@ mod tests {
             topics: topics.iter().map(|s| s.to_string()).collect(),
             milestone: "m".into(),
         }
+    }
+
+    #[test]
+    fn fix_intent_cleans_subject_fields() {
+        let i = Intent {
+            subject: " 数学 ".into(),
+            grade_band: "高中".into(),
+            exam_target: Some("高考".into()),
+            ..Default::default()
+        };
+        let i = fix_intent(i, 30, None);
+        assert_eq!(i.subject, "数学");
+        assert_eq!(i.grade_band, "senior");
+        assert_eq!(i.exam_target.as_deref(), Some("高考"));
+
+        // 非法/空值归空,不触发追问
+        let i2 = fix_intent(
+            Intent {
+                subject: "null".into(),
+                grade_band: "外星学段".into(),
+                exam_target: Some("null".into()),
+                ..Default::default()
+            },
+            30,
+            None,
+        );
+        assert_eq!(i2.subject, "");
+        assert_eq!(i2.grade_band, "");
+        assert_eq!(i2.exam_target, None);
+        // 学科字段不进 missing
+        assert!(!missing_fields(&i2).contains(&"subject".to_string()));
     }
 
     #[test]

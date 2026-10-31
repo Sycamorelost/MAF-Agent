@@ -19,6 +19,7 @@ const COLLAPSED_PREFIX = 'panel-collapsed:';
 const WIDTH_VARS: Record<string, string> = {
   mempanel: '--mempanel-w',
   wbinspector: '--wb-inspector-w',
+  wbside: '--sidebar-w',
 };
 
 /** 单个面板最多占视口的比例:左右两侧同时展开时仍为主区留出空间。 */

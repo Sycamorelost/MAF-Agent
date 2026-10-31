@@ -5,6 +5,7 @@ import { useUiStore } from '../stores/ui';
 import { useState } from 'react';
 import { IconX } from './icons';
 import { ContextMenu, type MenuItem } from './ContextMenu';
+import { ConfirmDialog } from './ConfirmDialog';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { cloneSession, renameSession } from '../lib/ipc/session';
 import type { SessionRow } from '../lib/ipc';
@@ -47,6 +48,8 @@ export default function Sidebar() {
   /** 正在内联重命名的会话 id(null = 无) */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  /** 待确认删除的会话(应用内确认,避免原生 confirm 先执行后弹出的时序问题) */
+  const [pendingDel, setPendingDel] = useState<SessionRow | null>(null);
   const sessionMenu = useContextMenu<SessionRow>();
 
   // 挤出式:挂 body class 让主区让位;卸载/关闭时移除
@@ -142,7 +145,21 @@ export default function Sidebar() {
           x={sessionMenu.pos.x}
           y={sessionMenu.pos.y}
           onClose={sessionMenu.close}
-          items={buildSidebarSessionMenu(sessionMenu.target)}
+          items={buildSidebarSessionMenu(sessionMenu.target, setPendingDel)}
+        />
+      )}
+      {pendingDel && (
+        <ConfirmDialog
+          title="删除会话"
+          message={`删除会话「${pendingDel.title || '未命名'}」?\n此操作不可撤销。`}
+          confirmText="删除"
+          danger
+          onCancel={() => setPendingDel(null)}
+          onConfirm={() => {
+            const id = pendingDel.id;
+            setPendingDel(null);
+            void useSessionsStore.getState().remove(id);
+          }}
         />
       )}
     </>
@@ -151,6 +168,7 @@ export default function Sidebar() {
 
 function buildSidebarSessionMenu(
   s: SessionRow,
+  onRequestDelete: (s: SessionRow) => void,
 ): MenuItem[] {
   return [
     {
@@ -177,9 +195,7 @@ function buildSidebarSessionMenu(
       label: '删除会话',
       danger: true,
       onClick: () => {
-        if (confirm(`删除会话「${s.title || '未命名'}」?此操作不可撤销。`)) {
-          useSessionsStore.getState().remove(s.id);
-        }
+        onRequestDelete(s);
       },
     },
   ];

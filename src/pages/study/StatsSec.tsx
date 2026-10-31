@@ -21,32 +21,21 @@ export function StatsSec({ stats, onChanged }: { stats: StudyStats | null; onCha
         </span>
         <span className="pg-chip">平均掌握 {Math.round(stats.mastery_avg * 100)}%</span>
       </div>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(35, 1fr)',
-          gap: 3,
-          marginTop: 10,
-          maxWidth: 560,
-        }}
-      >
+      <div className="st-heat">
         {stats.days.map((d) => {
           const on = d.activity > 0;
           return (
             <span
               key={d.date}
+              className={on ? 'on' : ''}
               title={`${d.date}${on ? ` · ${d.activity} 次学习行为` : ' · 未打卡'}`}
-              style={{
-                height: 10,
-                borderRadius: 3,
-                background: on ? 'var(--ok)' : 'var(--border-strong)',
-                opacity: on ? Math.min(1, 0.55 + d.activity * 0.12) : 0.6,
-              }}
+              /* 透明度随当日活跃数动态计算,属运行时值,保留内联 */
+              style={on ? { opacity: Math.min(1, 0.55 + d.activity * 0.12) } : undefined}
             />
           );
         })}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+      <div className="st-row-wrap st-mt-3">
         <FocusTimer
           key={focusKey}
           planId={active.id}

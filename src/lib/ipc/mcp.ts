@@ -109,6 +109,9 @@ export const mcpResolveApproval = (approvalId: string, result: ApprovalResult) =
 
 export const mcpClearSessionAllowed = () => invoke<void>("mcp_clear_session_allowed");
 
+/** 启动初始化状态(0=无/未开始,1=初始化中,2=完成);完成时后端广播 bootstrap_done 事件。 */
+export const getBootstrapState = () => invoke<number>("get_bootstrap_state");
+
 /** 读取 / 保存审批模式(保存后立即对下次工具调用生效)。 */
 export const mcpGetApprovalPolicy = () => invoke<ApprovalPolicy>("mcp_get_approval_policy");
 export const mcpSetApprovalPolicy = (policy: ApprovalPolicy) =>

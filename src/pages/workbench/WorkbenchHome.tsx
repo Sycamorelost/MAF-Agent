@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
 import {
-  IconLayers,
   IconZap,
   IconGauge,
   IconSettings,
@@ -109,10 +108,6 @@ export default function WorkbenchHome() {
         <div className="workhome-inner">
           <div className="wh-head">
             <div className="wh-mode">
-              <span className="mode-badge">
-                <IconLayers size={12} />
-                专业 Agent 工作台
-              </span>
               <button
                 type="button"
                 className="chip"

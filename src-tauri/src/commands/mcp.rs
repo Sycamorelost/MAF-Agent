@@ -12,6 +12,12 @@ use tauri::{AppHandle, Emitter, State};
 /// 全局 MCP 配置 state。
 pub struct McpState(pub Mutex<McpConfig>);
 
+/// 启动初始化状态(0=无/未开始,1=初始化中,2=完成);前端据此显示「正在初始化组件…」。
+#[tauri::command]
+pub async fn get_bootstrap_state() -> Result<u8, String> {
+    Ok(mcp::bootstrap_state())
+}
+
 // ============ 配置管理(Phase 4) ============
 
 #[tauri::command]

@@ -8,6 +8,7 @@ import DataDirSetupDialog from './components/DataDirSetupDialog';
 import OnboardingDialog from './components/OnboardingDialog';
 import * as ipc from './lib/ipc';
 import McpApprovalDialog from './components/McpApprovalDialog';
+import { getBootstrapState } from './lib/ipc/mcp';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useSessionsStore } from './stores/sessions';
 import { useProvidersStore } from './stores/providers';
@@ -33,6 +34,10 @@ const ChatPage = lazy(() => import('./pages/ChatPage'));
 const WorkbenchHome = lazy(() => import('./pages/workbench/WorkbenchHome'));
 const WorkbenchPage = lazy(() => import('./pages/workbench/WorkbenchPage'));
 const StudyPage = lazy(() => import('./pages/StudyPage'));
+// 整卷测试独立页面(学习中心内跳转)
+const PaperPage = lazy(() =>
+  import('./pages/study/PaperPage').then((m) => ({ default: m.PaperPage })),
+);
 const DrawPage = lazy(() => import('./pages/DrawPage'));
 const TranslatePage = lazy(() => import('./pages/TranslatePage'));
 const MemoryPage = lazy(() => import('./pages/MemoryPage'));
@@ -188,6 +193,7 @@ function MainApp() {
               <Route path="/work" element={<WorkbenchHome />} />
               <Route path="/work/:id" element={<SessionModeGate mode="work" />} />
               <Route path="/plan" element={<StudyPage />} />
+              <Route path="/plan/paper/:id" element={<PaperPage />} />
               <Route path="/draw" element={<DrawPage />} />
               <Route path="/translate" element={<TranslatePage />} />
               <Route path="/memory" element={<MemoryPage />} />
@@ -200,6 +206,48 @@ function MainApp() {
           </Suspense>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 首启预热提示:后端自启 MCP 组件期间(首次安装 npx 拉包)右下角显示初始化状态,完成即消失。 */
+function BootstrapHint() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    let disposed = false;
+    let delayTimer = 0;
+    let safetyTimer = 0;
+    let unDone: (() => void) | undefined;
+    getBootstrapState()
+      .then((s) => {
+        if (disposed || s !== 1) return;
+        // 3 秒内完成的初始化不打扰(热缓存启动避免闪现);兜底 10 分钟自动消失
+        delayTimer = window.setTimeout(() => {
+          if (disposed) return;
+          setShow(true);
+          safetyTimer = window.setTimeout(() => setShow(false), 600_000);
+        }, 3000);
+      })
+      .catch(() => {});
+    void listen('bootstrap_done', () => {
+      window.clearTimeout(delayTimer);
+      window.clearTimeout(safetyTimer);
+      setShow(false);
+    }).then((f) => {
+      unDone = f;
+    });
+    return () => {
+      disposed = true;
+      window.clearTimeout(delayTimer);
+      window.clearTimeout(safetyTimer);
+      unDone?.();
+    };
+  }, []);
+  if (!show) return null;
+  return (
+    <div className="boot-hint" role="status">
+      <span className="boot-spinner" aria-hidden="true" />
+      正在初始化组件…
     </div>
   );
 }
@@ -255,6 +303,7 @@ export default function App() {
     <HashRouter>
       <DataDirGate />
       <OnboardingGate />
+      <BootstrapHint />
       <ErrorBoundary>
         <MainApp />
       </ErrorBoundary>

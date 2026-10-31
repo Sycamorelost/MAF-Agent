@@ -65,9 +65,17 @@ export default function MermaidBlock({ code }: { code: string }) {
           setErr('Mermaid 未生成 SVG');
           return;
         }
-        // 保留 mermaid 原生的 width="100%" + style max-width(=图表自然宽) —— 实测:删掉 width
-        // 会让 SVG 失去内在宽度,在 .mermaid-svg(flex) 内塌陷为 0×0,整图压成左上角黑点。
-        // 高度不经属性约束,由 CSS height:auto + viewBox 比例推导,窗口 resize 零重绘。
+        // 宽度双向适配(内联 max-width 的值即图的自然宽,读取后移除):
+        //  · 自然宽 ≤ 容器:放大充满,但不超过 2 倍(矢量等比不失真;小图放大过多会糊成大色块)
+        //  · 自然宽 > 容器:保持原生尺寸,容器 overflow-x 滚动 —— 超宽图(如横向流程图)
+        //    若缩到容器宽,文字会小到不可读、宽高比悬殊,不如原尺寸 + 滚动
+        // 高度一律由 viewBox 比例推导,窗口 resize 零重绘。
+        const natural = parseFloat(svg.style.maxWidth ?? '');
+        svg.style.removeProperty('max-width');
+        const cw = hostRef.current?.clientWidth ?? 0;
+        if (natural > 0 && cw > 0) {
+          svg.style.width = natural <= cw ? `${Math.min(cw, natural * 2)}px` : `${natural}px`;
+        }
         svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         setDone(true);
       } catch (e: unknown) {

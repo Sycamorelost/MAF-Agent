@@ -78,12 +78,12 @@
   --brand-line:   #CBE0EF;
 
   /* ---- 中性 ---- */
-  --bg-frame:     #E9EAEE;
+  --bg-frame:     #FFFFFF;
   --bg-main:      #FFFFFF;
   --bg-main-rgb:  255,255,255;        /* 数字组,供 rgba(var(--bg-main-rgb), alpha) 拼接 */
   --bg-surface:   #FFFFFF;            /* 卡片/composer/dialog/pill/tool-chip/md 等表面底 */
   --bg-surface-rgb: 255,255,255;      /* 表面色数字组,供顶层弹窗拼 solid 背景(避免与壁纸透明变量叠加) */
-  --bg-side:      #F7F7F9;
+  --bg-side:      #FFFFFF;
   --bg-hover:     #EFF1F5;
   --bg-active:    #E8EDF3;
 
@@ -439,7 +439,6 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 }
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .greeting{margin-top:var(--space-6);font-size:calc(var(--font-hero) * 1.2);font-weight:650;letter-spacing:-.3px;color:var(--text-1);text-align:center;animation:float 4.5s ease-in-out infinite}
-.sub{margin-top:var(--space-2);font-size:var(--font-body);color:var(--text-3)}
 
 /* 空状态卡片组 */
 .cards{

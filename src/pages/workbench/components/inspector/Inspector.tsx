@@ -3,7 +3,7 @@
 //! 形态对齐 ui-design:标题 + 计数徽标 + 下划线页签;宽度可拖拽(240-520,默认 352)。
 
 import { useState } from 'react';
-import { IconChevronLeft, IconChevronRight } from '../../../../components/icons';
+import { IconChevronRight } from '../../../../components/icons';
 import { ResizeHandle } from '../../../../components/ResizeHandle';
 import { usePanelWidth } from '../../../../lib/usePanelWidth';
 import { useWorkbenchData } from '../../useWorkbenchData';
@@ -46,20 +46,8 @@ export function Inspector({
     setTab(k);
   };
 
-  if (collapsed) {
-    return (
-      <aside className="wb-inspector is-collapsed">
-        <button
-          type="button"
-          className="icon-btn"
-          title="展开检查器"
-          onClick={onToggleCollapse}
-        >
-          <IconChevronLeft size={14} />
-        </button>
-      </aside>
-    );
-  }
+  // 收起态不再渲染细条:与会话头「展开/收起检查器」按钮功能重复,统一由头部按钮开合
+  if (collapsed) return null;
 
   /** 当前页签的条目数(上下文页签显示用量百分比)。 */
   const count =

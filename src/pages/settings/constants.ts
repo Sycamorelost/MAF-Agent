@@ -55,7 +55,7 @@ export const NAV: NavGroup[] = [
 /** 导航菜单可见性开关项(对话/设置固定保留,不在此列)。 */
 export const NAV_VISIBILITY: { key: string; label: string }[] = [
   { key: 'work', label: '专业工作台' },
-  { key: 'plan', label: '学习规划' },
+  { key: 'plan', label: '学习中心' },
   { key: 'draw', label: '绘图' },
   { key: 'translate', label: '翻译' },
   { key: 'memory', label: '记忆' },

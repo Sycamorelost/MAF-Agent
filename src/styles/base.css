@@ -529,6 +529,8 @@ select.input option { background: var(--bg-main); color: var(--text-1); }
 .pg-seg { display: flex; gap: var(--space-1); }
 .pg-seg button {
   flex: 1; padding: 8px 0;
+  /* 按钮内容默认水平/垂直居中:容器被相邻行撑高时文字不顶边 */
+  display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--border); background: var(--bg-surface);
   border-radius: var(--radius-s); cursor: pointer;
   font-family: var(--font); font-size: var(--font-caption); color: var(--text-2);
@@ -730,4 +732,20 @@ select.input option { background: var(--bg-main); color: var(--text-1); }
 }
 .ctx-arr{font-size:var(--font-h3);color:var(--text-4);flex:none;line-height:1}
 .ctx-sep{height:1px;margin:4px 8px;background:var(--border)}
+
+/* ---------- 首启预热提示(后端自启组件期间右下角浮层,完成即消失) ---------- */
+.boot-hint{
+  position:fixed;right:var(--space-4);bottom:var(--space-4);z-index:var(--z-toast);
+  display:flex;align-items:center;gap:var(--space-2);
+  padding:var(--space-2) var(--space-4);
+  background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-m);
+  box-shadow:0 4px 16px rgba(var(--shadow-ambient),0.18);
+  font-size:var(--font-caption);color:var(--text-2);
+}
+.boot-spinner{
+  width:12px;height:12px;flex:none;
+  border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;
+  animation:boot-spin 0.8s linear infinite;
+}
+@keyframes boot-spin{to{transform:rotate(360deg)}}
 

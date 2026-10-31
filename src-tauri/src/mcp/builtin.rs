@@ -433,7 +433,9 @@ fn todo_write_exec(args: &Value, session_id: Option<&str>) -> (String, bool) {
     match result {
         Ok(()) => (
             format!(
-                "任务清单已更新:共 {} 项(进行中 {},待办 {},已完成 {},已取消 {})",
+                "任务清单已更新:共 {} 项(进行中 {},待办 {},已完成 {},已取消 {})。\
+                 记住:每完成一步必须立即再次调用 todo_write 更新状态(完成项→completed,下一项→in_progress),\
+                 不要等全部做完才更新,用户在面板上实时跟踪该进度。",
                 items.len(),
                 counts("in_progress"),
                 counts("pending"),

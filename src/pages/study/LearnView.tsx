@@ -76,14 +76,14 @@ export function LearnView({
 
   return (
     <div className="rp-timeline">
-      <div className="pg-sec" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <div className="pg-sec st-flex">
         <button className="btn-ghost" onClick={onClose}>
           <IconArrowLeft size={14} />
           返回
         </button>
         <b>{nodeName}</b>
         <span className="pg-chip">自学材料{unit ? ` · 约 ${unit.est_minutes} 分钟` : ''}</span>
-        <span className="sp" style={{ flex: 1 }} />
+        <span className="sp" />
         <button
           className={`pg-chip${freeForm ? ' on' : ''}`}
           title="重新生成时不套固定小节结构,按内容自然组织"
@@ -101,12 +101,12 @@ export function LearnView({
       {err && <div className="pg-warn">{err}</div>}
       {busy && <div className="pg-hint">正在生成自学材料,约需十几秒…</div>}
       {!busy && unit && (
-        <div className="md report-md" style={{ marginTop: 8 }}>
+        <div className="md report-md st-mt-2">
           <MemoMarkdown content={unit.content_md} />
         </div>
       )}
       {unit && (
-        <div className="pg-sec" style={{ marginTop: 12 }}>
+        <div className="pg-sec st-mt-3">
           <div className="pg-lab">读完自评掌握</div>
           <div className="pg-chips">
             <button className="pg-chip" title="还没理解,稍后再来" onClick={() => void rate(0)}>
@@ -127,6 +127,14 @@ export function LearnView({
               已记录。掌握度 = 自评 ×0.4 + 测验 ×0.6,做一次测验更能校准;「掌握」同时把知识点标记为完成。
             </div>
           )}
+        </div>
+      )}
+      {unit && (
+        <div className="pg-sec st-mt-3 st-flex">
+          <button className="btn-primary" onClick={onQuiz}>
+            我学完了,立即小测
+          </button>
+          <span className="pg-hint">5 道题校准掌握度,客观题即时判分</span>
         </div>
       )}
     </div>

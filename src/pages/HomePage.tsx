@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import Composer from '../components/Composer';
 import AgentPickerDialog from '../components/AgentPickerDialog';
-import { agentIconComponent, IconInfo } from '../components/icons';
+import { agentIconComponent } from '../components/icons';
 import { useSessionsStore } from '../stores/sessions';
 import { useProvidersStore } from '../stores/providers';
 import { useAgentsStore } from '../stores/agents';
@@ -177,13 +177,11 @@ export default function HomePage() {
   return (
     <div className="stage home">
       <h2 className="greeting">{greeting}</h2>
-      <p className="sub">回答问题 · 检索资料 · 整理文档，从一个输入框开始</p>
 
       <Composer
         value={text}
         onChange={setText}
         onSend={() => void onSend()}
-        placeholder="输入内容,Enter 直接开启新对话"
         sending={creating}
         attachments={attachments}
         onPickFiles={pickFiles}
@@ -215,10 +213,6 @@ export default function HomePage() {
           <span className="agent-chip-text">{agent?.name ?? '智能体'}</span>
         </button>
       </Composer>
-      <div className="home-note">
-        <IconInfo size={12} />
-        Enter 发送 · Shift + Enter 换行 · @ 召回记忆与知识库
-      </div>
 
       {error && (
         <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-caption)', color: 'var(--err)' }}>

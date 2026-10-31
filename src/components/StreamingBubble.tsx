@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react';
 import { useMessagesStore } from '../stores/messages';
 import { MemoMarkdown } from './MemoMarkdown';
 import ReasoningBlock from './ReasoningBlock';
-import { ToolTrace } from './ToolTrace';
-import { splitTraceSegments } from '../lib/toolTrace';
+import { ToolTrace, ToolTraceGroup } from './ToolTrace';
+import { groupTraceSegments, splitTraceSegments } from '../lib/toolTrace';
 
 /** 流式气泡:独立订阅 streaming[sessionId],ChatPage 主树不随 50ms 去抖重渲染。
  *  流式期间降级渲染(无语法高亮 / 无 mermaid),结束后由历史消息的完整渲染接管。
@@ -33,14 +33,11 @@ export default function StreamingBubble({
 
   if (!streaming) return null;
 
-  const segments = text ? splitTraceSegments(text) : [];
+  const segments = text ? groupTraceSegments(splitTraceSegments(text)) : [];
   const lastTextIdx = segments.reduce((acc, s, i) => (s.kind === 'text' ? i : acc), -1);
 
   return (
     <div className="msg assistant" ref={rootRef}>
-      <div className="avatar bot" aria-hidden="true">
-        M
-      </div>
       <div className="msg-col">
         {(reasoningText || rInfo?.tokens) && (
           <ReasoningBlock
@@ -64,8 +61,12 @@ export default function StreamingBubble({
           </div>
         )}
         {segments.map((seg, i) =>
-          seg.kind === 'trace' ? (
-            <ToolTrace key={`t${i}`} raw={seg.raw} />
+          seg.kind === 'traces' ? (
+            seg.raws.length === 1 ? (
+              <ToolTrace key={`t${i}`} raw={seg.raws[0]} />
+            ) : (
+              <ToolTraceGroup key={`t${i}`} raws={seg.raws} />
+            )
           ) : (
             <div className="bubble" key={`m${i}`}>
               <div className="md">

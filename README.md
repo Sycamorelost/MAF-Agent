@@ -8,7 +8,7 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 
 | 项目 | 说明 |
 |---|---|
-| **版本** | v1.17.1 |
+| **版本** | v2.1.0 |
 | **许可证** | Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明） |
 | **平台** | Windows 10 / 11（64 位） |
 
@@ -39,13 +39,25 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 - 会话改名(与记忆文件标题同步)与会话导出 Markdown
 - 单会话内中途切换模型
 - Markdown / KaTeX 公式 / Mermaid 图表 / ECharts 图表四类渲染
+- Mermaid 图双向自适应窗口:小图等比放大充满(矢量不失真),超宽图保持原生尺寸横向滚动
 - 附件本地解析：PDF(pdf-extract)、DOCX(docx-rs)、XLSX(calamine)、PPTX/EPUB/HTML,不经过云端
 
-### 学习规划
+### 专业工作台
 
-- AI 生成结构化学习计划(周维度拆解、知识点列表)
-- 测验(Quiz)、间隔重复复习、掌握度(Mastery)追踪
-- 学习统计与专注计时器
+- 会话内嵌检查器:产物 / 变更与回滚 / 上下文与记忆 / 工具流水四页签,宽度可拖拽
+- 目标级任务计划面板,步骤进度实时同步
+- 会话按项目文件夹分组管理
+
+### 学习中心
+
+- AI 生成结构化学习计划:意图澄清 → 知识地图 → 阶段设计 → 资料推荐,周维度拆解 + 每日任务
+- 自学材料逐知识点生成(表格/公式/图示),支持「深入研究」一键转为对话
+- 小测(Quiz):选择/判断/计算/填空即时判分,简答与主观题由模型按参考答案批改
+- 掌握度(Mastery)追踪与间隔重复复习(自评 ×0.4 + 测验 ×0.6)
+- 试题库:测验题目自动入库(同计划同题干去重),支持手动加题 / 编辑 / 筛选 / 搜索
+- 组卷自测:勾选题目生成整卷,交卷统一批改,答错可补作重批
+- 学习统计打卡热力图与专注计时器
+- 数据文件化存储(learningcenter/ 纯 JSON,可查看、可迁移),旧版数据库表自动迁移合并
 
 ### 持久记忆
 
@@ -113,7 +125,7 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 | 桌面框架 | Tauri 2.12（Rust + 系统 WebView2，不捆绑 Chromium） |
 | 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
 | 后端 | Rust（edition 2024，rust 1.90+），约 124 个 IPC 命令 |
-| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 27） |
+| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 35） |
 | 网络 | reqwest（rustls-tls）+ SSE 流式解析，Rust 层直推前端 |
 | 附件解析 | pdf-extract / docx-rs / calamine / pptxgenjs（全部本地原生） |
 | 密钥保护 | Windows DPAPI + AES-GCM 双路径加密（`provider/keychain.rs`） |
@@ -185,7 +197,7 @@ pnpm tauri build
 
 ```bash
 cd src-tauri
-cargo test        # Rust 单元测试(383 项)
+cargo test        # Rust 单元测试(432 项)
 cargo check       # 静态检查
 ```
 
@@ -228,7 +240,7 @@ myAgent/
         ├── db/                 # SQLite 会话与分支存储
         ├── provider/           # 服务商模板/Key 轮换/DPAPI 密钥链
         ├── websearch/          # 联网搜索(引擎/抓取/排序)
-        ├── study/              # 学习计划/测验/掌握度
+        ├── study/              # 学习中心:计划流水线/测验/题库/试卷(文件化存储)
         ├── memory/             # memory.md 读写与监听
         ├── selection.rs        # 全局划词(Win32)
         └── settings.rs         # 应用设置
@@ -253,12 +265,18 @@ data/
 ├── translations/               # 翻译历史
 ├── attachments/                # 会话附件
 ├── images/                     # AI 绘画产物
-└── study/                      # 学习计划数据
+└── learningcenter/             # 学习中心数据(纯 JSON 文件,可直接查看/迁移)
+    ├── plans/<id>/             # 单个学习计划:plan.json(结构+进度) + trail.jsonl(生成过程事件流)
+    ├── bank/<scope>/<id>.json  # 试题库:scope 为计划 id 或 manual(手动加题)
+    ├── papers/<id>.json        # 试卷:题目快照 + 作答 + 批改结果,自包含不受题库改动影响
+    └── templates/              # 学习内容模板
 ```
 
 **重要**:记忆与笔记均为纯文本 Markdown,你可以用任何编辑器直接修改，应用会通过文件监听实时同步。删除应用前如需保留数据，备份整个数据目录即可。
 
 > 历史版本说明：深度研究功能已整体移除，数据库升级时会自动删除 `research_sessions` 表；历史研究产物文件（`data/research/**`）保留在数据目录中，可自行清理。
+>
+> 学习中心迁移（v2.1.0）：旧版 `data/study/` 目录与数据库三表（`question_bank` / `study_papers` / `study_paper_items`）在升级后自动并入 `learningcenter/` —— 目录按集合并（已存在不覆盖）、旧表导出为 JSON 后删表；迁移幂等，失败会在下次启动自动重试，无需手工干预。
 >
 > 数据库迁移全自动且幂等：升级即建（如 V26 会话预设钉住列、V27 文档块全文索引 `doc_chunks_fts`）,存量数据自动回填；索引表缺失或分词器过旧时自动重建自愈，无需手工干预。
 

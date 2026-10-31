@@ -32,7 +32,7 @@ export function FocusTimer({ planId, onLogged }: { planId: string; onLogged: () 
   };
 
   return (
-    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+    <span className="st-inline">
       {running && <span className="pg-chip on">专注中 {mmss}</span>}
       {!running ? (
         <button className="pg-chip" onClick={() => setRunning(true)}>

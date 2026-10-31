@@ -57,8 +57,21 @@ pub fn grade(qtype: &str, answer: &str, user_answer: &str, self_correct: Option<
             (Some(a), Some(u)) => a == u,
             _ => answer.trim() == user_answer.trim(),
         },
+        // 计算/填空:可核对答案,去空白后精确比对(大小写不敏感)
+        "calc" | "cloze" => {
+            !norm_exact(answer).is_empty() && norm_exact(answer) == norm_exact(user_answer)
+        }
+        // short 与学科主观题(proof/translate/reading/recite):对照参考自评
         _ => self_correct.unwrap_or(false),
     }
+}
+
+/// 精确比对归一:去全部空白字符并转小写(「x = 2」≡「x=2」)。
+fn norm_exact(s: &str) -> String {
+    s.chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_lowercase()
 }
 
 /// 知识点落库状态(前端阶段树合并 payload 用)。
@@ -194,6 +207,21 @@ mod tests {
     }
 
     #[test]
+    fn grade_covers_subject_types() {
+        // calc/cloze:去空白精确比对,大小写不敏感
+        assert!(grade("calc", "x = 2", "x=2", None));
+        assert!(grade("calc", "14", " 14 ", None));
+        assert!(grade("cloze", "Am", "am", None));
+        assert!(!grade("calc", "14", "15", None));
+        assert!(!grade("calc", "14", "", None), "空作答不得分");
+        // 主观学科题:走自评
+        assert!(grade("proof", "要点", "作答", Some(true)));
+        assert!(!grade("translate", "参考译文", "作答", None));
+        assert!(!grade("reading", "要点", "作答", Some(false)));
+        assert!(grade("recite", "原文", "作答", Some(true)));
+    }
+
+    #[test]
     fn weighted_mastery_prefers_available_source() {
         assert!((weighted_mastery(0.5, 0.8) - (0.5 * 0.4 + 0.8 * 0.6)).abs() < 1e-9);
         assert!((weighted_mastery(0.5, -1.0) - 0.5).abs() < 1e-9);
@@ -209,8 +237,8 @@ mod tests {
         seed_node(&conn, "p0000004", 1, "A", 0);
         seed_node(&conn, "p0000004", 2, "B", 1);
         conn.execute(
-            "INSERT INTO study_units(plan_id, node_id, node_name, title, est_minutes, content_md, created)
-             VALUES('p0000004', 1, 'A', 'A', 30, '# A', '2026-01-01')",
+            "INSERT INTO study_units(plan_id, node_id, node_name, est_minutes, content_md, created)
+             VALUES('p0000004', 1, 'A', 30, '# A', '2026-01-01')",
             [],
         )
         .unwrap();

@@ -15,10 +15,12 @@
 //! - 结构校验(阶段数/难度阶梯/知识点覆盖/前置引用)在 Rust 端确定性完成,不依赖模型自检;
 //! - 排期为确定性计算(零 LLM 调用,零幻觉);资料推荐为单次 LLM 调用,失败静默跳过。
 
+pub mod lc;
 pub mod learn;
 pub mod pipeline;
 pub mod schedule;
 pub mod store;
+pub mod subject;
 pub mod template;
 pub mod validate;
 
@@ -57,6 +59,17 @@ pub struct Intent {
     pub deadline: Option<String>,
     #[serde(default, deserialize_with = "null_to_default")]
     pub lang: String,
+    /// 学科(自由文本,由模型从目标描述识别;空 = 未识别,走通用模板)
+    #[serde(default, deserialize_with = "null_to_default")]
+    pub subject: String,
+    /// 学段:primary / junior / senior / university / adult / 空(未指定)
+    #[serde(default, deserialize_with = "null_to_default")]
+    pub grade_band: String,
+    /// 考试目标(中考/高考/四六级/考研/兴趣等;None = 无)
+    pub exam_target: Option<String>,
+    /// 用户对内容范围/结构/呈现格式的明确要求(空 = 无,按模板默认)
+    #[serde(default, deserialize_with = "null_to_default")]
+    pub preferences: String,
     /// 缺失的可选字段名(preflight 用)
     #[serde(default, deserialize_with = "null_to_default")]
     pub missing: Vec<String>,
@@ -74,6 +87,10 @@ impl Default for Intent {
             daily_minutes: 30,
             deadline: None,
             lang: "zh".into(),
+            subject: String::new(),
+            grade_band: String::new(),
+            exam_target: None,
+            preferences: String::new(),
             missing: Vec::new(),
             questions: Vec::new(),
         }
@@ -139,6 +156,14 @@ pub struct PlanPayload {
     pub daily_minutes: u32,
     pub deadline: Option<String>,
     pub lang: String,
+    /// 学科(自由文本原文;空 = 通用模板)
+    pub subject: String,
+    /// 学段(primary/junior/senior/university/adult/空)
+    pub grade_band: String,
+    /// 考试目标(None = 无)
+    pub exam_target: Option<String>,
+    /// 用户明确的内容/格式要求(空 = 按模板默认)
+    pub preferences: String,
     pub nodes: Vec<NodeSpec>,
     pub stages: Vec<StageSpec>,
     pub schedule: Vec<ScheduleWeek>,
@@ -156,6 +181,10 @@ impl Default for PlanPayload {
             daily_minutes: 30,
             deadline: None,
             lang: "zh".into(),
+            subject: String::new(),
+            grade_band: String::new(),
+            exam_target: None,
+            preferences: String::new(),
             nodes: Vec::new(),
             stages: Vec::new(),
             schedule: Vec::new(),

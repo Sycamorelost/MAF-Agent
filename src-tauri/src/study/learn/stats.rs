@@ -249,8 +249,8 @@ mod tests {
         .unwrap();
         seed_node(&conn, "p0000006", 2, "B", 0);
         conn.execute(
-            "INSERT INTO study_units(plan_id, node_id, node_name, title, est_minutes, content_md, created)
-             VALUES('p0000006', 1, 'A', 'A', 30, '# A', '2026-01-02T00:00:00Z')",
+            "INSERT INTO study_units(plan_id, node_id, node_name, est_minutes, content_md, created)
+             VALUES('p0000006', 1, 'A', 30, '# A', '2026-01-02T00:00:00Z')",
             [],
         )
         .unwrap();

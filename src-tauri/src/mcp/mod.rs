@@ -29,6 +29,21 @@ pub use safety::{resolve_safe_path, truncate_chars, validate_command, validate_s
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, RwLock};
 
+// ---------- 启动初始化状态(首启预热提示:前端据此显示「正在初始化组件…」) ----------
+
+use std::sync::atomic::{AtomicU8, Ordering};
+
+/// 0 = 无需初始化/未开始,1 = 初始化中(自启 MCP server 等),2 = 完成。
+static BOOTSTRAP: AtomicU8 = AtomicU8::new(0);
+
+pub fn bootstrap_state() -> u8 {
+    BOOTSTRAP.load(Ordering::Relaxed)
+}
+
+pub fn set_bootstrap_state(v: u8) {
+    BOOTSTRAP.store(v, Ordering::Relaxed);
+}
+
 /// 全局 MCP 配置 —— 用 RwLock 包一层,前端调用时读写不阻塞。
 pub static GLOBAL_CONFIG: LazyLock<RwLock<McpConfig>> =
     LazyLock::new(|| RwLock::new(McpConfig::default()));

@@ -23,7 +23,7 @@ export function NewTaskBox({
       <textarea
         className="newtask-input"
         rows={2}
-        placeholder="描述任务目标,例如:把 dev_plan/val.md 的四档预设整理成一页 PDF,并给出档位选择建议。"
+        placeholder=""
         value={text}
         onChange={(e) => onText(e.target.value)}
         onKeyDown={(e) => {

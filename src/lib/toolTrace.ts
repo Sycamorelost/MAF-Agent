@@ -123,6 +123,26 @@ export function splitTraceSegments(content: string): ContentSegment[] {
   return out.filter((s) => s.kind === 'trace' || s.text.trim().length > 0);
 }
 
+/** 渲染段:文本 / 相邻工具块组(连续 ≥1 条 trace 并为一组,气泡内成组折叠)。 */
+export type RenderSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'traces'; raws: string[] };
+
+/** 把相邻的 trace 段合并成组:正文段原样保留,连续工具块聚为一组。 */
+export function groupTraceSegments(segs: ContentSegment[]): RenderSegment[] {
+  const out: RenderSegment[] = [];
+  for (const s of segs) {
+    const last = out[out.length - 1];
+    if (s.kind === 'trace') {
+      if (last && last.kind === 'traces') last.raws.push(s.raw);
+      else out.push({ kind: 'traces', raws: [s.raw] });
+    } else {
+      out.push(s);
+    }
+  }
+  return out;
+}
+
 /** 工具参数里最适合展示的字段(路径 / 查询 / 命令等),缺省取原始文本。 */
 export function argSummary(trace: Trace): string {
   const keys = ['path', 'query', 'q', 'pattern', 'command', 'cmd', 'url', 'name', 'task'];

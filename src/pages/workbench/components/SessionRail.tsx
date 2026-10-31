@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu, type MenuItem } from '../../../components/ContextMenu';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import {
   IconChevronRight,
   IconFolder,
@@ -179,6 +180,8 @@ export function SessionRail({ sessionId }: { sessionId: string }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [renameSessionId, setRenameSessionId] = useState<string | null>(null);
   const [renameSessionText, setRenameSessionText] = useState('');
+  /** 待确认删除的会话(应用内确认,避免原生 confirm 的先执行后弹出时序) */
+  const [pendingDel, setPendingDel] = useState<SessionRow | null>(null);
 
   const groupMenu = useContextMenu<FolderGroup>();
   const sessionMenu = useContextMenu<SessionRow>();
@@ -210,6 +213,9 @@ export function SessionRail({ sessionId }: { sessionId: string }) {
         }
         const agentId = sess.find((s) => s.agent_id)?.agent_id ?? null;
         const id = await store.create('新任务', modelId, agentId);
+        // 工作台内新建的任务必须显式标记为 work 模式:
+        // 否则全局默认为 chat 时,SessionModeGate 会把 /work/:id 弹回普通会话页
+        await useSessionsStore.getState().setWorkbenchMode(id, 'work');
         if (projectId) {
           // 用 getState 避免闭包内 store 可能过期
           await useSessionsStore.getState().setProject(id, projectId);
@@ -368,9 +374,7 @@ export function SessionRail({ sessionId }: { sessionId: string }) {
   };
 
   const deleteSession = (s: SessionRow) => {
-    if (!confirm(`删除会话「${s.title || '未命名会话'}」?此操作不可撤销。`)) return;
-    void store.remove(s.id);
-    if (s.id === sessionId) nav('/work');
+    setPendingDel(s);
   };
 
   const toggleCollapse = (key: string) => {
@@ -444,7 +448,7 @@ export function SessionRail({ sessionId }: { sessionId: string }) {
           <div className="insp-empty">暂无工作台会话,点顶栏 + 新建任务。</div>
         )}
         {groups.map((g) => (
-          <div key={g.key} className="wb-side-group">
+          <div key={g.key} className={`wb-side-group${g.projectId ? ' card' : ''}`}>
             {/* 分组标题 */}
             <div
               className="wb-side-label"
@@ -462,7 +466,7 @@ export function SessionRail({ sessionId }: { sessionId: string }) {
                   alignItems: 'center',
                   color: 'inherit',
                   transition: 'transform .15s',
-                  transform: g.collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                  transform: g.collapsed ? 'rotate(0deg)' : 'rotate(90deg)',
                 }}
               >
                 <IconChevronRight size={12} />
@@ -562,6 +566,21 @@ export function SessionRail({ sessionId }: { sessionId: string }) {
         onPick={handleNewInFolder}
         onClose={() => setPickerOpen(false)}
       />
+      {pendingDel && (
+        <ConfirmDialog
+          title="删除会话"
+          message={`删除会话「${pendingDel.title || '未命名会话'}」?\n此操作不可撤销。`}
+          confirmText="删除"
+          danger
+          onCancel={() => setPendingDel(null)}
+          onConfirm={() => {
+            const id = pendingDel.id;
+            setPendingDel(null);
+            void store.remove(id);
+            if (id === sessionId) nav('/work');
+          }}
+        />
+      )}
     </div>
   );
 }

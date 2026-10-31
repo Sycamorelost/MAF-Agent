@@ -46,8 +46,16 @@
   font-size: var(--font-micro); color: var(--text-1);
 }
 .wb-side-search input::placeholder { color: var(--text-4); }
-.wb-side-list { display: flex; flex-direction: column; gap: var(--space-1); min-height: 0; overflow: auto; }
+.wb-side-list { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; overflow: auto; }
 .wb-side-group { display: flex; flex-direction: column; gap: var(--space-1); }
+/* 项目卡片:每个项目一组任务,用卡片包裹强化分级 */
+.wb-side-group.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: var(--space-1) var(--space-2) var(--space-2);
+}
+.wb-side-group.card .wb-side-label { padding: var(--space-1) 0 var(--space-1); color: var(--text-2); font-weight: 600; }
 .wb-side-label {
   display: flex; align-items: center; gap: var(--space-1);
   padding: var(--space-2) 0 var(--space-1);
@@ -212,29 +220,6 @@
 .perm-menu button.on { color: var(--brand-deep); background: var(--brand-soft); font-weight: 600; }
 .perm-menu button.danger { color: var(--err); }
 
-/* 运行状态条(ui-design b3):会话头之下、消息区之上的 34px 通栏 */
-.runbar {
-  height: calc(34px * var(--ui-scale)); flex: none; display: flex; align-items: center; gap: var(--space-2);
-  padding: 0 var(--pad-x); border-bottom: 1px solid var(--border); background: var(--bg-side);
-  font-size: var(--font-micro); color: var(--text-2);
-}
-.runbar .live {
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  font-weight: 600; color: var(--brand-deep);
-  max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.runbar.ph-idle .live { color: var(--text-3); font-weight: 400; }
-.runbar .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--text-4); flex: none; }
-.runbar.ph-preparing .pulse, .runbar.ph-executing .pulse {
-  background: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft);
-}
-.runbar.ph-waiting .pulse { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
-.runbar.ph-done .pulse { background: var(--ok); box-shadow: none; }
-.runbar .step { color: var(--text-3); display: inline-flex; align-items: center; gap: var(--space-1); font-variant-numeric: tabular-nums; }
-.runbar .sp { flex: 1; }
-.runbar .ctxmini { width: 44px; height: 4px; border-radius: 2px; background: var(--bg-hover); overflow: hidden; flex: none; }
-.runbar .ctxmini i { display: block; height: 100%; background: var(--brand); border-radius: 2px; }
-
 /* ---------- WorkbenchHome(专业模式首页) ---------- */
 .workhome {
   flex: 1; min-height: 0; overflow: auto;
@@ -316,7 +301,6 @@
   width: var(--wb-inspector-w, 352px); flex: none; display: flex; flex-direction: column; min-height: 0;
   border-left: 1px solid var(--border); background: var(--bg-side);
 }
-.wb-inspector.is-collapsed { width: 36px; align-items: center; padding-top: var(--space-2); }
 .wb-inspector-head {
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border);
@@ -594,9 +578,9 @@
   .wb-main .model-switch .model-name { display: none; }
 }
 /* 窄窗(≤900):检查器展开时改为右侧浮层(复用抽屉图层/阴影),不再挤压中栏;
-   折叠态仍是 36px 在流窄条,点 〉展开即浮层,收起回落 */
+   收起态不渲染(由会话头按钮开合) */
 @media (max-width: 900px) {
-  .wb-inspector:not(.is-collapsed) {
+  .wb-inspector {
     position: fixed;
     top: var(--titlebar-h);
     right: 0;
@@ -609,11 +593,9 @@
 }
 @media (max-width: 560px) {
   .task-grid { grid-template-columns: minmax(0, 1fr); }
-  /* 极窄窗:中栏头部徽标与运行条迷你条让位(模型/上下文在底部状态栏已有) */
+  /* 极窄窗:中栏头部徽标让位(模型/上下文在底部状态栏已有) */
   .wb-main .mode-badge,
-  .wb-main .preset-chip,
-  .wb-main .runbar .ctxmini { display: none; }
-  .wb-main .runbar { gap: var(--space-1); }
+  .wb-main .preset-chip { display: none; }
   /* ≤560 左栏收为抽屉(ui-design「左栏收为抽屉」),防中栏被压到逐字换行;
      默认隐藏,由标题栏「会话历史」按钮切换(.drawer-open),选中会话自动收起 */
   .wb-side {

@@ -36,22 +36,34 @@ pub struct QuizRow {
     pub created: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct QuizAnswerIn {
     pub question_idx: u32,
     #[serde(default)]
     pub user_answer: String,
-    /// short 题自评(true = 记得 / false = 没记住)
+    /// short 题自评(true = 记得 / false = 没记住);兼容旧前端
     #[serde(default)]
     pub self_correct: Option<bool>,
+    /// 主观题「批改此题」按钮的判定结果(用户点击后才产生)
+    #[serde(default)]
+    pub grade_correct: Option<bool>,
+    /// 主观题批改得分(0-1)
+    #[serde(default)]
+    pub grade_score: Option<f64>,
+    /// 主观题批改反馈
+    #[serde(default)]
+    pub grade_feedback: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct QuizGrade {
     pub question_idx: u32,
     pub correct: bool,
+    /// 0-1(主观题可部分得分)
+    pub score: f64,
     pub expected: String,
     pub explanation: String,
+    pub feedback: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -91,6 +103,13 @@ pub fn parse_quiz(text: &str) -> Option<Vec<QuizQuestion>> {
         let qtype = match item.get("type").and_then(|x| x.as_str()).unwrap_or("") {
             "choice" => "choice",
             "judge" => "judge",
+            // 学科题型:calc/cloze 可确定性判分;proof/translate/reading/recite 走自评
+            "calc" => "calc",
+            "proof" => "proof",
+            "cloze" => "cloze",
+            "translate" => "translate",
+            "reading" => "reading",
+            "recite" => "recite",
             _ => "short",
         }
         .to_string();
@@ -157,23 +176,43 @@ pub(crate) fn quiz_submit_conn(
     quiz_id: i64,
     answers: &[QuizAnswerIn],
 ) -> Result<QuizResult, String> {
-    let (_, node_id, _name, questions) = quiz_row_conn(conn, plan_id, quiz_id)?;
+    let (_, node_id, node_name, questions) = quiz_row_conn(conn, plan_id, quiz_id)?;
     if questions.is_empty() {
         return Err("测验题目为空".into());
     }
     let now = now_str();
     let mut results = Vec::new();
     let mut correct_n = 0usize;
+    let mut scores_sum = 0.0f64;
     for q in &questions {
-        let (ua, sc) = answers
+        let (ua, sc, gc, gs, gf) = answers
             .iter()
             .find(|a| a.question_idx == q.idx)
-            .map(|a| (a.user_answer.clone(), a.self_correct))
-            .unwrap_or((String::new(), None));
-        let ok = grade(&q.qtype, &q.answer, &ua, sc);
+            .map(|a| {
+                (
+                    a.user_answer.clone(),
+                    a.self_correct,
+                    a.grade_correct,
+                    a.grade_score,
+                    a.grade_feedback.clone(),
+                )
+            })
+            .unwrap_or((String::new(), None, None, None, None));
+        // 客观题确定性判分;主观题以「批改此题」按钮产生的结果为准
+        let (ok, item_score) = if super::paper::is_objective(&q.qtype) {
+            let ok = grade(&q.qtype, &q.answer, &ua, None);
+            (ok, if ok { 1.0 } else { 0.0 })
+        } else {
+            let ok = gc
+                .or(sc)
+                .unwrap_or_else(|| gs.map(|s| s >= 0.6).unwrap_or(false));
+            let s = gs.unwrap_or(if ok { 1.0 } else { 0.0 }).clamp(0.0, 1.0);
+            (ok, s)
+        };
         if ok {
             correct_n += 1;
         }
+        scores_sum += item_score;
         conn.execute(
             "INSERT INTO quiz_attempts(quiz_id, question_idx, user_answer, correct, answered_at)
              VALUES(?1,?2,?3,?4,?5)",
@@ -183,11 +222,13 @@ pub(crate) fn quiz_submit_conn(
         results.push(QuizGrade {
             question_idx: q.idx,
             correct: ok,
+            score: item_score,
             expected: q.answer.clone(),
             explanation: q.explanation.clone(),
+            feedback: gf.unwrap_or_default(),
         });
     }
-    let score = correct_n as f64 / questions.len() as f64;
+    let score = scores_sum / questions.len() as f64;
 
     // 更新测验分与掌握度(掌握度 = 自评×0.4 + 测验×0.6)
     let sr: f64 = conn
@@ -227,6 +268,11 @@ pub(crate) fn quiz_submit_conn(
             INTERVALS[0],
             0,
         )?;
+    }
+
+    // P2 每日任务:有答错题 → 次日排错题重做(去重);复习任务日期由 upsert_review 同步
+    if correct_n < questions.len() {
+        super::tasks::schedule_redo_conn(conn, plan_id, node_id, &node_name)?;
     }
 
     store::add_log(conn, plan_id, Some(node_id), "quiz", 0)?;
@@ -270,6 +316,26 @@ mod tests {
     }
 
     #[test]
+    fn parse_quiz_accepts_subject_types() {
+        let text = r#"{"questions":[
+            {"idx":0,"type":"calc","stem":"计算 2+3×4","answer":"14","explanation":"先乘后加"},
+            {"idx":1,"type":"cloze","stem":"I ____ a student.","answer":"am"},
+            {"idx":2,"type":"translate","stem":"翻译:学而不思则罔","answer":"Learning without thought is labor lost."},
+            {"idx":3,"type":"proof","stem":"证明:对顶角相等","answer":"证明要点"},
+            {"idx":4,"type":"reading","stem":"阅读短文回答:主旨是什么","answer":"要点"},
+            {"idx":5,"type":"recite","stem":"默写《静夜思》前两句","answer":"床前明月光,疑是地上霜。"}
+        ]}"#;
+        let qs = parse_quiz(text).unwrap();
+        assert_eq!(qs.len(), 5, "仍截到 5 题");
+        assert_eq!(qs[0].qtype, "calc");
+        assert_eq!(qs[1].qtype, "cloze");
+        assert_eq!(qs[2].qtype, "translate");
+        assert_eq!(qs[3].qtype, "proof");
+        // recite 被截断;reading 保留
+        assert_eq!(qs[4].qtype, "reading");
+    }
+
+    #[test]
     fn quiz_submit_grades_and_schedules_review() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         crate::db::schema::migrate(&conn).unwrap();
@@ -283,16 +349,19 @@ mod tests {
                 question_idx: 0,
                 user_answer: "A".into(),
                 self_correct: None,
+                ..Default::default()
             },
             QuizAnswerIn {
                 question_idx: 1,
                 user_answer: "对".into(),
                 self_correct: None,
+                ..Default::default()
             },
             QuizAnswerIn {
                 question_idx: 2,
                 user_answer: "答了".into(),
                 self_correct: Some(true),
+                ..Default::default()
             },
         ];
         let r = quiz_submit_conn(&conn, "p0000001", 9, &answers).unwrap();
@@ -332,16 +401,19 @@ mod tests {
                 question_idx: 0,
                 user_answer: "B".into(),
                 self_correct: None,
+                ..Default::default()
             },
             QuizAnswerIn {
                 question_idx: 1,
                 user_answer: "对".into(),
                 self_correct: None,
+                ..Default::default()
             },
             QuizAnswerIn {
                 question_idx: 2,
                 user_answer: "答了".into(),
                 self_correct: Some(false),
+                ..Default::default()
             },
         ];
         conn.execute("UPDATE knowledge_nodes SET self_rating=0.5 WHERE id=1", [])

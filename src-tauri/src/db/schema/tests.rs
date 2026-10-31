@@ -53,6 +53,31 @@ fn migrate_creates_all_tables() {
     migrate(&conn).unwrap();
 }
 
+/// V33:冗余列归一 —— plans.preferences 可写,study_units.title(与 node_name 恒等)已删除。
+#[test]
+fn v33_normalizes_redundant_columns() {
+    let conn = Connection::open_in_memory().unwrap();
+    migrate(&conn).unwrap();
+
+    let prefs: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('plans') WHERE name='preferences'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(prefs, 1, "plans.preferences 应存在");
+
+    let title: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('study_units') WHERE name='title'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(title, 0, "study_units.title 冗余列应已删除");
+}
+
 /// PERF-2:版本已最新但核心表被删时,快路径必须回落全量迁移并自愈。
 #[test]
 fn fast_path_self_heals_missing_table() {

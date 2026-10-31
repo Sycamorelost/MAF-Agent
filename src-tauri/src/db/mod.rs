@@ -48,6 +48,13 @@ pub fn init() -> Result<(), String> {
     conn.pragma_update(None, "busy_timeout", "5000")
         .map_err(|e| format!("set busy_timeout failed: {e}"))?;
 
+    // 学习中心文件化:旧表(question_bank / study_papers / study_paper_items)先导出为
+    // learningcenter 下的文件再删表。必须在 migrate 之前(此时旧表仍在);失败仅记录,
+    // 旧表保留,下次启动重试(导出幂等)。
+    if let Err(e) = crate::study::learn::export_legacy_tables(&conn) {
+        log::error!("export legacy study tables failed(下次启动重试): {e}");
+    }
+
     schema::migrate(&conn).map_err(|e| format!("migrate failed: {e}"))?;
 
     DB.set(Mutex::new(conn))

@@ -136,9 +136,13 @@
 }
 
 /* ---------- 历史列表容器 ---------- */
+/* 三板块(计划/试卷/试题库)各自在 .pg-main 下,上方还有板块切换头:
+   用 flex:1 + min-height:0 让列表占满剩余高度并自身滚动,避免 min-height:100%
+   叠加头部后溢出、被窗口裁掉且无法滚动到末尾 */
 .rp-hist {
   display: flex; flex-direction: column;
-  min-height: 100%;
+  flex: 1; min-height: 0;
+  overflow-y: auto;
 }
 .rp-hist-list {
   display: flex; flex-direction: column; gap: var(--space-2);
@@ -203,3 +207,84 @@
   font-size: var(--font-mini); color: var(--text-3); font-weight: 500;
 }
 .pg-aside.rp-config .pg-row .pg-field { width: 100%; box-sizing: border-box; }
+
+/* ============================================================
+ * 学习中心通用样式(消灭组件内联 style,全部走 token)
+ * ============================================================ */
+
+/* 弹性占位:全应用 .sp 均为 flex 占位(原学习中心内联 flex:1) */
+.sp { flex: 1; min-width: 0; }
+
+/* 行布局 */
+.st-row { display: flex; align-items: center; gap: var(--space-2); }
+.st-row-wrap { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.st-row-base { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
+.st-inline { display: inline-flex; align-items: center; gap: var(--space-2); }
+.st-center { justify-content: center; }
+.st-actions { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
+
+/* 间距(4 的倍数网格) */
+.st-mt-1 { margin-top: var(--space-1); }
+.st-mt-2 { margin-top: var(--space-2); }
+.st-mt-3 { margin-top: var(--space-3); }
+.st-mb-2 { margin-bottom: var(--space-2); }
+.st-mb-3 { margin-bottom: var(--space-3); }
+.st-mr-2 { margin-right: var(--space-2); }
+
+/* 字号/字重微调 */
+.st-fs-caption { font-size: var(--font-caption); }
+.st-fw { font-weight: 500; }
+.st-q { font-size: var(--font-sub); margin-bottom: var(--space-1); }
+
+/* 表单:文本域全宽纵向拖拽,最小高度随 --ui-scale 缩放 */
+.st-area { width: 100%; resize: vertical; min-height: calc(56px * var(--ui-scale)); }
+.st-area-s { min-height: calc(44px * var(--ui-scale)); }
+.st-area-l { min-height: calc(64px * var(--ui-scale)); }
+.st-area-xl { min-height: calc(72px * var(--ui-scale)); }
+/* 数字输入:不定死全宽,与设置页 .pg-field.num 对齐 */
+.pg-field.num { width: 96px; flex: none; }
+
+/* 卡片化分区内的弹性行(筛选条/工具条):表单控件恢复自然宽度 */
+.pg-sec.st-flex { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.pg-sec.st-flex > .pg-field, .st-row-wrap > .pg-field { width: auto; }
+.pg-sec.st-flex > .pg-field.grow, .st-row-wrap > .pg-field.grow { flex: 1; min-width: 140px; }
+
+/* 列表项静态态(题库行不跳转、顶部对齐) */
+.rp-hist-item.st-static { cursor: default; align-items: flex-start; }
+
+/* 警示语义(答错/未达标):token 衍生色,禁硬编码色值 */
+.pg-hint.bad { color: var(--warn); }
+.pg-chip.bad { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: var(--warn-soft); }
+.pill.bad { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: var(--warn-soft); }
+
+/* 危险 ghost 按钮(终止) */
+.btn-ghost.stop { color: var(--err); }
+.btn-ghost.stop:hover { background: var(--err-soft); color: var(--err); }
+
+/* 任务名(今日待办):完成态划线置灰 */
+.st-task { font-weight: 500; }
+.st-task.done { text-decoration: line-through; color: var(--text-4); }
+
+/* 知识点主题:非必学降档 */
+.st-topic { font-weight: 600; color: var(--text-1); }
+.st-topic.dim { font-weight: 400; color: var(--text-3); }
+
+/* 勾选行(任务 checkbox + 文案) */
+.st-check { display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; }
+
+/* 板块切换头(学习计划/试卷/试题库) */
+.st-tabs-head { padding-top: var(--space-2); padding-bottom: var(--space-2); }
+.st-tabs-seg { width: 300px; flex-shrink: 0; }
+
+/* 弹窗头行(h2 + 占位 + 关闭按钮):.dialog-head 默认块级,学习中心弹窗需要行布局 */
+.st-dlg-head { display: flex; align-items: center; gap: var(--space-2); }
+.st-dlg-head h2 { font: inherit; }
+
+/* 测验弹窗 / 题库编辑弹窗宽度 */
+.st-quiz-dialog { width: min(720px, 92vw); max-height: 84vh; }
+.st-bank-dialog { width: min(620px, 92vw); }
+
+/* 打卡热力图(格子为装饰性固定尺寸) */
+.st-heat { display: grid; grid-template-columns: repeat(35, 1fr); gap: 3px; margin-top: var(--space-3); max-width: 560px; }
+.st-heat span { height: 10px; border-radius: 3px; background: var(--border-strong); opacity: .6; }
+.st-heat span.on { background: var(--ok); }

@@ -46,6 +46,10 @@ pub struct StudyParams {
     /// H3 同款:stream_options 被拒时重建 Provider 的入参快照
     pub rebuild: Option<crate::provider::rebuild::ProviderRebuild>,
     pub fallback: std::sync::Mutex<Option<Arc<dyn Provider>>>,
+    /// P2:生成每日任务(创建入口勾选,默认开)
+    pub daily_tasks: bool,
+    /// P3:预生成每个知识点的完整自学材料(创建入口勾选,默认关)
+    pub full_content: bool,
 }
 
 pub(crate) enum RunError {
@@ -135,12 +139,14 @@ pub async fn preflight(
     }
     // missing 由确定性计算,不信任模型自报
     intent.missing = missing_fields(&intent);
-    if !intent.missing.is_empty() && intent.questions.is_empty() {
-        intent.questions = default_questions(&intent.missing);
-    }
-    if intent.missing.is_empty() {
-        intent.questions.clear();
-    }
+    // 追问与缺失字段必须一一对应(前端按 missing[i] 决定控件类型):
+    // 模型的 questions 措辞/数量不可靠,统一用确定性生成覆盖。
+    intent.questions = if intent.missing.is_empty() {
+        Vec::new()
+    } else {
+        default_questions(&intent.missing)
+    };
+
     Ok(intent)
 }
 
@@ -174,6 +180,46 @@ pub async fn run(p: StudyParams) {
         Ok(payload) => {
             let _ = store::save_payload(&p.id, &payload);
             let _ = store::finish_plan(&p.id, &payload);
+            // P2 每日任务:确定性切分(失败不阻塞计划就绪)
+            if p.daily_tasks {
+                match crate::study::learn::tasks::generate_for_plan(&p.id, &payload) {
+                    Ok(n) => sink.emit(StudyEvent::StepNote {
+                        step: "export".into(),
+                        content: format!("已按每天 {} 分钟生成 {n} 个每日任务", payload.daily_minutes),
+                    }),
+                    Err(e) => sink.emit(StudyEvent::StepNote {
+                        step: "export".into(),
+                        content: format!("每日任务生成失败(不影响计划):{e}"),
+                    }),
+                }
+            }
+            // P3 完整教学内容:逐节点生成自学材料(用户创建时勾选)
+            // 逐条串行、失败不中断;取消/暂停沿用流水线控制,已完成部分保留。
+            if p.full_content {
+                if let Ok(nodes) = store::node_ids(&p.id) {
+                    if !nodes.is_empty() {
+                        sink.emit(StudyEvent::StepStart {
+                            step: "content".into(),
+                            label: format!("生成完整教学内容({} 个知识点)", nodes.len()),
+                        });
+                        sink.emit(StudyEvent::StepNote {
+                            step: "content".into(),
+                            content: format!(
+                                "开始为 {} 个知识点生成完整教学内容(逐条生成,可随时取消,已完成部分会保留)",
+                                nodes.len()
+                            ),
+                        });
+                        let done = generate_all_units(&p, &sink, &nodes).await;
+                        sink.emit(StudyEvent::StepNote {
+                            step: "content".into(),
+                            content: format!(
+                                "完整教学内容已生成 {done}/{} 个知识点;其余可在计划详情中逐个生成",
+                                nodes.len()
+                            ),
+                        });
+                    }
+                }
+            }
             sink.emit(StudyEvent::Done {
                 plan: Some(payload),
             });
@@ -189,6 +235,55 @@ pub async fn run(p: StudyParams) {
     }
 }
 
+/// P3:逐节点生成完整自学材料。暂停会挂起,取消则停止;单节点失败不中断整体。
+/// 返回值 = 实际成功生成的节点数。
+async fn generate_all_units(
+    p: &StudyParams,
+    sink: &Sink,
+    nodes: &[(i64, String, i64)],
+) -> usize {
+    let total = nodes.len();
+    let mut done = 0usize;
+    for (i, (node_id, name, difficulty)) in nodes.iter().enumerate() {
+        if p.cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        while p.paused.load(Ordering::Relaxed) && !p.cancel.load(Ordering::Relaxed) {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        if p.cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let est = 20 + (*difficulty).clamp(0, 5) as u32 * 10;
+        sink.emit(StudyEvent::StepNote {
+            step: "content".into(),
+            content: format!(
+                "正在生成第 {}/{} 个知识点的完整内容:{}(约 {est} 分钟)…",
+                i + 1,
+                total,
+                name
+            ),
+        });
+        match crate::study::learn::generate_unit(
+            &*p.provider,
+            &p.model,
+            &p.id,
+            *node_id,
+            false,
+            false,
+        )
+        .await
+        {
+            Ok(_) => done += 1,
+            Err(e) => sink.emit(StudyEvent::StepNote {
+                step: "content".into(),
+                content: format!("「{name}」生成失败,可稍后在计划详情中单独重新生成:{e}"),
+            }),
+        }
+    }
+    done
+}
+
 async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError> {
     let lang_label = if p.lang == "en" { "English" } else { "中文" };
 
@@ -202,7 +297,7 @@ async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError
     sink.emit(StudyEvent::StepNote {
         step: "intent".into(),
         content: format!(
-            "主题:{} · 水平:{} · 每天 {} 分钟{}",
+            "主题:{} · 水平:{} · 每天 {} 分钟{}{}",
             intent.topic,
             if intent.level.is_empty() {
                 "未指定"
@@ -215,6 +310,20 @@ async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError
                 .as_ref()
                 .map(|d| format!(" · 截止 {d}"))
                 .unwrap_or_default(),
+            if intent.subject.is_empty() {
+                String::new()
+            } else {
+                let band = super::subject::grade_band_label(&intent.grade_band);
+                format!(
+                    " · 学科:{}{}",
+                    intent.subject,
+                    if band == "未指定" {
+                        String::new()
+                    } else {
+                        format!("({band})")
+                    }
+                )
+            },
         ),
     });
 
@@ -244,7 +353,7 @@ async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError
         label: "计算周排期".into(),
     });
     gate(p, sink).await?;
-    let resources_fut = run_resources(p, &stages, lang_label);
+    let resources_fut = run_resources(p, sink, &stages, &intent, lang_label);
     let schedule_fut = {
         let stages = stages.clone();
         async move { calc_schedule(&stages, intent.daily_minutes) }
@@ -315,6 +424,10 @@ async fn run_inner(p: &StudyParams, sink: &Sink) -> Result<PlanPayload, RunError
         daily_minutes: intent.daily_minutes,
         deadline: intent.deadline.clone(),
         lang: intent.lang.clone(),
+        subject: intent.subject.clone(),
+        grade_band: intent.grade_band.clone(),
+        exam_target: intent.exam_target.clone(),
+        preferences: intent.preferences.clone(),
         nodes,
         stages,
         schedule,
@@ -335,14 +448,23 @@ async fn run_map(
     intent: &Intent,
     lang_label: &str,
 ) -> Result<Vec<NodeSpec>, RunError> {
-    let sys = template::effective("study_map");
+    let profile = template::LearnerProfile::from_intent(intent);
+    let sys = format!("{}{}", template::effective("study_map"), profile.appendix());
     let user = format!(
-        "学习主题:{}\n当前水平:{}\n学习目标:{}\n输出语言:{lang_label}",
-        intent.topic, intent.level, intent.goal
+        "{}学习主题:{}\n当前水平:{}\n学习目标:{}\n输出语言:{lang_label}",
+        profile.config_block(),
+        intent.topic,
+        intent.level,
+        intent.goal
     );
     let mut last_err = String::new();
     for attempt in 1..=3u32 {
         gate(p, sink).await?;
+        // P3 反馈:调用模型前发进行中文案,避免静默期
+        sink.emit(StudyEvent::StepNote {
+            step: "map".into(),
+            content: format!("正在调用模型绘制知识地图(第 {attempt}/3 次尝试)…"),
+        });
         let text = llm_collect(p, vec![sys_msg(sys.clone()), user_msg(user.clone())]).await?;
         if let Some(json) = extract_json(&text) {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
@@ -380,7 +502,12 @@ async fn run_stages(
     nodes: &[NodeSpec],
     lang_label: &str,
 ) -> Result<(Vec<StageSpec>, bool), RunError> {
-    let sys = template::effective("study_stages");
+    let profile = template::LearnerProfile::from_intent(intent);
+    let sys = format!(
+        "{}{}",
+        template::effective("study_stages"),
+        profile.appendix()
+    );
     let nodes_digest = serde_json::to_string(
         &nodes
             .iter()
@@ -396,7 +523,8 @@ async fn run_stages(
     )
     .map_err(|e| RunError::Fatal(e.to_string()))?;
     let base_user = format!(
-        "学习主题:{}\n输出语言:{lang_label}\n知识地图(只能引用其中的 name):\n{nodes_digest}",
+        "{}学习主题:{}\n输出语言:{lang_label}\n知识地图(只能引用其中的 name):\n{nodes_digest}",
+        profile.config_block(),
         intent.topic
     );
 
@@ -408,6 +536,11 @@ async fn run_stages(
         } else {
             format!("{base_user}\n\n上一轮输出存在以下问题,必须修正:\n{feedback}")
         };
+        // P3 反馈:调用模型前发进行中文案,避免静默期
+        sink.emit(StudyEvent::StepNote {
+            step: "stages".into(),
+            content: format!("正在调用模型设计学习阶段(第 {attempt}/3 次尝试)…"),
+        });
         let text = llm_collect(p, vec![sys_msg(sys.clone()), user_msg(user)]).await?;
         if let Some(json) = extract_json(&text)
             && let Ok(v) = serde_json::from_str::<serde_json::Value>(&json)
@@ -458,10 +591,22 @@ async fn run_stages(
 /// 步骤 ④a:资料推荐(失败静默跳过,返回空)。
 async fn run_resources(
     p: &StudyParams,
+    sink: &Sink,
     stages: &[StageSpec],
+    intent: &Intent,
     lang_label: &str,
 ) -> Vec<StageResource> {
-    let sys = template::effective("study_resources");
+    // P3 反馈:资料匹配期间给出进行中文案
+    sink.emit(StudyEvent::StepNote {
+        step: "resources".into(),
+        content: format!("正在为 {} 个阶段匹配学习资料…", stages.len()),
+    });
+    let profile = template::LearnerProfile::from_intent(intent);
+    let sys = format!(
+        "{}{}",
+        template::effective("study_resources"),
+        profile.appendix()
+    );
     let digest = stages
         .iter()
         .map(|s| {
@@ -475,7 +620,10 @@ async fn run_resources(
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let user = format!("学习阶段列表:\n{digest}\n输出语言:{lang_label}");
+    let user = format!(
+        "{}学习阶段列表:\n{digest}\n输出语言:{lang_label}",
+        profile.config_block()
+    );
     let text = match llm_collect(p, vec![sys_msg(sys), user_msg(user)]).await {
         Ok(t) => t,
         Err(_) => return Vec::new(),

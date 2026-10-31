@@ -1,7 +1,7 @@
 //! 学习计划的持久化。
 //!
 //! - db:`plans`(元数据 + 计划载荷 JSON)、`knowledge_nodes`(知识点行)、`study_logs`(行为日志)
-//! - 磁盘:`data/study/{id}/trail.jsonl`(过程事件)、`plan.json`(计划载荷镜像)
+//! - 磁盘:`<learningcenter>/plans/{id}/trail.jsonl`(过程事件)、`plan.json`(计划载荷镜像)
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -30,11 +30,19 @@ pub struct PlanRow {
     pub error: Option<String>,
     /// true = 校验失败后降级生成的默认结构
     pub repaired: bool,
+    /// 学科附录 key(math/english/physics/chinese/programming/other;None = 未识别/旧计划)
+    pub subject: Option<String>,
+    /// 学段(primary/junior/senior/university/adult;None = 未指定)
+    pub grade_band: Option<String>,
+    /// 考试目标(自由文本;None = 无)
+    pub exam_target: Option<String>,
+    /// 用户明确的内容/格式要求(None = 按模板默认)
+    pub preferences: Option<String>,
     pub created: String,
     pub updated: String,
 }
 
-const COLS: &str = "id, topic, status, level, goal, daily_minutes, deadline, lang, model_id, error, repaired, created, updated";
+const COLS: &str = "id, topic, status, level, goal, daily_minutes, deadline, lang, model_id, error, repaired, subject, grade_band, exam_target, preferences, created, updated";
 
 fn row_from(r: &rusqlite::Row) -> rusqlite::Result<PlanRow> {
     Ok(PlanRow {
@@ -49,14 +57,18 @@ fn row_from(r: &rusqlite::Row) -> rusqlite::Result<PlanRow> {
         model_id: r.get(8)?,
         error: r.get(9)?,
         repaired: r.get::<_, i64>(10)? != 0,
-        created: r.get(11)?,
-        updated: r.get(12)?,
+        subject: r.get(11)?,
+        grade_band: r.get(12)?,
+        exam_target: r.get(13)?,
+        preferences: r.get(14)?,
+        created: r.get(15)?,
+        updated: r.get(16)?,
     })
 }
 
-/// 学习目录:`<data_dir>/study/{id}`。
+/// 学习目录:`<data_dir>/learningcenter/plans/{id}`(旧 `data/study/` 由 `lc::migrate_legacy_dirs` 迁入)。
 pub fn study_dir(id: &str) -> PathBuf {
-    crate::paths::data_dir().join("study").join(id)
+    super::lc::plan_dir(id)
 }
 
 // ---------------- plans ----------------
@@ -64,8 +76,8 @@ pub fn study_dir(id: &str) -> PathBuf {
 pub fn insert_plan(row: &PlanRow) -> Result<(), String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     conn.execute(
-        "INSERT INTO plans(id, topic, status, level, goal, daily_minutes, deadline, lang, model_id, error, repaired, created, updated)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+        "INSERT INTO plans(id, topic, status, level, goal, daily_minutes, deadline, lang, model_id, error, repaired, subject, grade_band, exam_target, preferences, created, updated)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
         rusqlite::params![
             row.id,
             row.topic,
@@ -78,6 +90,10 @@ pub fn insert_plan(row: &PlanRow) -> Result<(), String> {
             row.model_id,
             row.error,
             row.repaired as i64,
+            row.subject,
+            row.grade_band,
+            row.exam_target,
+            row.preferences,
             row.created,
             row.updated,
         ],
@@ -129,10 +145,25 @@ pub fn update_status(id: &str, status: &str, error: Option<&str>) -> Result<(), 
 pub fn finish_plan(id: &str, payload: &PlanPayload) -> Result<(), String> {
     let now = Local::now().to_rfc3339();
     let json = serde_json::to_string(payload).map_err(|e| e.to_string())?;
+    // 学科列存归一后的附录 key(空学科 → NULL,等价旧计划的通用模板行为)
+    let subject_key = if payload.subject.trim().is_empty() {
+        None
+    } else {
+        Some(
+            super::subject::normalize_subject(&payload.subject)
+                .as_str()
+                .to_string(),
+        )
+    };
+    let grade_band = if payload.grade_band.trim().is_empty() {
+        None
+    } else {
+        Some(payload.grade_band.trim().to_string())
+    };
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE plans SET status='active', level=?1, goal=?2, daily_minutes=?3, deadline=?4,
-         repaired=?5, stages_json=?6, updated=?7 WHERE id=?8",
+         repaired=?5, stages_json=?6, subject=?7, grade_band=?8, exam_target=?9, preferences=?10, updated=?11 WHERE id=?12",
         rusqlite::params![
             payload.level,
             payload.goal,
@@ -140,6 +171,14 @@ pub fn finish_plan(id: &str, payload: &PlanPayload) -> Result<(), String> {
             payload.deadline,
             payload.repaired as i64,
             json,
+            subject_key,
+            grade_band,
+            payload.exam_target,
+            if payload.preferences.trim().is_empty() {
+                None
+            } else {
+                Some(payload.preferences.trim().to_string())
+            },
             now,
             id,
         ],
@@ -149,8 +188,11 @@ pub fn finish_plan(id: &str, payload: &PlanPayload) -> Result<(), String> {
     Ok(())
 }
 
-/// 删除:db 行(级联 nodes/logs)+ 磁盘目录。
+/// 删除:db 行(级联 nodes/logs/units/quizzes/reviews)+ 题库/试卷文件 + 磁盘目录。
+/// 题库/试卷已文件化(learningcenter),先清理文件再删 db 行,任一步失败即中止,避免留下不一致。
 pub fn delete(id: &str) -> Result<(), String> {
+    super::learn::bank::delete_scope(id)?;
+    super::learn::paper::delete_by_plan(id)?;
     {
         let conn = db::conn().lock().map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM plans WHERE id=?1", [id])
@@ -161,6 +203,18 @@ pub fn delete(id: &str) -> Result<(), String> {
         fs::remove_dir_all(&dir).map_err(|e| format!("remove {} failed: {e}", dir.display()))?;
     }
     Ok(())
+}
+
+/// 计划下全部知识点的 (id, 名称, 难度),按入库顺序(完整教学内容批量生成用)。
+pub fn node_ids(plan_id: &str) -> Result<Vec<(i64, String, i64)>, String> {
+    let conn = db::conn().lock().map_err(|e| e.to_string())?;
+    let mut st = conn
+        .prepare("SELECT id, name, difficulty FROM knowledge_nodes WHERE plan_id=?1 ORDER BY id")
+        .map_err(|e| e.to_string())?;
+    let rows = st
+        .query_map([plan_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
 /// L1 同款:启动清理 — 生成中(generating)的任务是进程内任务,重启后无法恢复,标记为 error。

@@ -48,7 +48,7 @@ pub fn readonly_tool_defs() -> Vec<ToolDef> {
         // harness 任务清单:多步任务开始时分解、每完成一步立即更新;UI 实时展示进度
         tool(
             "todo_write",
-            "替换式更新本会话任务清单(须提交完整列表)。多步任务开始时分解步骤,完成一步即改为 completed 并推进下一步;简单问答不用。",
+            "替换式更新本会话任务清单(须提交完整列表)。多步任务开始时分解步骤;之后每完成一步必须立即再次调用本工具,把该项改为 completed 并把下一项改为 in_progress;禁止只在开头建一次清单就不再更新。简单问答不用。",
             json!({
                 "type": "object",
                 "properties": {

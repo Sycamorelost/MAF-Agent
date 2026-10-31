@@ -8,20 +8,6 @@
   color: var(--text-1);
   text-align: center;
 }
-.sub { margin-top: var(--space-2); font-size: var(--font-body); color: var(--text-3); text-align: center; }
-/* 输入框下方提示行(对齐 ui-design 01:信息图标 + 操作说明) */
-.home-note {
-  width: 100%;
-  max-width: 820px;
-  margin: var(--space-5) auto 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-micro);
-  color: var(--text-4);
-}
-.home-note svg { flex: none; opacity: .7; }
-
 /* 主页:居中布局 */
 .home { justify-content: center; }
 @media (max-width: 560px) {
@@ -38,7 +24,6 @@
   gap: var(--space-2);
   padding: 0 var(--pad-x);
   height: calc(46px * var(--ui-scale));
-  border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
 }
 .chat-title {
