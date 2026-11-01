@@ -233,6 +233,8 @@
   border: 1px solid var(--border); border-radius: var(--radius-m); background: var(--bg-surface);
   box-shadow: var(--shadow-card-h); padding: var(--space-1); display: flex; flex-direction: column;
 }
+/* 左对齐锚定:chip 位于窗口左缘附近时由组件按实际位置加此类(JS 检测,见 PresetChip) */
+.perm-menu.align-left { left: 0; right: auto; }
 /* 窄窗改为左对齐,避免右锚点导致浮层越过左缘 */
 @media (max-width: 520px) {
   .perm-menu { left: 0; right: auto; width: min(calc(260px * var(--ui-scale)), calc(100vw - var(--space-6))); }

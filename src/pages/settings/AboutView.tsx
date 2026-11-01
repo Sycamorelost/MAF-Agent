@@ -29,7 +29,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">myAgent</div>
           <div className="set-product-ver">
-            版本 {appVersion ? `${appVersion} Beta` : '2.2.0 Beta'} · 桌面端 · Windows
+            版本 {appVersion ? `${appVersion} Beta` : '2.2.1 Beta'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             MAF 团队旗下的 Agent 产品,一款专为学习、调研而创造的智能体框架软件。
@@ -49,7 +49,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
 
       {/* 版本更新摘要:自 v1.17.1 至今的用户可感知改动,按类归组 */}
       <div className="set-card">
-        <div className="set-card-h">更新内容 · v1.17.1 → v2.2.0 Beta</div>
+        <div className="set-card-h">更新内容 · v1.17.1 → v2.2.1 Beta</div>
         <div className="set-card-b">
           <p>
             全新：专业工作台形态——会话内嵌检查器（产物 / 变更与回滚 / 上下文与记忆 / 工具流水
@@ -115,6 +115,11 @@ export function AboutView({ appVersion }: AboutViewProps) {
             被降级为纯文本；旁路写入或事件发送失败不再完全静默——记入本机日志并累计计数，
             本页在计数非 0 时显示一行提示；工程层面对网页抓取、内置工具与 HTML 处理做了拆分与
             合并去重，功能行为不变。
+          </p>
+          <p>
+            修复（v2.2.1）：会话头部切换运行时档位的下拉菜单在侧栏折叠时会从窗口左缘溢出、
+            内容被裁掉——菜单现在按实际位置自动选择对齐方向，靠近左缘时改为向右展开，
+            任何窗口宽度与侧栏状态下都能完整显示。
           </p>
         </div>
       </div>

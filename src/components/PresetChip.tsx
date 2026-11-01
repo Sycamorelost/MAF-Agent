@@ -2,7 +2,7 @@
 //! 点击切换本会话钉住;切换到不同档前弹 PresetDiffDialog 确认差异(D19 显式确认)。
 //! 放在通用 components(见 val.md §5.8 文件拆分),工作台与后续普通会话均可复用。
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconGauge } from './icons';
 import {
   listPresets,
@@ -27,6 +27,7 @@ export function PresetChip({ sessionId, onError }: Props) {
   const [presetsLoading, setPresetsLoading] = useState(false);
   const [presetsError, setPresetsError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [alignLeft, setAlignLeft] = useState(false);
   const [diffTarget, setDiffTarget] = useState<Preset | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +74,19 @@ export function PresetChip({ sessionId, onError }: Props) {
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
+
+  // 防左溢出:菜单默认右对齐 chip;chip 靠近窗口左缘时(如会话头部最左侧)
+  // 右锚会让 260px 菜单伸出左缘,改为左对齐锚定。预设列表后到时宽度可能变化,需重测。
+  useLayoutEffect(() => {
+    if (!open) return;
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const chip = wrap.getBoundingClientRect();
+    const menu = wrap.querySelector<HTMLElement>('.perm-menu');
+    const w = menu?.offsetWidth ?? 260;
+    // 右对齐时菜单左缘 = chip 右缘 - 菜单宽;小于安全边距即翻转
+    setAlignLeft(chip.right - w < 8);
+  }, [open, presets.length]);
 
   if (!info) return null;
   const current = info.preset;
@@ -126,7 +140,7 @@ export function PresetChip({ sessionId, onError }: Props) {
         {pinned && <i className="perm-dot" />}
       </button>
       {open && (
-        <div className="perm-menu">
+        <div className={alignLeft ? 'perm-menu align-left' : 'perm-menu'}>
           <div className="perm-menu-note">
             {current.description}(来源:{PRESET_SOURCE_LABEL[info.source] ?? info.source})
           </div>
