@@ -8,7 +8,7 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 
 | 项目 | 说明 |
 |---|---|
-| **版本** | v2.1.0 |
+| **版本** | v2.2.0 |
 | **许可证** | Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明） |
 | **平台** | Windows 10 / 11（64 位） |
 
@@ -124,8 +124,8 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 |---|---|
 | 桌面框架 | Tauri 2.12（Rust + 系统 WebView2，不捆绑 Chromium） |
 | 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
-| 后端 | Rust（edition 2024，rust 1.90+），约 124 个 IPC 命令 |
-| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 35） |
+| 后端 | Rust（edition 2024，rust 1.90+），约 125 个 IPC 命令 |
+| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 37） |
 | 网络 | reqwest（rustls-tls）+ SSE 流式解析，Rust 层直推前端 |
 | 附件解析 | pdf-extract / docx-rs / calamine / pptxgenjs（全部本地原生） |
 | 密钥保护 | Windows DPAPI + AES-GCM 双路径加密（`provider/keychain.rs`） |
@@ -146,7 +146,10 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 |---|---|
 | 数据存储 | 全部本地：SQLite + Markdown/JSON 文件，数据目录由用户自选、可迁移 |
 | 出网范围 | 仅连接用户自选的 LLM API 端点，无任何遥测/上报 |
-| API Key | Windows DPAPI 加密存储，辅以 AES-GCM 密钥链，不落明文 |
+| API Key | Windows DPAPI 加密存储，辅以 AES-GCM 密钥链，不落明文；`secrets/` 目录权限收紧为仅当前系统用户可读 |
+| 工具执行 | 高危 shell 命令（格式化/删根/改注册表等）一律人工确认，任何审批档位都不静默执行；外部 MCP 工具默认按中等风险走确认 |
+| 数据库升级 | 版本升级前自动快照（保留最近 2 份），工具调用记录按会话滚动保留最近 500 条 |
+| 导出 | 导出 PDF 的链接做协议白名单与转义校验，恶意链接降级为纯文本 |
 | CSP | 严格白名单，禁止远程脚本与对象嵌入 |
 | 开源 | Apache-2.0,全部代码可审计 |
 
@@ -197,7 +200,7 @@ pnpm tauri build
 
 ```bash
 cd src-tauri
-cargo test        # Rust 单元测试(432 项)
+cargo test        # Rust 单元测试(492 项)
 cargo check       # 静态检查
 ```
 
@@ -279,6 +282,8 @@ data/
 > 学习中心迁移（v2.1.0）：旧版 `data/study/` 目录与数据库三表（`question_bank` / `study_papers` / `study_paper_items`）在升级后自动并入 `learningcenter/` —— 目录按集合并（已存在不覆盖）、旧表导出为 JSON 后删表；迁移幂等，失败会在下次启动自动重试，无需手工干预。
 >
 > 数据库迁移全自动且幂等：升级即建（如 V26 会话预设钉住列、V27 文档块全文索引 `doc_chunks_fts`）,存量数据自动回填；索引表缺失或分词器过旧时自动重建自愈，无需手工干预。
+>
+> 迁移前快照（v2.2.0）：检测到磁盘版本落后时，迁移前自动用 `VACUUM INTO` 生成 `metaagent-v<旧版本>-<时间戳>.db.bak` 快照（保留最近 2 份），升级异常时可手工回滚。
 
 ---
 

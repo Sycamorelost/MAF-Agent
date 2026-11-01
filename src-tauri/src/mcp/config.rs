@@ -150,6 +150,7 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
 ///   请自己在 MCP 设置页显式配置 BRAVE_API_KEY / TAVILY_API_KEY / EXA_API_KEY / BOCHA_API_KEY / SERPAPI_API_KEY
 /// - tavily-mcp(可选付费档,未默认预置):启动时自动注入已保存的 Tavily 搜索 Key,
 ///   复用「联网搜索」页的 Key 配置,用户无需在 MCP 页再填一遍。
+///
 /// 已显式配置 env 的同名变量优先(不覆盖)。
 pub(crate) fn preset_env(args: &[String], configured: &HashMap<String, String>) -> Vec<(String, String)> {
     // agent-search-mcp 默认零 Key 即跑通,不注入任何 env

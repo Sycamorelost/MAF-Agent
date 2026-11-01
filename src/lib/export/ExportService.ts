@@ -60,17 +60,39 @@ const PRINT_CSS = `
 
 const PRINT_STYLE_ID = 'maf-print-style';
 
-/** 行内标记:`code`、**粗体**、链接。 */
-function inlineMd(line: string): string {
+/** 链接协议白名单(其余协议一律降级为纯文本)。 */
+const ALLOWED_HREF_PROTOCOLS = ['http', 'https', 'mailto'];
+
+/**
+ * 校验 Markdown 链接目标:只允许 http/https/mailto 与相对路径(无协议)。
+ * 返回 null 表示不在白名单,调用方应丢弃 `<a>` 只保留文字。
+ */
+function safeHref(raw: string): string | null {
+  // 判定协议前先去掉控制字符与首尾空白,避免 `java\tscript:` 这类绕过
+  const probe = raw.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (!probe) return null;
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(probe);
+  if (!scheme) return raw; // 相对路径 / 锚点 / 查询串
+  return ALLOWED_HREF_PROTOCOLS.includes(scheme[1].toLowerCase()) ? raw : null;
+}
+
+/** 行内标记:`code`、**粗体**、链接(带协议白名单与属性转义)。 */
+export function inlineMd(line: string): string {
   const esc = (s: string) =>
     s
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   return esc(line)
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, href: string) => {
+      const safe = safeHref(href);
+      // 白名单外协议(如 javascript:/data:)降级为纯文本,不生成可点击链接
+      return safe ? `<a href="${safe}">${text}</a>` : `<span>${text}</span>`;
+    });
 }
 
 /** 管道表格行 → 单元格文本数组。 */

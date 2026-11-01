@@ -7,6 +7,8 @@
 pub(crate) mod assembly;
 pub(crate) mod chat;
 pub(crate) mod compress;
+pub(crate) mod context_budget;
+pub(crate) mod event_log;
 pub(crate) mod failover;
 pub(crate) mod image;
 pub(crate) mod keys;
@@ -21,8 +23,8 @@ pub(crate) mod usage;
 
 pub use chat::{ChatStreamInput, chat_stream};
 pub use image::{
-    GenerateImageInput, ImageListItem, ImageMeta, ImageResultItem, generate_image,
-    image_to_session, list_images, read_image,
+    ComposePromptInput, GenerateImageInput, ImageListItem, ImageMeta, ImageResultItem,
+    compose_draw_prompt, generate_image, image_to_session, list_images, read_image,
 };
 pub use keys::{
     KeySlotView, delete_api_key, delete_provider_key, get_rotation_configs, has_api_key,

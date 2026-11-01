@@ -387,8 +387,10 @@ mod tests {
         // other / 空 key 无附录(行为同现状)
         let g = LearnerProfile::default();
         assert!(g.appendix().is_empty());
-        let mut g2 = LearnerProfile::default();
-        g2.subject_key = "other".into();
+        let g2 = LearnerProfile {
+            subject_key: "other".into(),
+            ..Default::default()
+        };
         assert!(g2.appendix().is_empty());
     }
 

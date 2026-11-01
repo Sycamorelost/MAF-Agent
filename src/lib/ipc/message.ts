@@ -14,10 +14,13 @@ export interface AppendMessageInput {
   sources?: string | null;
   /** 思考过程文本(V14;assistant 消息可选,缺省空串) */
   reasoning?: string | null;
+  /** V36(P1):断流/报错时保存的部分内容(true = 已中断,前端气泡显示标记) */
+  partial?: boolean;
 }
 
+/** 追加一条消息;P12:返回完整行(前端直接乐观插入,无需整页重拉)。 */
 export const appendMessage = (input: AppendMessageInput) =>
-  invoke<number>('append_message', { input });
+  invoke<MessageRow>('append_message', { input });
 
 /** 列出分支可见消息(branchId 缺省 = 会话当前激活分支)。 */
 export const listMessages = (sessionId: string, branchId?: string) =>

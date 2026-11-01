@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 #[cfg(windows)]
 use serde::Serialize;
 #[cfg(windows)]
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 #[cfg(windows)]
 use crate::settings;
@@ -175,7 +175,12 @@ pub fn spawn_listener(app: AppHandle) {
                                 let payload = SelectionPayload {
                                     text: clip_text(text),
                                 };
-                                let _ = app.emit_to("main", "selection_ask", payload);
+                                crate::diagnostics::safe_emit_to(
+                                    &app,
+                                    "main",
+                                    "selection_ask",
+                                    payload,
+                                );
                                 log::info!("selection ask triggered");
                             }
                         }

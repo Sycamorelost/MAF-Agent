@@ -15,8 +15,9 @@ mod search;
 
 #[allow(unused_imports)]
 pub use crud::{
-    append, append_on, clear, clear_on, copy_active_branch, delete_from, delete_from_on,
-    delete_one, delete_one_on, update_content,
+    append_on, append_on_partial, append_partial, clear, clear_on, copy_active_branch,
+    delete_from, delete_from_on, delete_one, delete_one_on, get_by_id, get_by_id_on,
+    update_content,
 };
 #[allow(unused_imports)]
 pub use search::{list, list_on, list_page, list_page_on, recent, recent_on};
@@ -44,6 +45,9 @@ pub struct MessageRow {
     /// 思考过程文本(V14;assistant 专用,与 content 分离;不进 FTS,避免搜索噪声)
     #[serde(default)]
     pub reasoning: String,
+    /// V36(P1):该条回答是否在断流/报错时保存的部分内容(true = 已中断,可继续)。
+    #[serde(default)]
+    pub partial: bool,
 }
 
 fn row_to_message(r: &rusqlite::Row) -> rusqlite::Result<MessageRow> {
@@ -60,10 +64,11 @@ fn row_to_message(r: &rusqlite::Row) -> rusqlite::Result<MessageRow> {
         parent_id: r.get(9)?,
         branch_id: r.get(10)?,
         reasoning: r.get(11)?,
+        partial: r.get::<_, i64>(12).map(|v| v != 0).unwrap_or(false),
     })
 }
 
-const SELECT_COLS: &str = "id, session_id, role, content, model_id, created, tokens, attachments, sources, parent_id, branch_id, reasoning";
+const SELECT_COLS: &str = "id, session_id, role, content, model_id, created, tokens, attachments, sources, parent_id, branch_id, reasoning, partial";
 
 /// 分支可见链 CTE:从分支尾(分支内 MAX id;空分支取分叉点)沿 parent_id 回溯到根。
 /// 空 main(分叉点 NULL)锚点为 NULL,链为空集,查询结果自然为空。
@@ -101,6 +106,31 @@ mod tests {
 
     fn ids(rows: &[MessageRow]) -> Vec<i64> {
         rows.iter().map(|m| m.id).collect()
+    }
+
+    /// V36(P1):partial 标记可落库并回读,普通消息默认 false。
+    #[test]
+    fn append_partial_flag_roundtrip() {
+        let conn = setup();
+        append_on_partial(
+            &conn,
+            "s1",
+            "assistant",
+            "写了一半",
+            None,
+            3,
+            None,
+            None,
+            None,
+            "main",
+            true,
+        )
+        .unwrap();
+        append_on(&conn, "s1", "assistant", "完整回答", None, 3, None, None, None, "main")
+            .unwrap();
+        let rows = list_on(&conn, "s1", "main").unwrap();
+        assert!(rows[0].partial, "中断保存的消息必须标记 partial");
+        assert!(!rows[1].partial, "普通消息默认非 partial");
     }
 
     /// V14:思考文本随 assistant 消息落库并可回读(默认空串,历史消息不受影响)。

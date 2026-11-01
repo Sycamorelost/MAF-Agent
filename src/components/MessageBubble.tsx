@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import React from 'react';
 // 代码块语法高亮:VS Code Dark+ 配色。必须用深色主题——代码面为深底(见 app.css),
 // 若导入浅色主题(github.css),其 `.hljs{color:#24292e}` 会把灰字压到深底上,可读性崩塌。
@@ -34,13 +34,15 @@ export type BubbleMessage = Pick<
   | 'sources'
   | 'reasoning'
   | 'tokens'
+  | 'partial'
 >;
 
 interface Props {
   msg: BubbleMessage;
   /** 是否为最后一条 AI 回复(决定显示「重新生成」) */
   isLastAssistant?: boolean;
-  onQuote?: (content: string) => void;
+  /** 引用:message 级别摘要,完整原文由外层保存(选区优先在调用方处理) */
+  onQuote?: (content: string, meta?: { role?: string; createdAt?: string }) => void;
   onEditResend?: (msg: BubbleMessage) => void;
   onDelete?: (id: number) => void;
   onRegenerate?: () => void;
@@ -48,14 +50,66 @@ interface Props {
   onRetryModel?: () => void;
   /** 「存入记忆」:把来源列表写入 memory.md 资料节 */
   onSaveSources?: (sources: SourceItem[]) => void;
-  /** 「翻译」:把消息内容带到翻译页(迭代 D6.5) */
-  onTranslate?: (content: string) => void;
+  /** 「翻译」:把消息正文带到翻译页(附来源信息,不复制 Markdown 进输入框) */
+  onTranslate?: (content: string, meta?: { role?: string; createdAt?: string }) => void;
   /** 「钉入记忆」:把消息正文写入 memory.md 指定节(F8) */
   onPin?: (content: string, section: string) => void;
 }
 
 /** 代码块容器已从 MemoMarkdown.tsx 导出,此处仅做兼容 re-export。 */
 export { CodeBlock };
+
+/** P3:单条超长消息默认折叠预览 —— 超过字符/行数阈值时只渲染前段,
+ *  避免一次挂载巨量 Markdown DOM(200k 字符级别)把主线程卡住;仍可一键展开全文。 */
+const LONG_PREVIEW_CHARS = 8000;
+const LONG_PREVIEW_LINES = 300;
+
+/** 计算预览文本:按行数上限或字符上限(优先在上限前最后一个换行处截断)。 */
+function longPreviewText(text: string): { shown: string; long: boolean } {
+  let cut = text.length;
+  let lines = 1;
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10 && ++lines > LONG_PREVIEW_LINES) {
+      cut = i;
+      break;
+    }
+  }
+  if (cut > LONG_PREVIEW_CHARS) {
+    const at = text.lastIndexOf('\n', LONG_PREVIEW_CHARS);
+    cut = at > 0 ? at : LONG_PREVIEW_CHARS;
+  }
+  if (cut >= text.length) return { shown: text, long: false };
+  return { shown: text.slice(0, cut), long: true };
+}
+
+/** 按字符预算截取渲染段:工具块本身已截断,按固定权重计;剩余正文段截到上限。 */
+function cutSegments(
+  segs: ReturnType<typeof groupTraceSegments>,
+  maxChars: number,
+): ReturnType<typeof groupTraceSegments> {
+  const out: ReturnType<typeof groupTraceSegments> = [];
+  let used = 0;
+  for (const s of segs) {
+    if (s.kind === 'traces') {
+      out.push(s);
+      used += 100;
+      if (used >= maxChars) break;
+      continue;
+    }
+    const remaining = maxChars - used;
+    if (remaining <= 0) break;
+    if (s.text.length <= remaining) {
+      out.push(s);
+      used += s.text.length;
+      continue;
+    }
+    const cut = s.text.slice(0, remaining);
+    const at = cut.lastIndexOf('\n');
+    out.push({ ...s, text: at > 0 ? cut.slice(0, at) : cut });
+    break;
+  }
+  return out;
+}
 
 function MessageBubbleInner({
   msg,
@@ -73,6 +127,8 @@ function MessageBubbleInner({
   const [copied, setCopied] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  /** P3:超长消息默认折叠,点击展开/收起 */
+  const [expanded, setExpanded] = useState(false);
   const reasoning = !isUser ? (msg.reasoning ?? '') : '';
 
   const closeMenus = () => { setPinOpen(false); setMoreOpen(false); };
@@ -91,7 +147,17 @@ function MessageBubbleInner({
     onQuote || onEditResend || onDelete || onRegenerate || onRetryModel || onTranslate || onPin;
 
   // 工具块提到气泡外(对齐设计稿:思考块 / 工具行 / 子任务卡片与正文平级);相邻工具块成组折叠
-  const segments = isUser ? [] : groupTraceSegments(splitTraceSegments(msg.content));
+  const allSegments = useMemo(
+    () => (isUser ? [] : groupTraceSegments(splitTraceSegments(msg.content))),
+    [isUser, msg.content],
+  );
+  const preview = useMemo(() => longPreviewText(msg.content), [msg.content]);
+  const showFull = expanded || !preview.long;
+  const shownContent = showFull ? msg.content : preview.shown;
+  const segments = useMemo(
+    () => (showFull ? allSegments : cutSegments(allSegments, shownContent.length)),
+    [showFull, allSegments, shownContent],
+  );
 
   return (
     <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
@@ -99,10 +165,10 @@ function MessageBubbleInner({
         <AttachmentCards attachments={msg.attachments} />
         {reasoning && <ReasoningBlock text={reasoning} />}
         {isUser
-          ? msg.content && (
+          ? shownContent && (
               <div className="bubble">
                 <div className="md">
-                  <MemoMarkdown content={msg.content} withCodeBlock={false} />
+                  <MemoMarkdown content={shownContent} withCodeBlock={false} />
                 </div>
               </div>
             )
@@ -121,6 +187,22 @@ function MessageBubbleInner({
                 </div>
               ),
             )}
+        {preview.long && (
+          <button
+            type="button"
+            className="msg-expand"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded
+              ? '收起'
+              : `展开全文(共 ${msg.content.length.toLocaleString('zh-CN')} 字符)`}
+          </button>
+        )}
+        {!isUser && msg.partial && (
+          <div className="msg-partial" title="生成被中断，已保存中断前的内容">
+            输出中断 · 已保存部分内容
+          </div>
+        )}
         <SourceCards raw={msg.sources ?? null} onSaveSources={onSaveSources} />
         <div className="msg-meta">
           {msg.model_id && <span>{msg.model_id}</span>}
@@ -151,12 +233,12 @@ function MessageBubbleInner({
                     <span className="more-backdrop" onClick={closeMenus} />
                     <span className="more-menu">
                       {onQuote && (
-                        <button type="button" onClick={() => { closeMenus(); onQuote(msg.content); }}>
+                        <button type="button" onClick={() => { closeMenus(); onQuote(msg.content, { role: msg.role, createdAt: msg.created }); }}>
                           <IconQuote size={13} /><span>引用</span>
                         </button>
                       )}
                       {onTranslate && msg.content && (
-                        <button type="button" onClick={() => { closeMenus(); onTranslate(msg.content); }}>
+                        <button type="button" onClick={() => { closeMenus(); onTranslate(msg.content, { role: msg.role, createdAt: msg.created }); }}>
                           <IconTranslate size={13} /><span>翻译</span>
                         </button>
                       )}
@@ -233,6 +315,7 @@ const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
     a.sources === b.sources &&
     a.reasoning === b.reasoning &&
     a.tokens === b.tokens &&
+    a.partial === b.partial &&
     prev.isLastAssistant === next.isLastAssistant
   );
 });

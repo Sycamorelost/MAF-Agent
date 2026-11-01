@@ -1,6 +1,6 @@
 //! 流式对话:chat_stream 命令与带故障转移的后台流任务。
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use tauri::Emitter;
@@ -14,6 +14,7 @@ use crate::provider::{
     templates,
 };
 
+use super::context_budget::ContextBudget;
 use super::failover::{
     cooldown_for, error_kind, is_reasoning_rejected, is_retryable, is_stream_options_rejected,
     next_request_id,
@@ -138,9 +139,21 @@ pub async fn chat_stream(
         &input.provider_id,
         &input.model,
     );
+    // D6:工作区根下的 AGENTS.md / CLAUDE.md 自动注入 system 基线(零配置,无需用户设置)
+    let mut messages = input.messages.clone();
+    if let Some(rules) =
+        crate::project_rules::inject(&mut messages, input.session_id.as_deref())
+    {
+        // D7:留下「本轮注入了哪个约定文件」的痕迹
+        super::event_log::record_rules(
+            input.session_id.as_deref(),
+            &rules.source,
+            rules.content.chars().count(),
+        );
+    }
     let req = ChatRequest {
         model: input.model.clone(),
-        messages: input.messages.clone(),
+        messages,
         temperature: input.temperature.or_else(|| ov.and_then(|o| o.temperature)),
         max_tokens: input.max_tokens.or_else(|| ov.and_then(|o| o.max_tokens)),
         top_p: input.top_p.or_else(|| ov.and_then(|o| o.top_p)),
@@ -149,6 +162,14 @@ pub async fn chat_stream(
         tools: input.tools.clone(),
         ..Default::default()
     };
+    // D7:记录本轮请求的规模与消息指纹(压缩/注入都会让指纹变化,便于事后比对)
+    super::event_log::record_request(
+        input.session_id.as_deref(),
+        &spec.provider_id,
+        &req.model,
+        &req.messages,
+        req.tools.as_ref().map_or(0, |t| t.len()),
+    );
 
     // 3. 归因上下文:会话 → 助手(按助手归因)+ 模型卡定价(成本)
     let agent = input
@@ -181,6 +202,16 @@ pub async fn chat_stream(
     Ok(())
 }
 
+/// P2(选项 B):整体生成的总时长上限 —— 覆盖连接、首字等待、流式输出与各轮工具调用。
+/// 不额外设首字/空闲分段超时(长任务不会被中途的慢思考误杀),只在总时长到点后收口。
+/// 超时会向前端补 `Error`(而不是静默关闭 channel),前端据此保留已生成内容(P1)。
+const STREAM_TOTAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+/// 距离总时长上限还剩多少;已超时返回 0(让下一次 await 立即超时收口)。
+fn remaining_budget(started: &Instant) -> Duration {
+    STREAM_TOTAL_TIMEOUT.saturating_sub(started.elapsed())
+}
+
 /// 用量归因上下文(与 Key 选择无关,仅影响落库内容)。
 struct Attribution {
     session_id: Option<String>,
@@ -209,12 +240,16 @@ fn spawn_chat_with_failover(
     approval_store: crate::mcp::ApprovalStore,
     capability_store: crate::mcp::CapabilityStore,
 ) {
+    // panic 兜底用的 channel 副本(必须在使用 work 之前克隆)
+    let panic_channel = channel.clone();
     let work = async move {
         use futures::StreamExt;
 
         let group = rotation_group(&spec.provider_id, &spec.base_url);
         let request_id = next_request_id();
         let started = Instant::now();
+        // D5:按模型上下文窗口算预算(未知窗口回落 48k 字符),整轮对话只算一次
+        let budget = ContextBudget::for_model(&spec.provider_id, &spec.model);
         let mut stream_options = cfg.supports_stream_options;
         let mut last_error: Option<String> = None;
         // 工具调用轮次(模型每次要求调工具算一轮;上限 200 轮,支持长任务连续执行)
@@ -226,20 +261,44 @@ fn spawn_chat_with_failover(
         let sub_llm = super::keys::build_sub_llm(&spec);
 
         'rounds: loop {
+            // P2:总时长到点即收口(工具执行同样计入预算),避免单轮工具卡死绕过上限。
+            if remaining_budget(&started).is_zero() {
+                let _ = channel.send(StreamChunk::Error {
+                    message: format!(
+                        "生成超时(总时长超过 {} 分钟),已中断;已生成内容会保留。",
+                        STREAM_TOTAL_TIMEOUT.as_secs() / 60
+                    ),
+                });
+                return;
+            }
             // 200 轮工具调用的前提:每轮都会往 req.messages 追加 assistant + tool 结果。
             // 超预算时先用 LLM 摘要压缩早期轮次(保住需求与结论);压缩失败/不可用回落硬裁剪。
-            if context_over_budget(&req.messages)
+            if context_over_budget(&req.messages, &budget)
                 && let Some(llm) = sub_llm.as_ref()
-                && let Ok(n) = super::compress::compress_context(&mut req.messages, llm).await
-                && n > 0
-                && let Some(sid) = attr.session_id.as_deref()
             {
-                let _ = app.emit(
-                    &format!("chat-notice-{sid}"),
-                    format!("上下文过长,已自动把早期 {n} 条对话压缩为摘要"),
-                );
+                let before = req.messages.len();
+                if let Ok(n) =
+                    super::compress::compress_context(&mut req.messages, llm, &budget).await
+                    && n > 0
+                {
+                    // D7:记录压缩前后的条数与预算口径,便于事后核对「为什么被压缩」
+                    super::event_log::record_compress(
+                        attr.session_id.as_deref(),
+                        n,
+                        before,
+                        req.messages.len(),
+                        &budget,
+                    );
+                    if let Some(sid) = attr.session_id.as_deref() {
+                        crate::diagnostics::safe_emit(
+                            &app,
+                            &format!("chat-notice-{sid}"),
+                            format!("上下文过长,已自动把早期 {n} 条对话压缩为摘要"),
+                        );
+                    }
+                }
             }
-            prune_context(&mut req.messages);
+            prune_context(&mut req.messages, &budget);
             let mut cands = key_candidates(&spec.provider_id, &spec.base_url, &spec.model, &cfg);
             if cands.is_empty() {
                 let _ = channel.send(StreamChunk::Error {
@@ -292,8 +351,14 @@ fn spawn_chat_with_failover(
                 let masked = usage::mask_key(&key);
                 let provider = build_openai(&spec, &key, stream_options);
 
-                match provider.chat_stream(req.clone()).await {
-                    Ok(mut stream) => {
+                // P2:建立连接 + 等到 2xx 响应的剩余总预算(不再单独设首字超时)
+                let connect = tokio::time::timeout(
+                    remaining_budget(&started),
+                    provider.chat_stream(req.clone()),
+                )
+                .await;
+                match connect {
+                    Ok(Ok(mut stream)) => {
                         // 首次 2xx 后即锁定该 Key:stream 期间绝不换 Key
                         let mut first_token_ms: Option<i64> = None;
                         let mut toks: (Option<u32>, Option<u32>, Option<u32>) = (None, None, None);
@@ -305,7 +370,20 @@ fn spawn_chat_with_failover(
                         let mut pending_calls: Option<Vec<ToolCall>> = None;
                         // 本轮是否已下发给前端一个 done(部分中转站流末尾不带 done)
                         let mut saw_done = false;
-                        while let Some(chunk) = stream.next().await {
+                        // P2:每个 chunk 只受「剩余总预算」约束(不按空闲时长打断长思考)
+                        let mut timed_out = false;
+                        loop {
+                            let chunk =
+                                match tokio::time::timeout(remaining_budget(&started), stream.next())
+                                    .await
+                                {
+                                    Ok(Some(c)) => c,
+                                    Ok(None) => break,
+                                    Err(_) => {
+                                        timed_out = true;
+                                        break;
+                                    }
+                                };
                             match &chunk {
                                 StreamChunk::Usage {
                                     input_tokens,
@@ -376,6 +454,16 @@ fn spawn_chat_with_failover(
                             if channel.send(chunk).is_err() {
                                 break; // 前端已关闭 channel
                             }
+                        }
+                        // P2:超时收口 —— 补一个明确的 Error,前端据此保留已生成内容(P1)。
+                        // 不执行已请求的工具:结果不完整时执行写入类工具风险更高。
+                        if timed_out {
+                            let msg = format!(
+                                "生成超时(总时长超过 {} 分钟),已中断;已生成内容会保留。",
+                                STREAM_TOTAL_TIMEOUT.as_secs() / 60
+                            );
+                            let _ = channel.send(StreamChunk::Error { message: msg });
+                            return;
                         }
                         // 成本(纳元):有定价但 token 不足无法拆分时记 unpriced,不写 0 元假账
                         let cost_nano = attr
@@ -476,7 +564,7 @@ fn spawn_chat_with_failover(
                         }
                         return;
                     }
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         // 兼容回退 1(优先判断):中转站不认思考扩展字段 → 剥离 reasoning,
                         // 同一候选重试一次(与 stream_options 回退同构;剥离后 temperature/top_p
                         // 由 openai.rs 在重建 body 时自动恢复,无需额外处理)
@@ -528,6 +616,15 @@ fn spawn_chat_with_failover(
                         cands.retain(|c| c.cooldown_key() != cand.cooldown_key());
                         continue;
                     }
+                    // P2:连接阶段耗尽总预算 —— 换 Key 也救不了「网络/中转站不响应」,
+                    // 直接收口并提示用户,避免无限挂起。
+                    Err(_elapsed) => {
+                        last_error = Some(format!(
+                            "生成超时(总时长超过 {} 分钟),已中断;已生成内容会保留。",
+                            STREAM_TOTAL_TIMEOUT.as_secs() / 60
+                        ));
+                        break;
+                    }
                 }
             }
 
@@ -538,28 +635,41 @@ fn spawn_chat_with_failover(
             return;
         }
     };
-    tauri::async_runtime::spawn(run_cancellable(cancel_state, cancel_id, cancel_rx, work));
+    // 终态兜底:后台任务 panic 时 Tokio 只会吞掉 JoinHandle 的 panic,channel 静默关闭,
+    // 前端 `done` 永不 resolve(表现为「思考/工具调用之后再无任何反应」)。
+    // 这里 catch_unwind 后补发一个 Error chunk,保证前端一定收口。
+    tauri::async_runtime::spawn(async move {
+        use futures::FutureExt;
+        let fut = run_cancellable(cancel_state, cancel_id, cancel_rx, work);
+        if std::panic::AssertUnwindSafe(fut)
+            .catch_unwind()
+            .await
+            .is_err()
+        {
+            log::error!("chat stream task panicked; emit Error chunk to close the stream");
+            let _ = panic_channel.send(StreamChunk::Error {
+                message: "对话流异常中断(内部错误),请重试".into(),
+            });
+        }
+    });
 }
 
 /// 单次请求最多携带的消息条数(200 轮工具调用时防止上下文无限膨胀)。
 const MAX_CONTEXT_MESSAGES: usize = 40;
-/// 单次请求上下文的最大字符数(约 24k tokens;超出先按预算裁最早的轮次)。
-const MAX_CONTEXT_CHARS: usize = 48_000;
 
 /// 是否超预算(触发 LLM 压缩;压缩后仍超限由 prune_context 硬裁剪兜底)。
-fn context_over_budget(messages: &[ChatMessage]) -> bool {
-    messages.len() > MAX_CONTEXT_MESSAGES
-        || messages.iter().map(|m| m.content.len()).sum::<usize>() > MAX_CONTEXT_CHARS
+fn context_over_budget(messages: &[ChatMessage], budget: &ContextBudget) -> bool {
+    messages.len() > MAX_CONTEXT_MESSAGES || budget.over(messages)
 }
 
 /// 裁剪过长的工具调用上下文:
 ///   - 永远保留 system;
-///   - 其余只保留最近 N 条 / 预算内;
+///   - 其余只保留最近 N 条 / 预算内(D5:预算按模型上下文窗口折算为 token);
 ///   - 裁剪后若开头是孤立的 tool 消息(其 assistant 已被裁掉),一并丢弃,
 ///     否则 OpenAI function-calling 协议不合法(400)。
-fn prune_context(messages: &mut Vec<ChatMessage>) {
-    let total_chars: usize = messages.iter().map(|m| m.content.len()).sum();
-    if messages.len() <= MAX_CONTEXT_MESSAGES && total_chars <= MAX_CONTEXT_CHARS {
+fn prune_context(messages: &mut Vec<ChatMessage>, budget: &ContextBudget) {
+    let total: usize = messages.iter().map(|m| budget.weight(m)).sum();
+    if messages.len() <= MAX_CONTEXT_MESSAGES && total <= budget.limit() {
         return;
     }
     let system: Vec<ChatMessage> = messages
@@ -577,13 +687,10 @@ fn prune_context(messages: &mut Vec<ChatMessage>) {
         .collect();
     tail.reverse();
 
-    let mut chars: usize = system
-        .iter()
-        .chain(tail.iter())
-        .map(|m| m.content.len())
-        .sum();
-    while chars > MAX_CONTEXT_CHARS && tail.len() > 1 {
-        chars -= tail.remove(0).content.len();
+    let mut weight: usize = system.iter().chain(tail.iter()).map(|m| budget.weight(m)).sum();
+    while weight > budget.limit() && tail.len() > 1 {
+        weight = weight.saturating_sub(budget.weight(&tail[0]));
+        tail.remove(0);
     }
     // 丢掉开头没有对应 assistant 的 tool 结果
     while tail.first().map(|m| m.role == "tool").unwrap_or(false) {
@@ -644,8 +751,23 @@ mod tests {
     #[test]
     fn prune_keeps_short_context_untouched() {
         let mut m = vec![msg("system", "s"), msg("user", "u")];
-        prune_context(&mut m);
+        prune_context(&mut m, &ContextBudget::unknown());
         assert_eq!(m.len(), 2);
+    }
+
+    /// P6:预算按 Unicode 字符计 —— 大量中文不应因 UTF-8 字节放大而被过早裁掉。
+    #[test]
+    fn budget_counts_chars_not_bytes_for_chinese() {
+        let zh = "中".repeat(4_000); // 4k 字符 / 12k 字节
+        let mut m = vec![msg("system", "s")];
+        for _ in 0..10 {
+            m.push(msg("user", &zh));
+        }
+        // 40k 字符(120k 字节)在 48k 字符预算内 → 不裁剪
+        let budget = ContextBudget::unknown();
+        assert!(!context_over_budget(&m, &budget));
+        prune_context(&mut m, &budget);
+        assert_eq!(m.len(), 11);
     }
 
     #[test]
@@ -657,7 +779,8 @@ mod tests {
             m.push(a);
             m.push(msg("tool", &format!("r{i}")));
         }
-        prune_context(&mut m);
+        let budget = ContextBudget::unknown();
+        prune_context(&mut m, &budget);
         assert!(m.len() <= MAX_CONTEXT_MESSAGES);
         assert_eq!(m[0].role, "system");
         assert_ne!(m[1].role, "tool", "裁剪后开头不应是孤立 tool 消息");

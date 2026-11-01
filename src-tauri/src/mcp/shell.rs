@@ -404,7 +404,23 @@ async fn execute(
         (true, false) => format!("[stderr] {stderr}"),
         (false, false) => format!("{stdout}\n[stderr] {stderr}"),
     };
-    let body = truncate_head_tail(&full, MAX_OUTPUT_CHARS);
+    // P9:超长输出完整落盘到 data/tmp/cmd,正文仍保留首尾;模型可再用 fs_read 续读全文。
+    let total_chars = full.chars().count();
+    let body = if total_chars > MAX_OUTPUT_CHARS {
+        let mut b = truncate_head_tail(&full, MAX_OUTPUT_CHARS);
+        match save_full_output(&dir, &full) {
+            Some(p) => b.push_str(&format!(
+                "\n[完整输出已保存] {}({total_chars} 字符;可用 fs_read 按 offset 分页读取)",
+                display_path(&p)
+            )),
+            None => b.push_str(&format!(
+                "\n[完整输出落盘失败] 原始 {total_chars} 字符,此处仅保留首尾"
+            )),
+        }
+        b
+    } else {
+        full
+    };
     let exit = output.status.code();
     let exit_label = exit.map(|c| c.to_string()).unwrap_or_else(|| "?".into());
     let mut text =
@@ -431,6 +447,44 @@ async fn execute(
         exit_code: exit,
         timed_out: false,
     })
+}
+
+/// P9:把完整命令输出写到 `data/tmp/cmd/<时间>-<随机>.log`,返回落盘路径。
+/// 同一目录下超过 24 小时的旧日志在写入时顺手清理,避免无限堆积。
+fn save_full_output(dir: &Path, text: &str) -> Option<PathBuf> {
+    let sub = dir.join("tmp").join("cmd");
+    std::fs::create_dir_all(&sub).ok()?;
+    cleanup_cmd_logs(&sub);
+    let name = format!(
+        "{}-{}.log",
+        chrono::Local::now().format("%Y%m%d-%H%M%S"),
+        &uuid::Uuid::new_v4().to_string()[..8]
+    );
+    let path = sub.join(name);
+    std::fs::write(&path, text).ok()?;
+    Some(path)
+}
+
+fn cleanup_cmd_logs(sub: &Path) {
+    let Ok(read) = std::fs::read_dir(sub) else {
+        return;
+    };
+    let cutoff = std::time::SystemTime::now() - Duration::from_secs(24 * 3600);
+    for entry in read.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|x| x.to_str()) != Some("log") {
+            continue;
+        }
+        let expired = entry
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .map(|t| t < cutoff)
+            .unwrap_or(false);
+        if expired {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
 }
 
 /// 整行命令交给系统 shell:Windows 用 `cmd /c`(raw_arg 避免 Rust 引号与 cmd 解析冲突),
@@ -515,6 +569,39 @@ mod tests {
             .expect("进程本身能启动");
         assert!(out.text.contains("(无输出)"), "实际输出:{}", out.text);
         assert!(out.success());
+    }
+
+    #[tokio::test]
+    async fn huge_output_keeps_head_and_tail() {
+        // 约 80KB 输出:必须保留头尾(尾部的错误/结果不能丢),中间标注省略
+        let out = run_unrestricted("cmd /c for /L %i in (1,1,8000) do @echo line%i", &[], None)
+            .await
+            .expect("批量输出命令必须可执行");
+        assert!(out.success(), "实际:{}", out.text);
+        assert!(
+            out.text.contains("line1"),
+            "头部丢失:{}",
+            out.text.chars().take(40).collect::<String>()
+        );
+        assert!(out.text.contains("line8000"), "尾部丢失(只保留头部会看不到最终结果)");
+        assert!(out.text.contains("省略中间"), "超限输出应显式标注省略");
+        // P9:完整输出落盘,提示中给出可续读路径
+        assert!(out.text.contains("[完整输出已保存]"), "实际:{}", out.text);
+        let saved = out
+            .text
+            .lines()
+            .find(|l| l.contains("[完整输出已保存]"))
+            .and_then(|l| l.split("] ").nth(1))
+            .map(|s| s.split('(').next().unwrap_or("").trim().to_string());
+        if let Some(p) = saved {
+            assert!(std::path::Path::new(&p).exists(), "落盘文件不存在: {p}");
+        }
+        // 正文本体受 MAX_OUTPUT_CHARS 约束;额外允许落盘路径提示(绝对路径长度)
+        assert!(
+            out.text.chars().count() <= MAX_OUTPUT_CHARS + 400,
+            "输出必须被截断到上限附近,实际 {} 字符",
+            out.text.chars().count()
+        );
     }
 
     #[test]

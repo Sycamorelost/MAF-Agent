@@ -9,17 +9,73 @@ import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import Composer from '../components/Composer';
 import AgentPickerDialog from '../components/AgentPickerDialog';
-import { agentIconComponent } from '../components/icons';
+import {
+  IconEdit,
+  IconHistory,
+  IconLayers,
+  IconLanguages,
+  IconResearch,
+  agentIconComponent,
+} from '../components/icons';
 import { useSessionsStore } from '../stores/sessions';
 import { useProvidersStore } from '../stores/providers';
 import { useAgentsStore } from '../stores/agents';
 import { DEFAULT_THINKING_LEVEL, useThinkingStore } from '../stores/thinking';
 import type { ThinkingSelection } from '../stores/thinking';
 import * as ipc from '../lib/ipc';
+import { sessionPath } from '../lib/workbench';
 import type { AttachmentMeta } from '../lib/ipc';
 
 /** 首页默认提示语(用户可在设置 · 主题与字体大小 · 首页中自定义)。 */
 export const DEFAULT_HOME_PROMPT = 'myAgent | 向更美好的生活出发！';
+
+/** 快捷开始:点击只填入输入框,不直接发送,避免误触发模型计费。 */
+const QUICK_PROMPTS = [
+  {
+    key: 'write',
+    title: '写作润色',
+    desc: '起草 · 改写 · 总结',
+    prompt: '帮我润色下面这段文字,保持原意,让表达更自然:',
+    Icon: IconEdit,
+  },
+  {
+    key: 'research',
+    title: '深度研究',
+    desc: '联网检索 · 多步分析',
+    prompt: '请联网检索,围绕这个主题给出一份带引用来源的分析:',
+    Icon: IconResearch,
+  },
+  {
+    key: 'translate',
+    title: '翻译对比',
+    desc: '中英互译 · 术语统一',
+    prompt: '翻译成英文,并给出两种更地道的表达:',
+    Icon: IconLanguages,
+  },
+  {
+    key: 'code',
+    title: '代码助手',
+    desc: '解释 · 调试 · 重构',
+    prompt: '解释这段代码的作用,并指出潜在问题:',
+    Icon: IconLayers,
+  },
+];
+
+/** 最近对话的相对时间(失败兜底为空串,不阻塞渲染)。 */
+function relTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const diff = Date.now() - t;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return '刚刚';
+  if (min < 60) return `${min} 分钟前`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} 天前`;
+  const d = new Date(t);
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
 
 /** 首页选中的待上传附件:文件本体 + 占位元数据(真正落盘要等会话创建后) */
 interface PendingFile {
@@ -41,6 +97,8 @@ export default function HomePage() {
   const nav = useNavigate();
   const create = useSessionsStore((s) => s.create);
   const setWebSearch = useSessionsStore((s) => s.setWebSearch);
+  const sessions = useSessionsStore((s) => s.sessions);
+  const refreshSessions = useSessionsStore((s) => s.refresh);
   const current = useProvidersStore((s) => s.current);
   const { templates, loaded, load } = useAgentsStore();
   const setThinking = useThinkingStore((s) => s.set);
@@ -57,6 +115,8 @@ export default function HomePage() {
   const [thinkCap, setThinkCap] = useState<ipc.ReasoningCapability | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [greeting, setGreeting] = useState(DEFAULT_HOME_PROMPT);
+  /** 最近对话加载失败(非阻塞,仅小节内提示) */
+  const [recentError, setRecentError] = useState(false);
 
   // 首页提示语:读取设置里的自定义文案,并随设置保存实时更新
   useEffect(() => {
@@ -79,6 +139,21 @@ export default function HomePage() {
     if (!loaded) void load();
   }, [loaded, load]);
 
+  // 最近对话:进入首页时刷新一次,失败只在小节内提示,不阻塞主流程
+  useEffect(() => {
+    let alive = true;
+    refreshSessions()
+      .then(() => {
+        if (alive) setRecentError(false);
+      })
+      .catch(() => {
+        if (alive) setRecentError(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [refreshSessions]);
+
   // 当前模型的思考能力(与会话页同源;查询失败按不支持处理,控件隐藏)
   useEffect(() => {
     let alive = true;
@@ -97,6 +172,14 @@ export default function HomePage() {
 
   const agent = templates.find((t) => t.agent_id === agentId) ?? null;
   const attachments = useMemo(() => pending.map((p) => p.meta), [pending]);
+  /** 最近 3 个会话(按更新时间倒序;空标题兜底为「新对话」) */
+  const recents = useMemo(
+    () =>
+      [...sessions]
+        .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime())
+        .slice(0, 3),
+    [sessions],
+  );
 
   const pickFiles = (files: FileList) => {
     const arr = Array.from(files);
@@ -166,7 +249,7 @@ export default function HomePage() {
       if (v) sessionStorage.setItem('metaagent.draft', v);
       setText('');
       setPending([]);
-      nav(`/chat/${id}`);
+      nav(sessionPath(id));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -218,6 +301,54 @@ export default function HomePage() {
         <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-caption)', color: 'var(--err)' }}>
           {error}
         </div>
+      )}
+
+      {/* 快捷开始:只填词不发送,零额外 token */}
+      <section className="home-quick" aria-label="快捷开始">
+        <div className="home-sec-head">快捷开始</div>
+        <div className="home-quick-grid">
+          {QUICK_PROMPTS.map(({ key, title, desc, prompt, Icon }) => (
+            <button
+              key={key}
+              type="button"
+              className="home-quick-card"
+              title="点击填入输入框"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setText(prompt)}
+            >
+              <span className="qi">
+                <Icon size={14} />
+              </span>
+              <span className="qt">{title}</span>
+              <span className="qd">{desc}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {(recents.length > 0 || recentError) && (
+        <section className="home-recent" aria-label="最近对话">
+          <div className="home-sec-head">
+            <IconHistory size={13} />
+            <span>最近对话</span>
+          </div>
+          {recentError ? (
+            <div className="home-recent-err">最近对话加载失败,可重新进入首页重试</div>
+          ) : (
+            recents.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="home-recent-item"
+                title={s.title || '新对话'}
+                onClick={() => nav(sessionPath(s.id))}
+              >
+                <span className="t">{s.title || '新对话'}</span>
+                <span className="m">{relTime(s.updated)}</span>
+              </button>
+            ))
+          )}
+        </section>
       )}
 
       {pickerOpen && (

@@ -149,7 +149,7 @@ export function AppearanceView() {
 
       <h2 style={{ marginTop: 'var(--space-6)' }}>主题</h2>
       <p className="set-desc">
-        预制 6 套主题,一键切换界面配色。只改变背景与文字颜色,不影响按钮、输入框的尺寸与排版。
+        预制 {THEMES.length} 套主题,一键切换界面配色。只改变背景与文字颜色,不影响按钮、输入框的尺寸与排版。
       </p>
 
       <div className="set-card">

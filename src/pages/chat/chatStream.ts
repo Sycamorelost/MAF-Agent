@@ -29,7 +29,7 @@ export function createStreamChunks(
       // P6:a=实际执行参数摘要(截断 300),ms=耗时;tid=关联任务(供检查器工具流水/产物/子任务卡片归集)
       // 写文件类工具 content 巨大且 path 在 content 之后会被截断:只保留 path/rel,保证检查器能提取产物路径
       let args: string | null = chunk.arguments ?? null;
-      if (args && /^fs_write|write_file|fs_export/.test(chunk.tool_name)) {
+      if (args && /^(fs_write|fs_edit)|write_file|fs_export/.test(chunk.tool_name)) {
         try {
           const v = JSON.parse(chunk.arguments!) as Record<string, unknown>;
           const path = typeof v.path === 'string' ? v.path : typeof v.rel === 'string' ? v.rel : null;
@@ -42,6 +42,7 @@ export function createStreamChunks(
       const payload = JSON.stringify({
         s: chunk.server_name, t: chunk.tool_name, ok: chunk.ok, c: body,
         a: args, ms: chunk.elapsed_ms ?? null, tid: getTaskId?.() ?? null,
+        lid: chunk.log_id ?? null,
       });
       pushStreamDelta(sessionId, `\n\n\`\`\`maf-tool\n${payload}\n\`\`\`\n\n`);
     }

@@ -266,7 +266,7 @@ pub fn set_preset(id: &str, preset: Option<(&str, i64)>) -> Result<(), String> {
 /// 绑定成功后自动:有 project → 注入 guard prompt;无 project → 移除旧 guard。
 #[allow(dead_code)]
 pub fn set_project(id: &str, project_id: Option<&str>) -> Result<(), String> {
-    let pid = project_id.and_then(|s| if s.is_empty() { None } else { Some(s) });
+    let pid = project_id.filter(|s| !s.is_empty());
     // 先在独立作用域里完成 UPDATE,释放锁后再调 guard 函数(它们内部也会 lock)
     {
         let conn = db::conn().lock().map_err(|e| e.to_string())?;
@@ -342,6 +342,8 @@ pub fn delete(id: &str) -> Result<(), String> {
         "DELETE FROM doc_chunks_fts WHERE rowid IN (SELECT id FROM doc_chunks WHERE session_id=?1)",
         [id],
     );
+    // D7:事件日志无外键级联,随会话一起清理
+    let _ = conn.execute("DELETE FROM session_events WHERE session_id=?1", [id]);
     conn.execute("DELETE FROM sessions WHERE id=?1", [id])
         .map_err(|e| e.to_string())?;
     Ok(())

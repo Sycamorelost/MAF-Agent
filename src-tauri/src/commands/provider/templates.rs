@@ -124,6 +124,5 @@ pub async fn restore_builtin_templates(app: tauri::AppHandle) -> Result<(), Stri
 /// 密钥 / 模板 / 单模型配置变更后广播,各窗口据此刷新全局 providers store。
 /// 修复「设置页保存 Key 后同生命周期内对话页仍显示未配置」的状态不同步问题(H-1)。
 pub(crate) fn notify_providers_changed(app: &tauri::AppHandle) {
-    use tauri::Emitter;
-    let _ = app.emit("providers_changed", ());
+    crate::diagnostics::safe_emit(app, "providers_changed", ());
 }

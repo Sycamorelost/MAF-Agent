@@ -36,6 +36,30 @@ pub struct GenerateImageInput {
     pub custom_display_name: Option<String>,
 }
 
+/// 前端实时预览输入:与 generate_image 的组装规则完全一致,但不触发生成。
+#[derive(Debug, Deserialize)]
+pub struct ComposePromptInput {
+    pub provider_id: String,
+    pub model: String,
+    pub prompt: String,
+    pub negative: Option<String>,
+    pub style_prompt: Option<String>,
+}
+
+/// 组装最终 Prompt,供绘图页实时显示字数 / 估算 token / 上限 / 告警。
+///
+/// 复用 `draw_prompt::compose`,保证「预览看到的内容」就是「实际发给模型的内容」。
+#[tauri::command]
+pub fn compose_draw_prompt(input: ComposePromptInput) -> crate::draw_prompt::ComposedPrompt {
+    crate::draw_prompt::compose(
+        &input.prompt,
+        input.style_prompt.as_deref(),
+        input.negative.as_deref(),
+        &input.provider_id,
+        &input.model,
+    )
+}
+
 #[derive(Debug, serde::Serialize)]
 pub struct ImageResultItem {
     /// 落盘绝对路径(项目 data/images/ 下)
@@ -62,6 +86,15 @@ pub struct ImageMeta {
     pub seed: Option<i64>,
     pub guidance: Option<f32>,
     pub created: String,
+    /// 实际发给模型的组装后 Prompt(可复现;旧作品无此字段)
+    #[serde(default)]
+    pub final_prompt: Option<String>,
+    /// 模型族(sdxl / flux / openai / cogview / generic)
+    #[serde(default)]
+    pub prompt_family: Option<String>,
+    /// 估算 token 数
+    #[serde(default)]
+    pub est_tokens: Option<usize>,
 }
 
 /// 生成图像。n 张图逐张调用 Provider(单张生成,职责单一),全部落盘后返回。
@@ -89,24 +122,15 @@ pub async fn generate_image(
     let n = input.n.unwrap_or(1).clamp(1, 4);
     let size = input.size.clone().unwrap_or_else(|| "1024x1024".into());
 
-    // 风格词与负面提示合并进 prompt(对所有 OpenAI 兼容 Provider 生效)
-    let mut final_prompt = input.prompt.clone();
-    if let Some(sp) = input
-        .style_prompt
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        final_prompt = format!("{final_prompt}, {sp}");
-    }
-    if let Some(neg) = input
-        .negative
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        final_prompt = format!("{final_prompt}. Avoid: {neg}");
-    }
+    // Prompt 组装:按模型族归一/去重/截断,风格与负向词有序追加(见 draw_prompt)
+    let composed = crate::draw_prompt::compose(
+        &input.prompt,
+        input.style_prompt.as_deref(),
+        input.negative.as_deref(),
+        &input.provider_id,
+        &input.model,
+    );
+    let final_prompt = composed.prompt.clone();
 
     let meta = ImageMeta {
         prompt: input.prompt.clone(),
@@ -118,6 +142,9 @@ pub async fn generate_image(
         seed: input.seed,
         guidance: input.guidance,
         created: chrono::Local::now().to_rfc3339(),
+        final_prompt: Some(final_prompt.clone()),
+        prompt_family: Some(composed.family.clone()),
+        est_tokens: Some(composed.est_tokens),
     };
 
     let mut results = Vec::with_capacity(n as usize);
@@ -182,7 +209,7 @@ async fn save_image_response(
     } else {
         return Err(format!(
             "未知的图片返回格式: {}",
-            &resp.url[..resp.url.len().min(64)]
+            resp.url.chars().take(64).collect::<String>()
         ));
     };
 

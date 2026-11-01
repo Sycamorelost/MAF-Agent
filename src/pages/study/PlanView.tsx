@@ -8,6 +8,7 @@ import { useStudyStore } from '../../stores/study';
 import { useSessionsStore } from '../../stores/sessions';
 import { useProvidersStore } from '../../stores/providers';
 import * as ipc from '../../lib/ipc';
+import { sessionPath } from '../../lib/workbench';
 import type { NodeState, StudyStats, StudyTask, TodayPlan } from '../../lib/ipc/study';
 import * as studyIpc from '../../lib/ipc/study';
 import { STATUS_LABEL } from './PlanList';
@@ -74,7 +75,7 @@ export function PlanView() {
       );
       await useSessionsStore.getState().refresh();
       useSessionsStore.getState().setPendingComposer({ sessionId: id, text: prefill });
-      nav(`/chat/${id}`);
+      nav(sessionPath(id));
     } catch (e) {
       warn(e);
     }

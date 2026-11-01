@@ -3,8 +3,10 @@ import { searchAll, type AttachmentMeta } from '../../lib/ipc';
 import { registerAtRef } from '../../lib/atRefs';
 import AtMenu, { findAtTrigger, type AtItem } from './AtMenu';
 import AttachTray from './AttachTray';
+import QuoteTray from './QuoteTray';
 import ToolBar, { type ThinkingControl } from './ToolBar';
 import { useComposerHeight } from './useComposerHeight';
+import type { QuoteRef } from '../../lib/quote';
 
 interface Props {
   value: string;
@@ -22,6 +24,9 @@ interface Props {
   /** 选择文件回调(input[type=file] 内部处理) */
   onPickFiles?: (files: FileList) => void;
   onRemoveAttachment?: (index: number) => void;
+  /** 待发送引用(完整原文存 state,输入框只显示摘要) */
+  quotes?: QuoteRef[];
+  onRemoveQuote?: (id: string) => void;
   /** 输入框为空时按 ↑ 召回上一条用户消息 */
   onRecall?: () => void;
   /** 联网搜索开关(会话级持久化在 sessions.web_search_enabled) */
@@ -30,6 +35,8 @@ interface Props {
   /** 思考控制(v1.9.0 工作块 I):null / enabled=false 时不渲染。
    *  levels=false 仅开关(四档不可用);can_disable=false 锁定为开。 */
   thinking?: ThinkingControl | null;
+  /** 本会话模型选择器(工具条右端,发送按钮前) */
+  model?: { name: string; ready: boolean; onOpen: () => void } | null;
   /** 追加到工具条的自定义 chip(智能体 / 会话设置等) */
   children?: ReactNode;
 }
@@ -46,10 +53,13 @@ export default function Composer({
   attachments,
   onPickFiles,
   onRemoveAttachment,
+  quotes,
+  onRemoveQuote,
   onRecall,
   webSearch,
   onToggleWebSearch,
   thinking,
+  model,
   children,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -187,6 +197,9 @@ export default function Composer({
           onPointerMove={onResizeMove}
           onPointerUp={onResizeUp}
         />
+        {quotes && quotes.length > 0 && (
+          <QuoteTray quotes={quotes} onRemoveQuote={onRemoveQuote} />
+        )}
         {hasAttachments && (
           <AttachTray attachments={attachments!} onRemoveAttachment={onRemoveAttachment} />
         )}
@@ -266,6 +279,7 @@ export default function Composer({
           onStop={onStop}
           canSend={!disabled && (!!value.trim() || hasAttachments)}
           onSend={doSend}
+          model={model}
         >
           {children}
         </ToolBar>

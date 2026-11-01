@@ -53,13 +53,17 @@ export function useChatStream({
       }
       setSending(true);
       setError(null);
+      /** 用户主动停止或超时:已生成内容按「部分内容」落库,不当作完整回答 */
+      let interrupted = false;
+      let chunks: ReturnType<typeof createStreamChunks> | null = null;
+      const sourcesJson = sources && sources.length > 0 ? JSON.stringify(sources) : null;
       try {
         startStreaming(sessionId);
         // 思考参数:模型不支持 → null(后端能力门控二次兜底);用户关闭 → 'off';否则档位
         const reasoningEffort = resolveReasoningEffort(thinkCap, thinkingSel);
         // Phase 5e:收集已启用 MCP server 的工具定义(按会话预设裁剪;空则不启用工具调用)
         const tools = await collectSessionTools(agent, sessionId);
-        const chunks = createStreamChunks(
+        chunks = createStreamChunks(
           sessionId,
           { pushStreamDelta, pushStreamReasoning, setStreamReasoningTokens },
           // 工具块打上当前进行中任务 id(val.md §5.4):检查器流水/产物按任务归集
@@ -76,19 +80,34 @@ export function useChatStream({
           },
           chunks.onChunk,
         );
-        cancelRef.current = cancel;
+        cancelRef.current = () => {
+          interrupted = true;
+          cancel();
+        };
         await done;
         const { content: fullText, reasoning } = endStreaming(sessionId);
         if (fullText) {
           await appendAssistant(
             sessionId, fullText, eff.model, chunks.getTokens(),
-            sources && sources.length > 0 ? JSON.stringify(sources) : null, reasoning,
+            sourcesJson, reasoning, interrupted,
           );
         }
         maybeAutoSummarize(sessionId, eff.providerId, eff.model, agent?.memory_write ?? true);
       } catch (e) {
+        // P1:断流/报错时已生成的内容不能丢 —— 以 partial 落库,气泡标记「已中断」,
+        // 用户仍可复制、搜索、让模型在此基础上续写。
+        const { content: partialText, reasoning: partialReasoning } = endStreaming(sessionId);
+        if (partialText.trim()) {
+          try {
+            await appendAssistant(
+              sessionId, partialText, eff.model, chunks?.getTokens() ?? 0,
+              sourcesJson, partialReasoning, true,
+            );
+          } catch {
+            // 落库失败不掩盖原始错误
+          }
+        }
         setError(e instanceof Error ? e.message : String(e));
-        endStreaming(sessionId);
       } finally {
         setSending(false);
         cancelRef.current = null;

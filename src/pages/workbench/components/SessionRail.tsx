@@ -182,6 +182,12 @@ export function SessionRail({ sessionId }: { sessionId: string }) {
   const [renameSessionText, setRenameSessionText] = useState('');
   /** 待确认删除的会话(应用内确认,避免原生 confirm 的先执行后弹出时序) */
   const [pendingDel, setPendingDel] = useState<SessionRow | null>(null);
+  /** 待确认删除的项目(同上:原生 confirm 在 WebView 下会先执行后弹窗,必须用应用内确认框) */
+  const [pendingProjectDel, setPendingProjectDel] = useState<{
+    projectId: string;
+    label: string;
+    count: number;
+  } | null>(null);
 
   const groupMenu = useContextMenu<FolderGroup>();
   const sessionMenu = useContextMenu<SessionRow>();
@@ -289,13 +295,11 @@ export function SessionRail({ sessionId }: { sessionId: string }) {
         disabled: !isProject,
         onClick: () => {
           if (!g.projectId) return;
-          const cnt = g.items.length;
-          const msg = cnt > 0
-            ? `删除项目「${g.label}」?\n\n⚠ 项目下 ${cnt} 个会话将被归入「未分类」,不会被删除。`
-            : `删除项目「${g.label}」?`;
-          if (confirm(msg)) {
-            void ipc.deleteProject(g.projectId).then(() => void refreshFolders());
-          }
+          setPendingProjectDel({
+            projectId: g.projectId,
+            label: g.label,
+            count: g.items.length,
+          });
         },
       },
     ];
@@ -578,6 +582,24 @@ export function SessionRail({ sessionId }: { sessionId: string }) {
             setPendingDel(null);
             void store.remove(id);
             if (id === sessionId) nav('/work');
+          }}
+        />
+      )}
+      {pendingProjectDel && (
+        <ConfirmDialog
+          title="删除项目"
+          message={
+            pendingProjectDel.count > 0
+              ? `删除项目「${pendingProjectDel.label}」?\n\n⚠ 项目下 ${pendingProjectDel.count} 个会话将被归入「未分类」,不会被删除。`
+              : `删除项目「${pendingProjectDel.label}」?`
+          }
+          confirmText="删除"
+          danger
+          onCancel={() => setPendingProjectDel(null)}
+          onConfirm={() => {
+            const id = pendingProjectDel.projectId;
+            setPendingProjectDel(null);
+            void ipc.deleteProject(id).then(() => void refreshFolders());
           }}
         />
       )}

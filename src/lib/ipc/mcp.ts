@@ -117,7 +117,45 @@ export const mcpGetApprovalPolicy = () => invoke<ApprovalPolicy>("mcp_get_approv
 export const mcpSetApprovalPolicy = (policy: ApprovalPolicy) =>
   invoke<void>("mcp_set_approval_policy", { policy });
 
+/** P8:完全信任临时授权状态。 */
+export interface FullTrustStatus {
+  active: boolean;
+  remaining_secs: number;
+  session_id: string | null;
+}
+
+/** P8:签发完全信任临时授权(默认 60 分钟;传 sessionId 即仅该会话有效)。 */
+export const mcpGrantFullTrust = (sessionId?: string, minutes?: number) =>
+  invoke<number>("mcp_grant_full_trust", {
+    sessionId: sessionId ?? null,
+    minutes: minutes ?? null,
+  });
+
+/** P8:吊销临时授权 —— 传 sessionId 只清该会话授权,不传则全部清除。 */
+export const mcpRevokeFullTrust = (sessionId?: string) =>
+  invoke<void>("mcp_revoke_full_trust", { sessionId: sessionId ?? null });
+
+/** P8:查询授权状态(全局授权对任意会话都返回 active)。 */
+export const mcpFullTrustStatus = (sessionId?: string) =>
+  invoke<FullTrustStatus>("mcp_full_trust_status", { sessionId: sessionId ?? null });
+
 /** Phase 5e:汇总所有已启用 server 的工具定义(OpenAI function-calling)。
  *  P5/D18:传 sessionId 时后端按会话生效预设裁剪工具名单;不传则不过滤。 */
 export const mcpCollectTools = (sessionId?: string) =>
   invoke<ToolDef[]>("mcp_collect_tools", { sessionId: sessionId ?? null });
+
+/** P4:工具调用审计记录(含结果全文,按需按 id 拉取)。 */
+export interface ToolCallLog {
+  id: number;
+  session_id: string;
+  project_id: string | null;
+  tool_name: string;
+  target_path: string | null;
+  args_preview: string | null;
+  result: string;
+  created: string;
+}
+
+/** P4:「查看完整输出」按 id 拉取工具结果全文(不存在时返回 null)。 */
+export const mcpGetToolLog = (id: number) =>
+  invoke<ToolCallLog | null>("mcp_get_tool_log", { id });

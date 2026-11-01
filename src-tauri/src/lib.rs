@@ -14,7 +14,9 @@ mod aiflavor;
 mod attachment;
 mod commands;
 mod db;
+mod diagnostics;
 mod doc;
+mod draw_prompt;
 mod export;
 mod fs;
 mod gui;
@@ -23,6 +25,7 @@ mod memory;
 mod navguard;
 mod paths;
 mod presets;
+mod project_rules;
 mod provider;
 mod retrieval;
 mod selection;
@@ -34,7 +37,7 @@ mod websearch;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 /// 从托盘恢复主窗口:show + unminimize + focus。
 fn show_main_window(app: &AppHandle) {
@@ -151,7 +154,7 @@ pub fn run() {
                         }
                     }
                     mcp::set_bootstrap_state(2);
-                    let _ = handle.emit("bootstrap_done", ());
+                    diagnostics::safe_emit(&handle, "bootstrap_done", ());
                 });
             }
 

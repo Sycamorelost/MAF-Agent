@@ -103,6 +103,8 @@ pub struct PaperItemResult {
 }
 
 /// 当前引擎:生产 = learningcenter/papers;测试 = target/test-tmp 下隔离目录。
+// cfg 分裂成两段,测试分支需要显式 return(clippy 建议的省略写法在 test 构建下会类型不匹配)
+#[allow(clippy::needless_return)]
 fn fs() -> &'static PaperFs {
     #[cfg(test)]
     {

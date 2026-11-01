@@ -195,30 +195,29 @@ pub async fn run(p: StudyParams) {
             }
             // P3 完整教学内容:逐节点生成自学材料(用户创建时勾选)
             // 逐条串行、失败不中断;取消/暂停沿用流水线控制,已完成部分保留。
-            if p.full_content {
-                if let Ok(nodes) = store::node_ids(&p.id) {
-                    if !nodes.is_empty() {
-                        sink.emit(StudyEvent::StepStart {
-                            step: "content".into(),
-                            label: format!("生成完整教学内容({} 个知识点)", nodes.len()),
-                        });
-                        sink.emit(StudyEvent::StepNote {
-                            step: "content".into(),
-                            content: format!(
-                                "开始为 {} 个知识点生成完整教学内容(逐条生成,可随时取消,已完成部分会保留)",
-                                nodes.len()
-                            ),
-                        });
-                        let done = generate_all_units(&p, &sink, &nodes).await;
-                        sink.emit(StudyEvent::StepNote {
-                            step: "content".into(),
-                            content: format!(
-                                "完整教学内容已生成 {done}/{} 个知识点;其余可在计划详情中逐个生成",
-                                nodes.len()
-                            ),
-                        });
-                    }
-                }
+            if p.full_content
+                && let Ok(nodes) = store::node_ids(&p.id)
+                && !nodes.is_empty()
+            {
+                sink.emit(StudyEvent::StepStart {
+                    step: "content".into(),
+                    label: format!("生成完整教学内容({} 个知识点)", nodes.len()),
+                });
+                sink.emit(StudyEvent::StepNote {
+                    step: "content".into(),
+                    content: format!(
+                        "开始为 {} 个知识点生成完整教学内容(逐条生成,可随时取消,已完成部分会保留)",
+                        nodes.len()
+                    ),
+                });
+                let done = generate_all_units(&p, &sink, &nodes).await;
+                sink.emit(StudyEvent::StepNote {
+                    step: "content".into(),
+                    content: format!(
+                        "完整教学内容已生成 {done}/{} 个知识点;其余可在计划详情中逐个生成",
+                        nodes.len()
+                    ),
+                });
             }
             sink.emit(StudyEvent::Done {
                 plan: Some(payload),

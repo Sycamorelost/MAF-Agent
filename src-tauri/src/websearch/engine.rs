@@ -361,12 +361,11 @@ fn parse_text_results(text: &str) -> Vec<RawSearchResult> {
             {
                 *url = u.to_string();
             }
-        } else if let Some(c) = line.strip_prefix("Content: ") {
-            if let Some((_, _, content)) = cur.as_mut()
-                && content.is_empty()
-            {
-                *content = c.to_string();
-            }
+        } else if let Some(c) = line.strip_prefix("Content: ")
+            && let Some((_, _, content)) = cur.as_mut()
+            && content.is_empty()
+        {
+            *content = c.to_string();
         }
     }
     flush(&mut out, &mut cur);

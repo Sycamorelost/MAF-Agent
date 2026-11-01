@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import type { BubbleMessage } from '../../components/MessageBubble';
 import { useMessagesStore } from '../../stores/messages';
 import { useMemoryStore } from '../../stores/memory';
+import { useSessionsStore } from '../../stores/sessions';
 import * as ipc from '../../lib/ipc';
 import type { AttachmentMeta } from '../../lib/ipc';
 import { useEditResend } from './attachments';
@@ -33,22 +34,30 @@ export function useMessageActions({
   const loadMemory = useMemoryStore((s) => s.load);
 
   // ---------- 消息操作(useCallback 稳定引用,配合 MessageList memo) ----------
-  /** 「翻译」(D6.5):内容写入草稿并跳翻译页。 */
+  /** 「翻译」:把纯文本 + 来源信息写入草稿并跳翻译页(不在输入框复制整条 Markdown)。 */
   const onTranslate = useCallback(
-    (content: string) => {
+    (content: string, meta?: { role?: string; createdAt?: string }) => {
+      const title =
+        useSessionsStore.getState().sessions.find((s) => s.id === sessionId)?.title ?? '未命名会话';
+      const role = meta?.role === 'user' ? '用户' : '助手';
+      const time = meta?.createdAt
+        ? new Date(meta.createdAt).toLocaleString('zh-CN', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+      const source = [title, role, time].filter(Boolean).join(' · ');
       try {
-        sessionStorage.setItem('translate_draft', JSON.stringify({ text: content }));
+        sessionStorage.setItem('translate_draft', JSON.stringify({ text: content, source }));
       } catch {
         // 存储失败不阻塞跳转
       }
       nav('/translate');
     },
-    [nav],
+    [nav, sessionId],
   );
-  const onQuote = useCallback((content: string) => {
-    const quoted = content.split('\n').map((l) => `> ${l}`).join('\n');
-    setComposerText((prev) => (prev ? `${quoted}\n\n${prev}` : `${quoted}\n\n`));
-  }, []);
   const onEditResend = useEditResend({
     sessionId, setComposerText, setPendingAttachments, setPendingImages, forkAndReload,
   });
@@ -115,7 +124,7 @@ export function useMessageActions({
     [sessionId, loadMemory, showToast],
   );
   return {
-    onTranslate, onQuote, onEditResend, onDelete, onRegenerate, onPickRetryModel,
+    onTranslate, onEditResend, onDelete, onRegenerate, onPickRetryModel,
     onSaveSources, onPin,
   };
 }

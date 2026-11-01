@@ -19,6 +19,9 @@ export function McpView() {
     policy,
     allowText,
     setAllowText,
+    ftStatus,
+    onGrantFullTrust,
+    onRevokeFullTrust,
     startingAll,
     wsRoot,
     backupCount,
@@ -80,8 +83,11 @@ export function McpView() {
       <ApprovalPolicyCard
         policy={policy}
         allowText={allowText}
+        ftStatus={ftStatus}
         onAllowTextChange={setAllowText}
         onPickMode={onPickMode}
+        onGrantFullTrust={onGrantFullTrust}
+        onRevokeFullTrust={onRevokeFullTrust}
         onSaveAllowList={onSaveAllowList}
       />
 

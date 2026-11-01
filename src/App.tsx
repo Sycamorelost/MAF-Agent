@@ -13,7 +13,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { useSessionsStore } from './stores/sessions';
 import { useProvidersStore } from './stores/providers';
 import { useThemeStore } from './stores/theme';
-import { resolveMode, useDefaultWorkbench } from './lib/workbench';
+import { resolveMode, sessionPath, useDefaultWorkbench } from './lib/workbench';
 import './styles/base.css';
 import './styles/dialog.css';
 import './styles/home.css';
@@ -120,6 +120,8 @@ function OnboardingGate() {
 /** 主窗口内容:监听「跳转会话」/「打开设置页」/「划词提问」事件并导航。 */
 function MainApp() {
   const nav = useNavigate();
+  // 全局常驻订阅默认模式:同步 lib/workbench 的模块级缓存,保证任意入口导航都能直达正确形态
+  useDefaultWorkbench();
   useEffect(() => {
     const unlistenSession = listen<{ sessionId: string }>('navigate-to-session', (e) => {
       // 先刷新会话列表:目标会话可能由其它窗口刚创建,否则模式门会因「本地不存在」而回首页
@@ -127,7 +129,7 @@ function MainApp() {
         .getState()
         .refresh()
         .catch(() => {})
-        .finally(() => nav(`/chat/${e.payload.sessionId}`));
+        .finally(() => nav(sessionPath(e.payload.sessionId)));
     });
     const unlistenSettings = listen<{ tab?: string }>('navigate-to-settings', (e) => {
       nav(e.payload.tab ? `/settings?tab=${e.payload.tab}` : '/settings');
@@ -149,7 +151,7 @@ function MainApp() {
         );
         await useSessionsStore.getState().refresh();
         useSessionsStore.getState().setPendingComposer({ sessionId: id, text });
-        nav(`/chat/${id}`);
+        nav(sessionPath(id));
       })().catch((err) => console.error('selection_ask failed', err));
     });
     // 外部编辑器改 memory.md frontmatter 的 conversation → 后端同步 sessions.title 后广播此事件

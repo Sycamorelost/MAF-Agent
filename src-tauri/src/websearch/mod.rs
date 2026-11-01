@@ -14,6 +14,7 @@
 
 mod engine;
 mod fetch;
+pub(crate) mod page;
 mod rank;
 
 use serde::{Deserialize, Serialize};

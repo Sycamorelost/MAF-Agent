@@ -1,6 +1,9 @@
 //! 设置 · 关于视图(从 SettingsPage 搬出,纯搬家:视觉与行为不变)。
 
+import { useEffect, useState } from 'react';
+
 import logoUrl from '../../assets/logo.png';
+import { getFailureCounts } from '../../lib/ipc/diagnostics';
 import { CN_NUM, TERMS } from './constants';
 
 export interface AboutViewProps {
@@ -8,6 +11,14 @@ export interface AboutViewProps {
 }
 
 export function AboutView({ appVersion }: AboutViewProps) {
+  // P2:旁路操作失败计数(非 0 才提示,不给小白新增任何开关)
+  const [failures, setFailures] = useState(0);
+  useEffect(() => {
+    getFailureCounts()
+      .then((c) => setFailures(c.emit + c.event_log + c.audit))
+      .catch(() => setFailures(0));
+  }, []);
+
   return (
     <>
       <h2>关于</h2>
@@ -18,18 +29,27 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">myAgent</div>
           <div className="set-product-ver">
-            版本 {appVersion ? `${appVersion} Beta` : '2.1.0 Beta'} · 桌面端 · Windows
+            版本 {appVersion ? `${appVersion} Beta` : '2.2.0 Beta'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             MAF 团队旗下的 Agent 产品,一款专为学习、调研而创造的智能体框架软件。
             完全免费且无广告,开发者:梧桐吾桐及其团队。
           </div>
+          <div className="set-product-ver">
+            凭据存储:API Key 与 MCP 请求头以 DPAPI(Windows)/ AES-GCM 密文保存在本地数据目录的
+            secrets 下,目录权限已收紧为仅当前系统用户可读。
+          </div>
+          {failures > 0 && (
+            <div className="set-product-ver">
+              运行自检:累计 {failures} 次旁路写入或事件发送失败(已记入本机日志,不影响正常使用)。
+            </div>
+          )}
         </div>
       </div>
 
       {/* 版本更新摘要:自 v1.17.1 至今的用户可感知改动,按类归组 */}
       <div className="set-card">
-        <div className="set-card-h">更新内容 · v1.17.1 → v2.1.0 Beta</div>
+        <div className="set-card-h">更新内容 · v1.17.1 → v2.2.0 Beta</div>
         <div className="set-card-b">
           <p>
             全新：专业工作台形态——会话内嵌检查器（产物 / 变更与回滚 / 上下文与记忆 / 工具流水
@@ -66,6 +86,35 @@ export function AboutView({ appVersion }: AboutViewProps) {
             图表与组件（v2.1.0）：Mermaid 图双向自适应窗口——小图等比放大充满
             （矢量不失真），超宽图保持原生尺寸、横向滚动不再压扁；
             分段切换按钮内容默认居中。
+          </p>
+          <p>
+            稳定性与修复（v2.1.1）：发送消息后输入框文字与附件不再滞留——点击发送即清空，
+            失败时自动回填，不再出现「已显示正在思考但文字还卡在输入框」；修复工具轮次结束后
+            会话静默卡死——MCP 工具层原先在持锁状态下等待 server 应答且没有超时，任一 server
+            无响应就会拖死整条工具链，现改为只持锁取句柄、工具列表 10s / 工具调用 120s 超时、
+            启动过程不持锁、按工具名路由并行查询；上下文压缩子调用收紧到 60s 并超时回落硬裁剪；
+            后台流任务异常中断时补发终态，界面不再无限等待。
+          </p>
+          <p>
+            界面与交互（v2.1.1）：联网搜索来源默认折叠、字号下调，作为辅助信息不再占据主体版面；
+            工作台项目文件夹删除改为应用内确认框，确认后才真正执行（修复原生确认框在弹窗前
+            即已删除的问题）。
+          </p>
+          <p>
+            安全加固（v2.2.0）：高危命令（格式化磁盘、删除根目录、改写注册表等）一律弹出人工确认，
+            任何审批档位下都不再静默执行；外部 MCP 工具的风险分级收紧——仅凭工具名像「只读」
+            不再自动放行，统一按中等风险走确认流程，你仍可用「始终允许」对可信工具免打扰。
+          </p>
+          <p>
+            数据与凭据（v2.2.0）：API Key 存储目录权限收紧为仅当前系统用户可读；数据库版本升级前
+            自动留存一份快照（保留最近 2 份），升级失败可手工回滚；工具调用记录按会话滚动保留
+            最近 500 条，长期使用不再无限增长。
+          </p>
+          <p>
+            稳健性（v2.2.0）：导出为 PDF 时，正文中的链接增加协议白名单与转义校验，恶意链接会
+            被降级为纯文本；旁路写入或事件发送失败不再完全静默——记入本机日志并累计计数，
+            本页在计数非 0 时显示一行提示；工程层面对网页抓取、内置工具与 HTML 处理做了拆分与
+            合并去重，功能行为不变。
           </p>
         </div>
       </div>

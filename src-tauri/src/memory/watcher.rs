@@ -16,7 +16,7 @@ use std::{
 };
 
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 use super::memory_path;
 
@@ -46,7 +46,8 @@ fn sync_title_from_memory(session_id: &str, app: &AppHandle) {
         return;
     }
     if crate::db::sessions::update_title(session_id, &new_title).is_ok() {
-        let _ = app.emit(
+        crate::diagnostics::safe_emit(
+            app,
             "session_renamed",
             serde_json::json!({
                 "session_id": session_id,
@@ -121,7 +122,8 @@ impl WatcherRegistry {
                             Ok(()) => continue,
                             // 静默窗口结束:广播一次最终状态
                             Err(RecvTimeoutError::Timeout) => {
-                                let _ = debounce_app.emit(
+                                crate::diagnostics::safe_emit(
+                                    &debounce_app,
                                     "memory_changed",
                                     serde_json::json!({
                                         "session_id": debounce_sid,

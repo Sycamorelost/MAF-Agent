@@ -13,8 +13,13 @@
 //! 安全边界:DPAPI 保护级别 = 当前 Windows 用户登录会话;攻击者需能在该用户上下文执行代码
 //! 才能解密。这是 Windows 桌面应用的标准实践(Chrome/Edge 本地密码存储同源)。
 //! 依据:Microsoft DPAPI 文档、OWASP Secrets Management Cheat Sheet。
+//!
+//! 存储位置:`<data>/secrets/*.bin`。目录在首次写入时收紧为「仅当前用户」——
+//! Windows 用 `icacls` 断开 ACL 继承并递归修正,Unix 用 `0700`。
+//! 非 Windows 的 AES 密钥由 SHA-256(`APP_SALT`|用户名|主机名)派生,属软件级保护,
+//! 弱于 DPAPI(密文与密钥在同一台机器上,拿到文件即可尝试派生)。
 
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, sync::OnceLock};
 
 use aes_gcm::{
     Aes256Gcm, Nonce,
@@ -33,6 +38,56 @@ const DPAPI_PREFIX: &str = "dpapi:";
 
 fn secrets_dir() -> PathBuf {
     crate::paths::data_dir().join("secrets")
+}
+
+/// 确保 secrets 目录存在,并在本进程首次调用时收紧为「仅当前用户可读写」。
+/// 收紧失败只告警、不阻断存取(Windows 下密文仍受 DPAPI 用户密钥保护)。
+fn ensure_secrets_dir() -> Result<PathBuf, String> {
+    let dir = secrets_dir();
+    fs::create_dir_all(&dir).map_err(|e| format!("mkdir secrets failed: {e}"))?;
+    static ONCE: OnceLock<()> = OnceLock::new();
+    if ONCE.set(()).is_ok()
+        && let Err(e) = restrict_dir_permissions(&dir)
+    {
+        log::warn!("restrict secrets dir permissions failed: {e}");
+    }
+    Ok(dir)
+}
+
+/// Unix:目录权限位改为 `0700`。
+#[cfg(unix)]
+fn restrict_dir_permissions(dir: &std::path::Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
+        .map_err(|e| format!("chmod 0700 {}: {e}", dir.display()))
+}
+
+/// Windows:用 `icacls` 断开 ACL 继承,只保留当前用户的完全控制,并递归修正已有密钥文件。
+#[cfg(target_os = "windows")]
+fn restrict_dir_permissions(dir: &std::path::Path) -> Result<(), String> {
+    let user = std::env::var("USERNAME").map_err(|_| "缺少 USERNAME 环境变量".to_string())?;
+    let status = std::process::Command::new("icacls")
+        .arg(dir)
+        .args([
+            "/inheritance:r",
+            "/grant:r",
+            &format!("{user}:(OI)(CI)F"),
+            "/T",
+            "/Q",
+            "/C",
+        ])
+        .status()
+        .map_err(|e| format!("运行 icacls 失败: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("icacls 退出码 {:?}", status.code()))
+    }
+}
+
+#[cfg(not(any(unix, target_os = "windows")))]
+fn restrict_dir_permissions(_dir: &std::path::Path) -> Result<(), String> {
+    Ok(())
 }
 
 /// 计算密钥文件路径(slot 0 沿用旧命名 `{id}.bin`,其余为 `{id}.{n}.bin`)。
@@ -226,8 +281,8 @@ fn aes_decrypt(provider_id: &str, encoded: &str) -> Result<String, String> {
 
 /// 加密并存储指定槽位的 API Key。Windows 优先 DPAPI,其他平台回退 AES-GCM。
 pub fn store_slot(provider_id: &str, slot: u32, api_key: &str) -> Result<(), String> {
-    let dir = secrets_dir();
-    fs::create_dir_all(&dir).map_err(|e| format!("mkdir secrets failed: {e}"))?;
+    // 目录创建 + 权限收紧(仅当前用户)
+    ensure_secrets_dir()?;
 
     #[cfg(target_os = "windows")]
     let encoded = {
@@ -539,5 +594,33 @@ mod tests {
         assert!(store("../../evil", "k").is_err());
         assert!(load("../../evil").is_err());
         assert!(remove("../../evil").is_err());
+    }
+
+    /// P2:secrets 目录权限收紧后不再继承父目录 ACL(Windows),Unix 为 0700。
+    #[cfg(unix)]
+    #[test]
+    fn secrets_dir_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        ensure_secrets_dir().unwrap();
+        let mode = fs::metadata(secrets_dir()).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700, "secrets 目录应仅所有者可访问");
+    }
+
+    /// P2:Windows 下用 icacls 断开继承,只保留当前用户。
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn secrets_dir_drops_acl_inheritance() {
+        ensure_secrets_dir().unwrap();
+        let out = std::process::Command::new("icacls")
+            .arg(secrets_dir())
+            .output()
+            .expect("运行 icacls 失败");
+        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        assert!(
+            !text.contains("(I)"),
+            "secrets 目录不应再继承父目录 ACL:\n{text}"
+        );
+        let user = std::env::var("USERNAME").unwrap();
+        assert!(text.contains(&user), "应保留当前用户权限:\n{text}");
     }
 }

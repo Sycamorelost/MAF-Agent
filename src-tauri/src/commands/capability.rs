@@ -16,8 +16,11 @@ pub fn mcp_issue_capability(
     max_uses: Option<u32>,
     store: State<'_, CapabilityStore>,
 ) -> Result<Capability, String> {
-    let policy = crate::mcp::approval::load_policy(&data_dir_fn());
-    if policy.mode != crate::mcp::approval::ApprovalMode::Full {
+    let dir = data_dir_fn();
+    let policy = crate::mcp::approval::load_policy(&dir);
+    // P8:签发令牌无会话上下文,要求「完全信任」档且持有有效的全局临时授权
+    if crate::mcp::approval::effective_mode(&policy, &dir, None) != crate::mcp::approval::ApprovalMode::Full {
+
         return Err("能力令牌已并入完全信任模式:请将审批模式切为「完全信任」后签发".into());
     }
     let cap = store.issue(&label, scopes, ttl_secs, max_uses)?;

@@ -1,19 +1,128 @@
 /* ============ HomePage(空状态首页,对齐模板 01) ============
    .stage / .cards / .card / .card-dark / .composer / .composer-box 由 _tokens.css 提供。 */
 
-.greeting {
+/* 标题:提高优先级覆盖 _tokens 的同名规则(浮动动画 + 1.2 倍字号);
+   持续上下浮动会让整列视觉重心晃动,与固定输入卡不协调,这里保持静止 */
+.home > .greeting {
+  width: 100%;
+  max-width: var(--composer-max-w);
+  margin: 0 auto;
   font-size: calc(var(--font-hero) * 1.2);
+  line-height: 1.3;
   font-weight: 650;
-  letter-spacing: -.3px;
+  letter-spacing: calc(-.3px * var(--ui-scale));
   color: var(--text-1);
   text-align: center;
+  animation: none;
 }
-/* 主页:居中布局 */
-.home { justify-content: center; }
+/* 主页:提示语 / 输入卡 / 小组件同列居中;
+   上下内边距一致 → 内容整体居中;safe center 让矮窗口内容超高时自动改为顶部对齐而不被裁切
+   (选择器用 .stage.home 提高优先级,避免被加载顺序靠后的 .stage padding 简写覆盖) */
+.stage.home {
+  justify-content: flex-start;
+  justify-content: safe center;
+  align-items: center;
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+}
+.home > .composer,
+.home > .home-quick,
+.home > .home-recent {
+  width: 100%;
+  max-width: var(--composer-max-w);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- 快捷开始:只填词不发请求 ---------- */
+.home-quick { margin-top: var(--space-6); }
+.home-sec-head {
+  display: flex; align-items: center; gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  font-size: var(--font-micro); font-weight: 600;
+  color: var(--text-3); letter-spacing: .3px;
+}
+.home-sec-head svg { color: var(--text-3); flex-shrink: 0; }
+.home-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.home-quick-card {
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: calc(3px * var(--ui-scale));
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--bg-surface);
+  color: var(--text-2);
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .15s;
+}
+.home-quick-card:hover {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+}
+.home-quick-card:active { transform: translateY(0); }
+.home-quick-card .qi {
+  width: calc(26px * var(--ui-scale)); height: calc(26px * var(--ui-scale));
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-bottom: calc(2px * var(--ui-scale));
+  border-radius: var(--radius-s);
+  background: var(--brand-soft); color: var(--brand-deep);
+}
+.home-quick-card .qi svg { width: 14px; height: 14px; }
+.home-quick-card .qt {
+  max-width: 100%;
+  font-size: var(--font-sub); font-weight: 600; color: var(--text-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.home-quick-card .qd {
+  max-width: 100%;
+  font-size: var(--font-micro); color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---------- 最近对话:轻量列表,无卡片描边 ---------- */
+.home-recent { margin-top: var(--space-5); }
+.home-recent-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none; border-radius: var(--radius-m);
+  background: transparent; color: var(--text-2);
+  font-family: var(--font); font-size: var(--font-caption);
+  text-align: left; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.home-recent-item:hover { background: var(--bg-hover); color: var(--text-1); }
+.home-recent-item .t {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-recent-item .m {
+  flex-shrink: 0;
+  font-size: var(--font-micro); color: var(--text-4);
+}
+.home-recent-err { font-size: var(--font-micro); color: var(--warn); padding: 0 var(--space-3); }
+/* 首页卡片:统一 composer 边界 + 静息阴影;hover 抬升 ≤2px */
+.home .card {
+  border-color: var(--composer-border);
+  box-shadow: var(--shadow-card);
+}
+.home .card:hover {
+  border-color: var(--composer-border);
+  box-shadow: var(--shadow-card-h);
+  transform: translateY(-2px);
+}
 @media (max-width: 560px) {
-  .greeting { margin-top: calc(var(--space-3) * 1.5); text-align: center; }
-  .agent-chip-text { max-width: 84px; }
-  .usage-bar-row .nm { width: 108px; }
+  .home-quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .agent-chip-text { max-width: calc(84px * var(--ui-scale)); }
+  .usage-bar-row .nm { width: calc(108px * var(--ui-scale)); }
 }
 
 /* 会话头部:标题 + 右侧模型选择 */
@@ -29,7 +138,7 @@
 .chat-title {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 340px;
+  max-width: calc(340px * var(--ui-scale));
   font-size: var(--font-h3);
   font-weight: 600;
   color: var(--text-1);
@@ -41,8 +150,8 @@
 /* 会话标题改名入口(幽灵按钮,贴标题右侧) */
 .chat-title-btn {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: calc(24px * var(--ui-scale));
+  height: calc(24px * var(--ui-scale));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -65,7 +174,7 @@
 .chat-title-edit input {
   flex: 1;
   min-width: 0;
-  height: 28px;
+  height: var(--ctl-h);
   padding: 0 var(--space-2);
   border: 1px solid var(--brand-line);
   border-radius: var(--radius-s);
@@ -78,8 +187,8 @@
 }
 .chat-title-edit button {
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: calc(26px * var(--ui-scale));
+  height: calc(26px * var(--ui-scale));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -92,28 +201,33 @@
 .chat-title-edit button:hover { background: var(--bg-hover); color: var(--text-1); }
 /* 会话头部:记忆面板展开/收起开关(样式统一在 chat.css) */
 
-/* 极窄窗:会话头部让位,避免标题+模型+按钮溢出 */
+/* 极窄窗:会话头部让位,避免标题+按钮溢出 */
 @media (max-width: 700px) {
   .chat-head { gap: var(--space-2); }
-  .model-switch { min-width: 0; padding: 8px 8px; }
-  .model-switch .tag { display: none; }
 }
 /* 窄窗(<480px):页头换行、隐藏次要提示,列表卡片紧凑 */
 @media (max-width: 480px) {
   .pg-main-head { flex-wrap: wrap; row-gap: 0; }
   .pg-main-head .topic { width: 100%; }
-  .pg-hint { width: 100%; margin-top: 4px; }
+  .pg-hint { width: 100%; margin-top: var(--space-1); }
   .rp-hist-list { padding: var(--space-2) var(--pad-x); }
   .rp-hist-item { padding: var(--space-2) var(--space-3); gap: var(--space-2); }
 }
-/* 极窄窗(<420px):模型切换器缩成状态点+箭头,会话头部按钮更小 */
+/* 极窄窗(<420px):会话头部按钮更小 */
 @media (max-width: 420px) {
-  .chat-head { height: 42px; padding: 0 var(--space-2); gap: var(--space-1); }
-  .model-switch { padding: 4px 8px; font-size: 0 !important; }
-  .model-switch .stat-dot { display: inline-block; }
-  .model-switch svg { font-size: var(--font-sub); color: var(--text-3); }
-  .chat-panel-toggle { width: 26px; height: 26px; }
-  .chat-title-btn { width: 22px; height: 22px; }
+  .chat-head {
+    height: calc(42px * var(--ui-scale));
+    padding: 0 var(--space-2);
+    gap: var(--space-1);
+  }
+  .chat-panel-toggle {
+    width: calc(26px * var(--ui-scale));
+    height: calc(26px * var(--ui-scale));
+  }
+  .chat-title-btn {
+    width: calc(22px * var(--ui-scale));
+    height: calc(22px * var(--ui-scale));
+  }
   .pg-hint { display: none; }
 }
 

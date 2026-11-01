@@ -3,7 +3,7 @@ import { create } from 'zustand';
 const LS_THEME = 'metaagent.theme';
 
 /** 预制主题 key。 */
-export type ThemeKey = 'default' | 'haze' | 'midnight' | 'pine' | 'sunset' | 'sakura';
+export type ThemeKey = 'default' | 'haze' | 'midnight' | 'pine' | 'sunset' | 'sakura' | 'obsidian';
 
 /** 主题元信息（设置页色卡展示用）。 */
 export interface ThemeMeta {
@@ -18,6 +18,7 @@ export const THEMES: ThemeMeta[] = [
   { key: 'default', label: '默认纯白', swatch: '#FFFFFF' },
   { key: 'haze', label: '雾霾蓝', swatch: '#F4F6FA' },
   { key: 'midnight', label: '深夜蓝', swatch: '#1E222C' },
+  { key: 'obsidian', label: '曜石黑', swatch: '#0F0F12' },
   { key: 'pine', label: '松烟绿', swatch: '#F1F4F1' },
   { key: 'sunset', label: '暖橙日落', swatch: '#FBF6EF' },
   { key: 'sakura', label: '樱花粉', swatch: '#FBF5F8' },

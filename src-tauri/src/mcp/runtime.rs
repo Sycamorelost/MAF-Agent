@@ -21,10 +21,19 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::process::Command;
 use tokio::sync::Mutex;
+use tokio::time::{Duration, timeout};
 
 /// 单条 MCP 文本结果上限与总预算(字符数),防止一次工具调用撑爆上下文。
 const MAX_TOOL_TEXT_CHARS: usize = 32_000;
 const MAX_TOOL_TOTAL_CHARS: usize = 64_000;
+
+/// `tools/list` 单次超时上限:stdio server 本地应答,10s 已非常宽松;
+/// 没有这个上限时,一个无响应的 server 会让整条工具链(以及对话)永久等待。
+const LIST_TOOLS_TIMEOUT_SECS: u64 = 10;
+
+/// 工具调用上限:directory_tree 扫大目录、memory 重建图谱都可能超过 30s;
+/// 仍保留上限防 server 死锁永久占住会话。
+const CALL_TOOL_TIMEOUT_SECS: u64 = 120;
 
 /// 工具描述(返回给前端或 ChatStream 的轻量结构)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,12 +63,17 @@ pub struct McpToolResult {
 #[derive(Default, Clone)]
 pub struct McpRuntime {
     handles: Arc<Mutex<HashMap<String, McpHandle>>>,
+    /// 正在启动中的 server 名。启动过程(npx 首次下载)最长 120s,
+    /// 期间不能持有 `handles` 锁,否则会把所有 list_tools / call_tool 一起卡住。
+    starting: Arc<Mutex<std::collections::HashSet<String>>>,
 }
 
 /// 已启动的 MCP server handle。`S` 类型就是 `.serve()` 返回的第二个类型参数。
 #[allow(dead_code)] // started_at 预留给 Phase 5d 设置页展示状态
 struct McpHandle {
-    runtime: rmcp::service::RunningService<rmcp::RoleClient, ClientConfig>,
+    /// 用 Arc 共享:RPC 时只克隆指针、立刻释放 `handles` 锁,
+    /// 避免持锁跨 await(一个 server 无响应会拖死整层 MCP)。
+    runtime: Arc<rmcp::service::RunningService<rmcp::RoleClient, ClientConfig>>,
     started_at: chrono::DateTime<chrono::Local>,
 }
 
@@ -71,6 +85,10 @@ impl McpRuntime {
 
     /// 启动一个 server。已在运行的 server 不会被 kill+respawn(幂等)。
     /// 探活失败才清理 stale handle 后重新 spawn。
+    ///
+    /// 关键约束:**绝不在启动(最长 120s)期间持有 `handles` 锁** ——
+    /// 否则启动 npx server 的同时,任何对话的 list_tools/call_tool 都会被阻塞,
+    /// 表现为「已显示正在思考但一直没有反应」。
     pub async fn start_server(
         &self,
         name: &str,
@@ -78,27 +96,48 @@ impl McpRuntime {
         args: &[String],
         env: &[(String, String)],
     ) -> Result<(), String> {
-        // --- 第一段:幂等检查 ---
-        // 先只检查 key 是否存在,不持锁做 RPC 探活(RunningService 是 Send,peer() 不是 &self)
-        {
-            let exists = self.handles.lock().await.contains_key(name);
-            if exists {
-                // 探活:list_tools 成功说明健康,幂等跳过
-                if let Ok(()) = self.peek_alive(name).await {
-                    log::debug!("[MCP] server `{name}` 已在运行,跳过启动");
-                    return Ok(());
-                }
-                // stale:清理
-                let mut lock = self.handles.lock().await;
-                if let Some(old) = lock.remove(name) {
-                    drop(old);
-                    log::info!("[MCP] server `{name}` 连接已断,清理旧进程后重启");
-                }
+        // --- 第一段:幂等检查(不持锁做 RPC 探活) ---
+        if self.handles.lock().await.contains_key(name) {
+            // 探活:list_tools 成功说明健康,幂等跳过
+            if self.peek_alive(name).await.is_ok() {
+                log::debug!("[MCP] server `{name}` 已在运行,跳过启动");
+                return Ok(());
+            }
+            // stale:清理
+            let mut lock = self.handles.lock().await;
+            if let Some(old) = lock.remove(name) {
+                drop(old);
+                log::info!("[MCP] server `{name}` 连接已断,清理旧进程后重启");
             }
         }
 
-        let mut lock = self.handles.lock().await;
+        // --- 第二段:同一 server 的并发启动串行化(等待上限 ~125s) ---
+        // 不持 handles 锁,只用一个轻量标记集合,避免重复 spawn 出两个子进程。
+        for _ in 0..625 {
+            if !self.starting.lock().await.contains(name) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        // 等待期间可能已被其他任务成功启动
+        if self.handles.lock().await.contains_key(name) {
+            return Ok(());
+        }
+        self.starting.lock().await.insert(name.to_string());
 
+        let res = self.spawn_handle(name, command, args, env).await;
+        self.starting.lock().await.remove(name);
+        res
+    }
+
+    /// 真正 spawn 子进程并握手(不持任何全局锁)。
+    async fn spawn_handle(
+        &self,
+        name: &str,
+        command: &str,
+        args: &[String],
+        env: &[(String, String)],
+    ) -> Result<(), String> {
         let client_info = ClientConfig::new(
             ClientCapabilities::default(),
             Implementation::from_build_env(),
@@ -112,17 +151,16 @@ impl McpRuntime {
         let transport =
             TokioChildProcess::new(cmd).map_err(|e| format!("启动子进程 `{command}` 失败: {e}"))?;
 
-        // npx 首次运行要下载 npm 包,可能较慢;加超时避免一直卡住(持锁期间其他命令会阻塞)
-        use tokio::time::{Duration, timeout};
+        // npx 首次运行要下载 npm 包,可能较慢;加超时避免一直卡住
         let runtime = timeout(Duration::from_secs(120), client_info.serve(transport))
             .await
             .map_err(|_| format!("启动 `{name}` 超时(120s):npx 首次下载较慢或网络不可达"))?
             .map_err(|e| format!("serve `{name}` 失败: {e}"))?;
 
-        lock.insert(
+        self.handles.lock().await.insert(
             name.to_string(),
             McpHandle {
-                runtime,
+                runtime: Arc::new(runtime),
                 started_at: chrono::Local::now(),
             },
         );
@@ -134,7 +172,6 @@ impl McpRuntime {
     /// 探活:对已持有的 handle 做一次轻量 RPC,成功即认为健康;超时 5s 保护,
     /// 避免 server 进程挂住时无限阻塞其他 MCP 操作。
     async fn peek_alive(&self, name: &str) -> Result<(), String> {
-        use tokio::time::{Duration, timeout};
         timeout(Duration::from_secs(5), self.list_tools(name))
             .await
             .map_err(|_| format!("probe `{name}` 超时(5s,进程可能已挂)"))?
@@ -213,7 +250,7 @@ impl McpRuntime {
         lock.insert(
             name.to_string(),
             McpHandle {
-                runtime,
+                runtime: Arc::new(runtime),
                 started_at: chrono::Local::now(),
             },
         );
@@ -223,49 +260,59 @@ impl McpRuntime {
     }
 
     /// 列出指定 server 的所有工具。
+    /// 只持锁取一份 Arc 快照,不持锁跨 await RPC —— 单个 server 无响应不能拖死整层 MCP。
     pub async fn list_tools(&self, name: &str) -> Result<Vec<McpToolInfo>, String> {
-        let handles = self.handles.clone();
-        let lock = handles.lock().await;
-        let handle = lock
-            .get(name)
-            .ok_or_else(|| format!("server `{name}` 未启动"))?;
+        let service = {
+            let lock = self.handles.lock().await;
+            lock.get(name).map(|h| h.runtime.clone())
+        }
+        .ok_or_else(|| format!("server `{name}` 未启动"))?;
 
-        let resp: ListToolsResult = handle
-            .runtime
-            .peer()
-            .list_tools(None)
-            .await
-            .map_err(|e| format!("list_tools `{name}` 失败: {e}"))?;
+        let resp: ListToolsResult = timeout(
+            Duration::from_secs(LIST_TOOLS_TIMEOUT_SECS),
+            service.peer().list_tools(None),
+        )
+        .await
+        .map_err(|_| {
+            format!(
+                "list_tools `{name}` 超时({LIST_TOOLS_TIMEOUT_SECS}s,进程可能已挂)"
+            )
+        })?
+        .map_err(|e| format!("list_tools `{name}` 失败: {e}"))?;
 
         Ok(resp.tools.into_iter().map(tool_to_info).collect())
     }
 
     /// 按工具名反查所属 server —— ChatStream 只拿到工具名,需要路由到已启动的 server。
-    /// 先收集名字列表再逐个查询,避免持锁 await(防止死锁)。
+    /// 先收集名字列表再并行查询,避免持锁 await,也避免逐个串行把超时累加。
     pub async fn find_server_for_tool(&self, tool: &str) -> Option<String> {
         let names: Vec<String> = {
             let lock = self.handles.lock().await;
             lock.keys().cloned().collect()
         };
-        for name in names {
-            if let Ok(tools) = self.list_tools(&name).await
+        if names.is_empty() {
+            return None;
+        }
+        let lists = futures::future::join_all(names.iter().map(|n| self.list_tools(n))).await;
+        for (name, res) in names.iter().zip(lists) {
+            if let Ok(tools) = res
                 && tools.iter().any(|t| t.name == tool)
             {
-                return Some(name);
+                return Some(name.clone());
             }
         }
         None
     }
 
-    /// 调用工具,30s 超时 + 审计日志。
+    /// 调用工具,上限 120s + 审计日志。
+    /// 同样只持锁取 Arc 快照后立即释放:长调用(以及超时)期间不能让其他 MCP 操作排队。
     pub async fn call_tool(&self, call: McpToolCall, data_dir: PathBuf) -> McpToolResult {
-        use tokio::time::{Duration, timeout};
-
-        let handles = self.handles.clone();
-        let lock = handles.lock().await;
-
-        let handle = match lock.get(&call.server_name) {
-            Some(h) => h,
+        let service = {
+            let lock = self.handles.lock().await;
+            lock.get(&call.server_name).map(|h| h.runtime.clone())
+        };
+        let service = match service {
+            Some(s) => s,
             None => {
                 return McpToolResult {
                     ok: false,
@@ -280,11 +327,9 @@ impl McpRuntime {
         let params = CallToolRequestParams::new(tool_name).with_arguments(args_obj);
 
         let before = std::time::Instant::now();
-        // 单次工具调用上限 120s:directory_tree 扫大目录、memory 重建图谱都可能超过 30s;
-        // 仍保留上限防 server 死锁永久占住会话
         let result = timeout(
-            Duration::from_secs(120),
-            handle.runtime.call_tool_once(params),
+            Duration::from_secs(CALL_TOOL_TIMEOUT_SECS),
+            service.call_tool_once(params),
         )
         .await;
 
@@ -307,7 +352,7 @@ impl McpRuntime {
             Err(_) => McpToolResult {
                 ok: false,
                 content: String::new(),
-                error: Some("30s 超时".into()),
+                error: Some(format!("调用超时({CALL_TOOL_TIMEOUT_SECS}s)")),
             },
         }
     }

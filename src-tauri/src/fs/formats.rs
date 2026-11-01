@@ -227,11 +227,12 @@ fn tags_text(xml: &str, tag: &str) -> Vec<String> {
     xml.split(&open)
         .skip(1)
         .filter_map(|seg| seg.split(&close).next())
-        .map(unescape)
+        .map(crate::fs::html_core::unescape)
         .collect()
 }
 
 /// 简单去标签:丢弃 `<...>`,压缩空白。
+/// 实体解码与整段丢弃规则复用 `fs::html_core`(与 `websearch` 的结构化转换同源)。
 pub(crate) fn strip_tags(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut in_tag = false;
@@ -245,13 +246,12 @@ pub(crate) fn strip_tags(html: &str) -> String {
             // 跳过整段 script/style
             for tag in ["script", "style"] {
                 let open = format!("<{tag}");
-                if lower[i..].starts_with(&open) {
-                    let close = format!("</{tag}>");
-                    if let Some(end) = lower[i..].find(&close) {
-                        i += end + close.len();
-                        in_script = true;
-                        break;
-                    }
+                if lower[i..].starts_with(&open)
+                    && let Some(next) = crate::fs::html_core::skip_block(&lower, i, tag)
+                {
+                    i = next;
+                    in_script = true;
+                    break;
                 }
             }
             if in_script {
@@ -273,16 +273,7 @@ pub(crate) fn strip_tags(html: &str) -> String {
         i += c.len_utf8();
     }
     let collapsed = out.split_whitespace().collect::<Vec<_>>().join(" ");
-    unescape(&collapsed)
-}
-
-fn unescape(s: &str) -> String {
-    s.replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&nbsp;", " ")
+    crate::fs::html_core::unescape(&collapsed)
 }
 
 #[cfg(test)]

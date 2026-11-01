@@ -79,6 +79,15 @@ export function ToolCapabilityCard({
               : '总开关关闭,server 工具暂不下发'}
           </span>
         </div>
+        {/* P14:外部 server 结果截断说明(本地 fs_* 不设上限) */}
+        <div className="mcp-cap-row">
+          <span className="mcp-cap-name">外部结果上限</span>
+          <b className="mcp-cap-val">32k / 64k 字符</b>
+          <span className="mcp-cap-desc">
+            第三方 MCP Server 单条结果最多 3.2 万字符、单次调用合计 6.4 万字符,超出部分截断;
+            本地 fs_* 文件工具不受此限(可分页读取 / 分批写入)
+          </span>
+        </div>
       </div>
 
       <div className="mcp-time-hint">

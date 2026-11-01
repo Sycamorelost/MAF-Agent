@@ -8,6 +8,7 @@ import { ContextMenu, type MenuItem } from './ContextMenu';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { cloneSession, renameSession } from '../lib/ipc/session';
+import { sessionPath } from '../lib/workbench';
 import type { SessionRow } from '../lib/ipc';
 
 /** 会话按最近更新时间分组(今天 / 昨天 / 更早),对齐模板 01 的分组侧栏。 */
@@ -37,7 +38,8 @@ function groupSessions(sessions: SessionRow[]) {
 /**
  * 会话历史抽屉(简洁模式):
  * 不占布局列,由标题栏玻璃 pill 开关,固定在左上角下方;
- * 打开后持久保持(挤出式:主区自动让位),点 pill / ✕ / Esc 关闭。
+ * 打开后跨页面持久保持(挤出式:主区自动让位),仅在再次点 pill / ✕ / Esc 时关闭;
+ * 选中会话只做导航,不自动收起抽屉。
  */
 export default function Sidebar() {
   const { sessions } = useSessionsStore();
@@ -104,10 +106,7 @@ export default function Sidebar() {
                   key={s.id}
                   className={`side-item ${s.id === activeId ? 'on' : ''}`}
                   onClick={() => {
-                    if (editingId !== s.id) {
-                      nav(`/chat/${s.id}`);
-                      setSidebarOpen(false);
-                    }
+                    if (editingId !== s.id) nav(sessionPath(s.id));
                   }}
                   onDoubleClick={(e) => {
                     e.stopPropagation();

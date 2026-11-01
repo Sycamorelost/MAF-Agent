@@ -4,6 +4,7 @@ import MemPanel from '../components/MemPanel';
 import AsideDrawer from '../components/AsideDrawer';
 import { IconBrain } from '../components/icons';
 import { useSessionsStore } from '../stores/sessions';
+import { sessionPath } from '../lib/workbench';
 
 /**
  * 记忆管理页(/memory):与对话页区分开的全局记忆入口。
@@ -66,7 +67,7 @@ export default function MemoryPage() {
         )}
         {selected && (
           <div className="memory-goto">
-            <button className="btn ghost" onClick={() => nav(`/chat/${selected}`)}>
+            <button className="btn ghost" onClick={() => nav(sessionPath(selected))}>
               打开该会话
             </button>
           </div>

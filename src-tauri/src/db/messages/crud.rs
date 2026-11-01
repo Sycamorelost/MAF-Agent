@@ -4,10 +4,36 @@ use rusqlite::Connection;
 
 use crate::db;
 
+use super::MessageRow;
+
+/// 按 id 读取单条消息(P12:追加后前端乐观插入,避免整页重拉)。
+pub fn get_by_id(id: i64) -> Result<Option<MessageRow>, String> {
+    let conn = db::conn().lock().map_err(|e| format!("db lock 失败: {e}"))?;
+    get_by_id_on(&conn, id)
+}
+
+/// 同 [`get_by_id`],使用调用方提供的连接(便于单测)。
+pub fn get_by_id_on(conn: &Connection, id: i64) -> Result<Option<MessageRow>, String> {
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT {} FROM messages WHERE id=?1",
+            super::SELECT_COLS
+        ))
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt
+        .query(rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
+    match rows.next().map_err(|e| e.to_string())? {
+        Some(r) => Ok(Some(super::row_to_message(r).map_err(|e| e.to_string())?)),
+        None => Ok(None),
+    }
+}
+
 /// 追加一条消息,返回 message id。attachments / sources 为 JSON 数组字符串(无则传 None)。
 /// reasoning 为思考过程文本(assistant 专用,无则传 None/空)。parent_id 自动取分支追加起点
 /// (分支头;空分支取分叉点),调用方无需关心。
-#[allow(clippy::too_many_arguments)]
+// 生产路径已改用 append_on_partial(需要 partial 标记);此包装保留给测试与轻量调用方。
+#[allow(dead_code, clippy::too_many_arguments)]
 pub fn append_on(
     conn: &Connection,
     session_id: &str,
@@ -20,6 +46,36 @@ pub fn append_on(
     reasoning: Option<&str>,
     branch_id: &str,
 ) -> Result<i64, String> {
+    append_on_partial(
+        conn,
+        session_id,
+        role,
+        content,
+        model_id,
+        tokens,
+        attachments,
+        sources,
+        reasoning,
+        branch_id,
+        false,
+    )
+}
+
+/// 同 [`append_on`],额外标记该条消息是否为「中断时保存的部分内容」(P1)。
+#[allow(clippy::too_many_arguments)]
+pub fn append_on_partial(
+    conn: &Connection,
+    session_id: &str,
+    role: &str,
+    content: &str,
+    model_id: Option<&str>,
+    tokens: i64,
+    attachments: Option<&str>,
+    sources: Option<&str>,
+    reasoning: Option<&str>,
+    branch_id: &str,
+    partial: bool,
+) -> Result<i64, String> {
     let parent_id = db::branches::tail_parent_on(conn, session_id, branch_id)?;
     let now = chrono::Local::now().to_rfc3339();
     // M-13:消息行 / sessions.updated / FTS / 自动标题同事务,
@@ -27,8 +83,8 @@ pub fn append_on(
     // unchecked_transaction:调用方持 &Connection,串行性由全局 db Mutex 保证。
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     tx.execute(
-        "INSERT INTO messages(session_id, role, content, model_id, created, tokens, attachments, sources, reasoning, parent_id, branch_id) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
-        rusqlite::params![session_id, role, content, model_id, now, tokens, attachments, sources, reasoning.unwrap_or(""), parent_id, branch_id],
+        "INSERT INTO messages(session_id, role, content, model_id, created, tokens, attachments, sources, reasoning, parent_id, branch_id, partial) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+        rusqlite::params![session_id, role, content, model_id, now, tokens, attachments, sources, reasoning.unwrap_or(""), parent_id, branch_id, partial as i64],
     )
     .map_err(|e| e.to_string())?;
     let id = tx.last_insert_rowid();
@@ -56,9 +112,9 @@ pub fn append_on(
     Ok(id)
 }
 
-/// 追加一条消息(全局连接包装)。
+/// 追加消息并标记 partial(P1:断流/报错时保存的部分内容)。
 #[allow(clippy::too_many_arguments)]
-pub fn append(
+pub fn append_partial(
     session_id: &str,
     role: &str,
     content: &str,
@@ -68,9 +124,10 @@ pub fn append(
     sources: Option<&str>,
     reasoning: Option<&str>,
     branch_id: &str,
+    partial: bool,
 ) -> Result<i64, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    append_on(
+    append_on_partial(
         &conn,
         session_id,
         role,
@@ -81,6 +138,7 @@ pub fn append(
         sources,
         reasoning,
         branch_id,
+        partial,
     )
 }
 
@@ -306,7 +364,7 @@ pub fn copy_active_branch(
     // 1. 拉源消息(按 id asc)
     let mut stmt = conn
         .prepare(
-            "SELECT role, content, model_id, tokens, attachments, sources, reasoning
+            "SELECT role, content, model_id, tokens, attachments, sources, reasoning, partial
              FROM messages
              WHERE session_id=?1 AND branch_id=?2
              ORDER BY id ASC",
@@ -322,6 +380,7 @@ pub fn copy_active_branch(
                 r.get::<_, Option<String>>(4)?,
                 r.get::<_, Option<String>>(5)?,
                 r.get::<_, String>(6)?,
+                r.get::<_, i64>(7)?,
             ))
         })
         .map_err(|e| e.to_string())?
@@ -329,13 +388,13 @@ pub fn copy_active_branch(
         .collect();
     drop(stmt);
     // 2. 逐条 INSERT 新会话消息
-    for (role, content, model_id, tokens, att, src, reason) in &origs {
+    for (role, content, model_id, tokens, att, src, reason, partial) in &origs {
         conn.execute(
             "INSERT INTO messages(session_id, role, content, model_id, tokens, attachments, sources,
-                                  parent_id, branch_id, reasoning)
-             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9)",
+                                  parent_id, branch_id, reasoning, partial)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10)",
             params![
-                to_session, role, content, model_id, tokens, att, src, to_branch, reason
+                to_session, role, content, model_id, tokens, att, src, to_branch, reason, partial
             ],
         )
         .map_err(|e| e.to_string())?;

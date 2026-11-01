@@ -20,7 +20,10 @@ function fmtTime(created: string): string {
   return m ? `${m[1]}:${m[2]}:${m[3]}` : created;
 }
 
-const WRITE_TOOLS = new Set(['fs_write_text', 'fs_write', 'fs_export_docx', 'fs_export_xlsx', 'write_file']);
+const WRITE_TOOLS = new Set([
+  'fs_write_text', 'fs_write', 'fs_edit', 'fs_write_finish',
+  'fs_export_docx', 'fs_export_xlsx', 'write_file',
+]);
 
 export function ToolStreamTab({ data }: { data: WorkbenchData }) {
   const [, setSearchParams] = useSearchParams();

@@ -99,6 +99,8 @@ export interface MessageRow {
   branch_id: string;
   /** 思考过程文本(V14;assistant 专用,无思考为空串) */
   reasoning: string;
+  /** V36(P1):断流/报错时保存的部分内容(true = 已中断,可继续) */
+  partial?: boolean;
 }
 
 /** 分支信息(F4,与后端 BranchInfo 对齐)。 */
@@ -181,6 +183,8 @@ export type StreamChunk =
       arguments?: string | null;
       /** 执行耗时(毫秒,不含审批等待;旧版本后端无此字段) */
       elapsed_ms?: number | null;
+      /** 审计日志行 id(P4:按 id 拉取结果全文;旧版本后端/未记录时为 null) */
+      log_id?: number | null;
     }
   | {
       type: 'done';

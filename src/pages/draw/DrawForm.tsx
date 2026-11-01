@@ -9,16 +9,18 @@ const SIZES = [
   { value: '1024x1792', label: '1024×1792' },
 ];
 
-/** 风格 chip:标签 + 合并进 prompt 的英文关键词。 */
+/** 风格 chip:标签 + 合并进 prompt 的英文关键词。
+ * 关键词只描述「视觉风格」,不堆 8k / masterpiece / octane 这类无增益的质量词:
+ * 后者对 FLUX / DALL·E 会被后端剥离,对 SD 也只是白占 token。 */
 export const STYLES = [
   { id: 'none', label: '无', prompt: '' },
-  { id: 'photo', label: '写实摄影', prompt: 'photorealistic, high detail, 8k' },
-  { id: 'anime', label: '动漫', prompt: 'anime style, cel shading' },
-  { id: 'watercolor', label: '水彩', prompt: 'watercolor painting, soft colors' },
-  { id: 'oil', label: '油画', prompt: 'oil painting, textured brushstrokes' },
-  { id: 'cyber', label: '赛博朋克', prompt: 'cyberpunk, neon lights, futuristic' },
-  { id: '3d', label: '3D 渲染', prompt: '3d render, octane, studio lighting' },
-  { id: 'sketch', label: '线稿', prompt: 'pencil sketch, monochrome line art' },
+  { id: 'photo', label: '写实摄影', prompt: 'photorealistic photo, natural lighting, shallow depth of field' },
+  { id: 'anime', label: '动漫', prompt: 'anime style, cel shading, clean line art' },
+  { id: 'watercolor', label: '水彩', prompt: 'watercolor painting, soft colors, paper texture' },
+  { id: 'oil', label: '油画', prompt: 'oil painting, visible brushstrokes, rich color' },
+  { id: 'cyber', label: '赛博朋克', prompt: 'cyberpunk, neon lights, futuristic city' },
+  { id: '3d', label: '3D 渲染', prompt: '3d render, soft studio lighting, clean surfaces' },
+  { id: 'sketch', label: '线稿', prompt: 'pencil sketch, monochrome line art, hatching' },
 ];
 
 interface Props {
@@ -32,6 +34,9 @@ interface Props {
   onPromptChange: (v: string) => void;
   negative: string;
   onNegativeChange: (v: string) => void;
+  /** 实时组装结果(字数 / token / 截断 / 告警);无有效输入时为 null */
+  composed: ipc.ComposedPrompt | null;
+  composedError: string | null;
   styleId: string;
   onStyleChange: (id: string) => void;
   size: string;
@@ -56,6 +61,8 @@ export default function DrawForm({
   onPromptChange,
   negative,
   onNegativeChange,
+  composed,
+  composedError,
   styleId,
   onStyleChange,
   size,
@@ -108,22 +115,51 @@ export default function DrawForm({
         </div>
 
         <div className="pg-sec">
-          <div className="pg-lab">Prompt</div>
+          <div className="pg-lab">
+            <span>Prompt</span>
+            <span className="sp" />
+            {composed && (
+              <span className={`dw-count${composed.truncated ? ' over' : ''}`}>
+                {composed.chars}/{composed.max_chars} 字符 · ≈{composed.est_tokens} token
+              </span>
+            )}
+          </div>
           <textarea
             className="pg-area"
-            rows={3}
-            placeholder="描述想要的画面,例如:黄昏时分的湖边小屋,水彩风格"
+            rows={4}
+            placeholder="主体 → 动作 → 环境 → 风格;例如:黄昏时分的湖边小屋,暖色灯光,水彩风格"
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
           />
+
+          {composed && (
+            <div className="dw-prompt-meta">
+              <span className="dw-fam">{composed.family_label}</span>
+              {composed.truncated && <span className="dw-cut">已按上限截断</span>}
+              <span className="sp" />
+              <span className="dw-hint">规则组装 · 无额外模型调用</span>
+            </div>
+          )}
+          {composed?.warnings.map((w) => (
+            <div key={w} className="dw-prompt-warn">{w}</div>
+          ))}
+          {composedError && <div className="dw-prompt-warn">{composedError}</div>}
+
+          <div className="pg-lab dw-lab-sub">Negative prompt</div>
           <textarea
             className="pg-area"
             rows={2}
-            style={{ marginTop: 'var(--space-2)' }}
-            placeholder="Negative prompt(可选):不希望出现的元素"
+            placeholder="可选:不希望出现的元素;该通道无独立 negative 参数,会以 Avoid: 文本追加"
             value={negative}
             onChange={(e) => onNegativeChange(e.target.value)}
           />
+
+          {composed && composed.prompt && (
+            <details className="dw-final">
+              <summary>最终 Prompt 预览(实际发给模型)</summary>
+              <pre>{composed.prompt}</pre>
+            </details>
+          )}
         </div>
 
         <div className="pg-sec">

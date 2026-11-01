@@ -61,13 +61,41 @@ pub async fn dispatch_tool_calls(
 
     for tc in &tool_calls {
         let tool_name = tc.function.name.clone();
-        // arguments 是 JSON 字符串;空串/半截 JSON 兜底为 {}
-        let args: Value =
-            serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| json!({}));
+        // arguments 是 JSON 字符串;空串兜底为 {}。非空但不是合法 JSON 时
+        // 通常是模型单次输出被截断(大段文件内容),此时绝不能按空参数执行,
+        // 否则只会得到一个误导性的「缺少 path 参数」。
+        let raw_args = tc.function.arguments.trim();
+        let args: Value = match serde_json::from_str::<Value>(raw_args) {
+            Ok(v) if v.is_object() => v,
+            Ok(_) => json!({}),
+            Err(_) if raw_args.is_empty() => json!({}),
+            Err(e) => {
+                all_ok = false;
+                let msg = format!(
+                    "工具 `{tool_name}` 的参数不是合法 JSON({e});通常是单次输出被截断。\
+                     请缩小单次参数,写大文件改用 fs_write_begin → fs_write_chunk(多次)→ fs_write_finish 分批写入后重试。"
+                );
+                let _ = channel.send(StreamChunk::ToolCallResult {
+                    tool_call_id: tc.id.clone(),
+                    tool_name: tool_name.clone(),
+                    server_name: "builtin".into(),
+                    content: msg.clone(),
+                    ok: false,
+                    arguments: None,
+                    elapsed_ms: None,
+                    log_id: None,
+                });
+                tool_messages.push(tool_message(&tc.id, msg));
+                continue;
+            }
+        };
 
         // 0. 内置工具(Phase 6):时间 / 白名单 shell —— 不走 MCP,但 shell 仍需审批
         if is_builtin_tool(&tool_name) {
-            let need_approval = builtin_needs_approval(&tool_name);
+            // D3:写入/执行类一律审批;只读工具若指向工作区外本机文件同样要问一次
+            let write_like = builtin_needs_approval(&tool_name);
+            let forced = !write_like && reads_outside_workspace(&tool_name, &args, session_id);
+            let need_approval = write_like || forced;
             let exec_args = if need_approval {
                 match ask_approval(
                     app,
@@ -78,6 +106,7 @@ pub async fn dispatch_tool_calls(
                     &tool_name,
                     args.clone(),
                     session_id,
+                    forced,
                 )
                 .await
                 {
@@ -96,21 +125,26 @@ pub async fn dispatch_tool_calls(
                 args.clone()
             };
             // 审批通过后才真正执行(顺序不可颠倒:shell_exec 有副作用);
-            // shell_exec 的放开白名单只看全局「完全信任」,会话级 full 覆盖不解锁 shell/GUI
-            // (避免单会话静默提权系统级能力;会话覆盖只管「问不问」)。
-            let trust_shell =
-                crate::mcp::approval::load_policy(&data_dir).mode == crate::mcp::ApprovalMode::Full;
+            // P8:shell 放开白名单需要「完全信任」且持有有效的临时授权(全局或本会话),
+            // 仅有档位声明而授权已过期时按工作区档执行(白名单校验照常生效)。
+            let trust_shell = crate::mcp::approval::effective_mode(
+                &crate::mcp::approval::load_policy(&data_dir),
+                &data_dir,
+                session_id,
+            ) == crate::mcp::ApprovalMode::Full;
             let started = std::time::Instant::now();
             let (content, ok) =
                 execute_builtin(&tool_name, &exec_args, trust_shell, session_id, sub_llm).await;
             let elapsed_ms = Some(started.elapsed().as_millis() as u64);
             let arguments = args_summary(&exec_args);
+            // P4:统一记录审计日志(全文),并把行 id 回传前端供「查看完整输出」
+            let log_id = record_tool_log(session_id, &tool_name, &exec_args, &content);
             // 任务清单变更 → 通知前端刷新对应会话的 todo 面板
             if ok
                 && tool_name == "todo_write"
                 && let Some(sid) = session_id
             {
-                let _ = app.emit(&format!("session-todos-{sid}"), ());
+                crate::diagnostics::safe_emit(app, &format!("session-todos-{sid}"), ());
             }
             let _ = channel.send(StreamChunk::ToolCallResult {
                 tool_call_id: tc.id.clone(),
@@ -120,6 +154,7 @@ pub async fn dispatch_tool_calls(
                 ok,
                 arguments,
                 elapsed_ms,
+                log_id,
             });
             if !ok {
                 all_ok = false;
@@ -142,6 +177,7 @@ pub async fn dispatch_tool_calls(
                     ok: false,
                     arguments: None,
                     elapsed_ms: None,
+                    log_id: None,
                 });
                 tool_messages.push(tool_message(&tc.id, msg));
                 continue;
@@ -150,7 +186,15 @@ pub async fn dispatch_tool_calls(
 
         // 2. 审批(会话内已放行的工具直接跳过弹窗);AllowEdited 用用户改后的参数
         let exec_args = match ask_approval(
-            app, approval, capability, &data_dir, &server, &tool_name, args, session_id,
+            app,
+            approval,
+            capability,
+            &data_dir,
+            &server,
+            &tool_name,
+            args,
+            session_id,
+            false,
         )
         .await
         {
@@ -170,6 +214,7 @@ pub async fn dispatch_tool_calls(
                     ok: false,
                     arguments: None,
                     elapsed_ms: None,
+                    log_id: None,
                 });
                 tool_messages.push(tool_message(&tc.id, msg));
                 continue;
@@ -195,6 +240,7 @@ pub async fn dispatch_tool_calls(
                 ok: false,
                 arguments: None,
                 elapsed_ms: None,
+                log_id: None,
             });
             tool_messages.push(tool_message(&tc.id, msg));
             continue;
@@ -227,7 +273,8 @@ pub async fn dispatch_tool_calls(
             all_ok = false;
         }
 
-        // 5. 结果推前端(UI 展示工具卡片)
+        // 5. 结果推前端(UI 展示工具卡片);P4:外部工具同样记录全文并回传 log id
+        let log_id = record_tool_log(session_id, &tool_name, &exec_args, &content);
         let _ = channel.send(StreamChunk::ToolCallResult {
             tool_call_id: tc.id.clone(),
             tool_name: tool_name.clone(),
@@ -236,6 +283,7 @@ pub async fn dispatch_tool_calls(
             ok: result.ok,
             arguments,
             elapsed_ms,
+            log_id,
         });
 
         // 6. 回填 tool 消息
@@ -275,6 +323,13 @@ fn tool_message(tool_call_id: &str, content: String) -> ChatMessage {
 ///   2. 命中有效的能力令牌(且作用域覆盖该工具)
 ///   3. 审批档为「完全信任」(全局或会话级覆盖,D11)
 ///   4. 「工作区」档下判定为只读 / 工作区内写,或命中附加白名单
+///
+/// `forced=true` 表示必须人工确认、跳过一切自动放行(风险/白名单/能力令牌/会话常允许):
+///   - D3 工作区外读取(低风险但需确认)
+///   - P1 高危 shell 命令(完全信任档下也不交给模型自行确认)
+///
+/// 「完全信任」档位本身仍会拦截 `forced` 调用 —— 高危动作始终需要人类点击。
+#[allow(clippy::too_many_arguments)]
 async fn ask_approval(
     app: &tauri::AppHandle,
     approval: &ApprovalStore,
@@ -284,8 +339,15 @@ async fn ask_approval(
     tool: &str,
     args: Value,
     session_id: Option<&str>,
+    forced: bool,
 ) -> Option<Value> {
-    if approval.is_session_allowed(server, tool).await {
+    // P1:高危 shell 命令(格式化/删根/改注册表等)强制人工确认。
+    // `confirm` 是模型可写的工具参数,不作为人类确认依据,在此统一忽略。
+    let danger = dangerous_shell_pattern(server, tool, &args);
+    let forced = forced || danger.is_some();
+    if !forced
+        && approval.is_session_allowed(server, tool).await
+    {
         return Some(args);
     }
     let mut policy = super::approval::load_policy(data_dir);
@@ -300,10 +362,15 @@ async fn ask_approval(
             _ => super::approval::ApprovalMode::Workspace,
         };
     }
+    // P8:声明为「完全信任」但临时授权缺失/过期/会话不匹配时,实际按「工作区」档执行,
+    // 能力令牌消费条件也随之自动收缩,避免残留令牌在失效后继续免审批。
+    policy.mode = super::approval::effective_mode(&policy, data_dir, session_id);
     let risk = super::approval::assess_risk(server, tool, &args);
     // 能力令牌:已并入「完全信任」总开关 —— 仅完全信任模式下才消费令牌,
-    // 避免 full 期间签发的残留令牌在切回逐次/工作区档后继续免审批
-    if policy.mode == super::approval::ApprovalMode::Full
+    // 避免 full 期间签发的残留令牌在切回逐次/工作区档后继续免审批。
+    // forced(工作区外读取 / 高危 shell)不消费令牌:令牌不能被用来静默放行。
+    if !forced
+        && policy.mode == super::approval::ApprovalMode::Full
         && let Some(cap) = capability.consume(capability_scope(server, tool, risk))
     {
         crate::mcp::audit(
@@ -321,7 +388,7 @@ async fn ask_approval(
         );
         return Some(args);
     }
-    if !policy.requires_approval(server, tool, risk, &args) {
+    if !forced && !policy.requires_approval(server, tool, risk, &args) {
         crate::mcp::audit(
             data_dir,
             "approval_skip",
@@ -331,7 +398,20 @@ async fn ask_approval(
         );
         return Some(args);
     }
-    let (_id, req, rx) = approval.register(server, tool, args.clone()).await;
+    let (_id, mut req, rx) = approval.register(server, tool, args.clone()).await;
+    if let Some(pattern) = &danger {
+        // P1:高危 shell 必须醒目提示命中的危险片段,由用户决定是否执行
+        req.risk = super::approval::ApprovalRisk::High;
+        req.reason = format!(
+            "检测到高风险命令片段 `{pattern}`(可能导致数据丢失或系统损坏),请确认无误后再放行"
+        );
+    } else if forced {
+        // 工作区外读取:低风险工具也要把风险标成 High 并说明原因,前端弹窗才会醒目
+        req.risk = super::approval::ApprovalRisk::High;
+        req.reason = format!(
+            "工具 `{tool}` 要读取工作区外的本机文件,请确认路径无误后再放行"
+        );
+    }
     // 通知前端弹审批框;emit 失败(窗口已关)按拒绝处理,避免无审批执行
     if app.emit("mcp-approval-request", &req).is_err() {
         return None;
@@ -350,5 +430,6 @@ async fn ask_approval(
 
 // 内置工具路由(作用域映射 / 白名单 / 执行)已拆到 builtin.rs,此处仅做转发
 pub(crate) use super::builtin::{
-    builtin_needs_approval, capability_scope, execute_builtin, is_builtin_tool,
+    builtin_needs_approval, capability_scope, dangerous_shell_pattern, execute_builtin,
+    is_builtin_tool, reads_outside_workspace, record_tool_log,
 };

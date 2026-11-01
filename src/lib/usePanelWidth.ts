@@ -28,12 +28,20 @@ const VIEWPORT_RATIO = 0.45;
 /** 读取当前断点下该面板的 token 宽度(px);失败或越界时回退 def。 */
 function readCssWidth(varName: string | undefined, def: number, min: number, max: number): number {
   if (!varName) return def;
+  let probe: HTMLDivElement | null = null;
   try {
-    const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-    const n = Number.parseFloat(raw);
+    // token 值形如 calc(320px * var(--ui-scale)),parseFloat 无法解析;
+    // 用一个探针元素让浏览器把 calc 解析成实际 px。
+    probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:-9999px;top:0;visibility:hidden;height:0';
+    probe.style.width = `var(${varName})`;
+    document.body.appendChild(probe);
+    const n = probe.getBoundingClientRect().width;
     if (Number.isFinite(n) && n > 0) return Math.min(max, Math.max(min, Math.round(n)));
   } catch {
     /* 非浏览器环境(测试)等:回退默认值 */
+  } finally {
+    probe?.remove();
   }
   return def;
 }

@@ -194,7 +194,7 @@ export default function AgentPickerDialog({ currentAgentId, onSelect, onClose, s
 
   return (
     <div className="dialog-mask" onClick={onClose}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()} style={{ width: 640, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()} style={{ width: 'min(calc(640px * var(--ui-scale)), 92vw)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
         <div className="dialog-head">选择智能体</div>
         <div className="dialog-body" style={{ overflow: 'auto', flex: 1 }}>
           {applyMsg && <div className="toast" style={{ position: 'static', marginBottom: 'var(--space-2)' }}>{applyMsg}</div>}

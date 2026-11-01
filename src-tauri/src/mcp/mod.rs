@@ -11,6 +11,8 @@ pub mod http;
 pub mod runtime;
 pub mod safety;
 pub mod shell;
+pub mod time_tool;
+pub mod tool_spec;
 
 // Phase 4 骨架导出;safety 四个函数/常量 Phase 5e/6 ChatStream/shell 才真正消费
 #[allow(unused_imports)]
@@ -196,7 +198,10 @@ fn rotate_audit_if_needed(file: &Path) {
         let _ = std::fs::rename(&from, &to);
     }
     if let Err(e) = std::fs::rename(file, audit_backup_path(file, 1)) {
-        log::warn!("rotate mcp audit log failed: {e}");
+        crate::diagnostics::record_failure(
+            crate::diagnostics::KIND_AUDIT,
+            &format!("rotate failed: {e}"),
+        );
     }
 }
 
@@ -212,7 +217,10 @@ pub fn audit(data_dir: &Path, event: &str, server: &str, tool: &str, detail: &st
     if let Some(parent) = file.parent()
         && let Err(e) = std::fs::create_dir_all(parent)
     {
-        log::warn!("create audit log dir failed: {e}");
+        crate::diagnostics::record_failure(
+            crate::diagnostics::KIND_AUDIT,
+            &format!("create dir failed: {e}"),
+        );
     }
     let safe_detail = sanitize_detail(detail);
     let line = serde_json::json!({
@@ -232,7 +240,10 @@ pub fn audit(data_dir: &Path, event: &str, server: &str, tool: &str, detail: &st
             writeln!(f, "{}", line).map_err(|e| std::io::Error::other(e.to_string()))
         })
     {
-        log::warn!("write mcp audit log failed: {e}");
+        crate::diagnostics::record_failure(
+            crate::diagnostics::KIND_AUDIT,
+            &format!("write failed: {e}"),
+        );
     }
 }
 

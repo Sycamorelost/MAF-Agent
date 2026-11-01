@@ -40,8 +40,11 @@ pub async fn gui_find_elements(
 ) -> Result<Vec<ElementInfo>, String> {
     let cfg = policy::load(&data_dir_fn());
     // 设置页自检与工具执行同一总开关:仅完全信任模式可用
-    let approval = crate::mcp::approval::load_policy(&data_dir_fn());
-    if approval.mode != crate::mcp::approval::ApprovalMode::Full {
+    let dir = data_dir_fn();
+    let approval = crate::mcp::approval::load_policy(&dir);
+    // P8:设置页自检无会话上下文,因此只认「全局 + 有效全局临时授权」
+    if crate::mcp::approval::effective_mode(&approval, &dir, None) != crate::mcp::approval::ApprovalMode::Full
+    {
         return Err("GUI 自动化已并入完全信任模式:请将审批模式切为「完全信任」后自检".into());
     }
     let window = uia::find_window(hwnd).ok_or_else(|| format!("窗口 {hwnd} 不存在或不可见"))?;

@@ -195,6 +195,8 @@ impl Default for PlanPayload {
 }
 
 /// 过程事件(推前端 + 落 trail.jsonl)。
+// 流水线热路径上频繁构造,Box 大会员只会多一次堆分配;此处有意保持扁平结构。
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StudyEvent {

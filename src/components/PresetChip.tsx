@@ -2,7 +2,7 @@
 //! 点击切换本会话钉住;切换到不同档前弹 PresetDiffDialog 确认差异(D19 显式确认)。
 //! 放在通用 components(见 val.md §5.8 文件拆分),工作台与后续普通会话均可复用。
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconGauge } from './icons';
 import {
   listPresets,
@@ -24,17 +24,44 @@ export function PresetChip({ sessionId, onError }: Props) {
   const setPreset = useSessionsStore((s) => s.setPreset);
   const [info, setInfo] = useState<SessionPresetInfo | null>(null);
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(false);
+  const [presetsError, setPresetsError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [diffTarget, setDiffTarget] = useState<Preset | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    listPresets().then(setPresets).catch(() => {});
+  /** 拉取可选预设;失败时保留错误供菜单内重试(禁止静默吞掉异常)。 */
+  const loadPresets = useCallback(async () => {
+    setPresetsLoading(true);
+    setPresetsError(null);
+    try {
+      setPresets(await listPresets());
+    } catch (e) {
+      setPresetsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPresetsLoading(false);
+    }
   }, []);
 
-  // 会话切换或钉住状态变化后重拉解析结果
   useEffect(() => {
-    resolveSessionPreset(sessionId).then(setInfo).catch(() => setInfo(null));
+    void loadPresets();
+  }, [loadPresets]);
+
+  // 会话切换或钉住状态变化后重拉解析结果;失败时保留上次结果并明确反馈
+  useEffect(() => {
+    let cancelled = false;
+    resolveSessionPreset(sessionId)
+      .then((v) => {
+        if (!cancelled) setInfo(v);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        onError(`加载运行时预设失败:${e instanceof Error ? e.message : String(e)}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, session?.preset_id, session?.preset_version]);
 
   // 点击外部收起菜单
@@ -50,6 +77,13 @@ export function PresetChip({ sessionId, onError }: Props) {
   if (!info) return null;
   const current = info.preset;
   const pinned = info.pinned_id != null;
+
+  const toggleOpen = () => {
+    const next = !open;
+    // 打开时若列表为空(首次加载失败/尚未返回),重试一次,避免菜单空白无反馈
+    if (next && presets.length === 0 && !presetsLoading) void loadPresets();
+    setOpen(next);
+  };
 
   const pick = (p: Preset) => {
     setOpen(false);
@@ -85,10 +119,10 @@ export function PresetChip({ sessionId, onError }: Props) {
         type="button"
         className="preset-chip"
         title={`运行时预设:${current.description}\n来源:${PRESET_SOURCE_LABEL[info.source] ?? info.source}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
       >
         <IconGauge size={12} />
-        {current.name}
+        <span className="ctl-chip-text">{current.name}</span>
         {pinned && <i className="perm-dot" />}
       </button>
       {open && (
@@ -96,6 +130,14 @@ export function PresetChip({ sessionId, onError }: Props) {
           <div className="perm-menu-note">
             {current.description}(来源:{PRESET_SOURCE_LABEL[info.source] ?? info.source})
           </div>
+          {presetsLoading && presets.length === 0 && (
+            <div className="perm-menu-hint">正在加载预设…</div>
+          )}
+          {presetsError && (
+            <button type="button" className="danger" onClick={() => void loadPresets()}>
+              加载失败,点击重试
+            </button>
+          )}
           {presets.map((p) => (
             <button
               key={p.id}

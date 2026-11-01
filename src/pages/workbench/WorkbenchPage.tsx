@@ -26,12 +26,9 @@ export default function WorkbenchPage({ children }: { children?: ReactNode }) {
   /** 窄窗自动收起过一次的标记;用户手动开关后失效(尊重用户选择) */
   const autoClosed = useRef(false);
 
-  /* ≤560 极窄窗:左栏转为抽屉(标题栏「会话历史」开关),选中会话后自动收起 */
+  /* ≤560 极窄窗:左栏转为抽屉(标题栏「会话历史」开关);
+     选中会话只做导航,抽屉保持展开,仅再次点图标才收起 */
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
-  const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [id, setSidebarOpen]);
 
   const toggleInspector = useCallback(() => {
     autoClosed.current = false;
@@ -44,10 +41,10 @@ export default function WorkbenchPage({ children }: { children?: ReactNode }) {
   /** 左栏会话列表:可折叠 + 可拖宽(与检查器同套 usePanelWidth,宽度/折叠态持久化) */
   const side = usePanelWidth('wbside', 280, 200, 420, 'left', 240, false);
 
-  /* 窄窗(≤900,检查器转浮层):进入时自动收起避免遮挡中栏与输入框;
+  /* 窄窗(≤760,检查器转浮层):进入时自动收起避免遮挡中栏与输入框;
      回到宽窗时仅恢复「被自动收起」的展开态,用户手动收起的不打扰 */
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 900px)');
+    const mq = window.matchMedia('(max-width: 760px)');
     const apply = (narrow: boolean) => {
       if (narrow) {
         setInspectorOpen((open) => {

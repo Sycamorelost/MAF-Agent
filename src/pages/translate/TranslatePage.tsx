@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import * as ipc from '../../lib/ipc';
 import { useProvidersStore } from '../../stores/providers';
 import { usePanelWidth } from '../../lib/usePanelWidth';
+import { sessionPath } from '../../lib/workbench';
 import TranslateForm, { langLabel } from './TranslateForm';
 import GlossaryPanel from './GlossaryPanel';
 import { useTranslateEngine } from './useTranslateEngine';
+import { stripMarkdown } from '../../lib/stripMarkdown';
 
 /** 对话页「翻译」按钮写入 sessionStorage 的 key。 */
 const DRAFT_KEY = 'translate_draft';
+/** 从对话带入的原文默认只放前 2000 字,避免整条长回答把编辑区撑爆。 */
+const DRAFT_LIMIT = 2000;
 
 export default function TranslatePage() {
   const nav = useNavigate();
@@ -25,6 +29,10 @@ export default function TranslatePage() {
   const [running, setRunning] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 来源卡:从对话「翻译」带入时的出处(会话标题 · 角色 · 时间) */
+  const [sourceLabel, setSourceLabel] = useState<string | null>(null);
+  /** 全文超长时暂存完整原文,点「翻译全文」再换入编辑区 */
+  const [fullSource, setFullSource] = useState<string | null>(null);
 
   // D6:术语表 / 历史 / 联动
   const [glossary, setGlossary] = useState<ipc.GlossaryEntry[]>([]);
@@ -61,14 +69,24 @@ export default function TranslatePage() {
     ipc.glossaryList().then(setGlossary).catch(() => {});
   }, []);
 
-  // 对话页「翻译」联动:捡起草稿
+  // 对话页「翻译」联动:捡起草稿(去 Markdown 语法 + 超长截断,来源单独成卡)
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(DRAFT_KEY);
       if (raw) {
         sessionStorage.removeItem(DRAFT_KEY);
-        const draft = JSON.parse(raw) as { text?: string };
-        if (draft.text) setText(draft.text);
+        const draft = JSON.parse(raw) as { text?: string; source?: string };
+        if (draft.text) {
+          const clean = stripMarkdown(draft.text);
+          setSourceLabel(draft.source ?? null);
+          if (clean.length > DRAFT_LIMIT) {
+            setFullSource(clean);
+            setText(clean.slice(0, DRAFT_LIMIT));
+          } else {
+            setFullSource(null);
+            setText(clean);
+          }
+        }
       }
     } catch {
       // 忽略损坏草稿
@@ -108,6 +126,8 @@ export default function TranslatePage() {
     if (result) {
       setText(result);
       setResult('');
+      setSourceLabel(null);
+      setFullSource(null);
     }
   };
 
@@ -128,6 +148,21 @@ export default function TranslatePage() {
     setText('');
     setResult('');
     setError(null);
+    setSourceLabel(null);
+    setFullSource(null);
+  };
+
+  /** 超长带入时换入完整原文(来源卡上的「翻译全文」) */
+  const translateFull = () => {
+    if (!fullSource) return;
+    setText(fullSource);
+    setFullSource(null);
+  };
+
+  /** 手动编辑/清空原文后,来源出处不再适用,移除来源卡 */
+  const handleTextChange = (v: string) => {
+    setText(v);
+    if (sourceLabel) setSourceLabel(null);
   };
 
   // ---- 历史侧栏 ----
@@ -152,6 +187,8 @@ export default function TranslatePage() {
     setSrcLang(rec.source_lang ?? '');
     setDstLang(rec.target_lang);
     setError(null);
+    setSourceLabel(null);
+    setFullSource(null);
   };
 
   const removeHistory = async (rec: ipc.TranslationRecord) => {
@@ -184,7 +221,7 @@ export default function TranslatePage() {
     try {
       await ipc.appendMessage({ session_id: s.id, role: 'user', content });
       setPickOpen(false);
-      nav(`/chat/${s.id}`);
+      nav(sessionPath(s.id));
     } catch (e) {
       setError(String(e));
       setPickOpen(false);
@@ -223,11 +260,16 @@ export default function TranslatePage() {
         onDstLangChange={setDstLang}
         onSwap={swap}
         text={text}
-        onTextChange={setText}
+        onTextChange={handleTextChange}
         result={result}
         running={running}
         copied={copied}
         error={error}
+        sourceLabel={sourceLabel}
+        truncated={fullSource !== null}
+        fullChars={fullSource?.length ?? 0}
+        onTranslateFull={translateFull}
+        onDismissSource={() => setSourceLabel(null)}
         srcChars={srcChars}
         srcParas={srcParas}
         outChars={outChars}

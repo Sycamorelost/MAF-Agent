@@ -105,18 +105,22 @@ fn tool(name: &str, desc: &str, params: Value) -> ToolDef {
 }
 
 /// 执行入口:返回 (给模型的内容, 是否成功)。
-pub fn execute(name: &str, args: &Value) -> (String, bool) {
-    match run(name, args) {
+/// `session_id` 用于校验会话级临时授权(全局授权时传 None 亦可生效)。
+pub fn execute(name: &str, args: &Value, session_id: Option<&str>) -> (String, bool) {
+    match run(name, args, session_id) {
         Ok(s) => (s, true),
         Err(e) => (e, false),
     }
 }
 
-fn run(name: &str, args: &Value) -> Result<String, String> {
-    // 总开关:GUI 自动化已并入「完全信任」审批模式;非完全信任一律拒绝,
+fn run(name: &str, args: &Value, session_id: Option<&str>) -> Result<String, String> {
+    // 总开关:GUI 自动化已并入「完全信任」审批模式(P8:还需有效临时授权);否则一律拒绝,
     // 进程白名单 / 句柄 TTL / 字数上限等内容层约束在完全信任下仍然生效。
-    let approval = crate::mcp::approval::load_policy(&crate::paths::data_dir());
-    if approval.mode != crate::mcp::approval::ApprovalMode::Full {
+    let dir = crate::paths::data_dir();
+    let approval = crate::mcp::approval::load_policy(&dir);
+    if crate::mcp::approval::effective_mode(&approval, &dir, session_id)
+        != crate::mcp::approval::ApprovalMode::Full
+    {
         return Err(
             "GUI 自动化已并入完全信任模式:请在 设置 → MCP 工具 中将审批模式切为「完全信任」后使用"
                 .into(),

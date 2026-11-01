@@ -30,25 +30,23 @@ pub fn workspace_root() -> Result<PathBuf, String> {
 /// 智能工作区根 —— 如果 session 绑定了项目且项目 path 有效,返回项目路径;
 /// 否则回退全局 `workspace_root()`。MCP tool dispatch 时用这个替换硬编码 workspace_root。
 pub fn resolve_workspace_root(session_id: Option<&str>) -> Result<PathBuf, String> {
-    if let Some(sid) = session_id {
-        if let Ok(Some(session)) = crate::db::sessions::get(sid) {
-            if let Some(ref pid) = session.project_id {
-                if let Ok(Some(proj)) = crate::db::projects::get(pid) {
-                    let p = PathBuf::from(&proj.path);
-                    if p.is_dir() {
-                        // Windows UNC 清理 + canonicalize
-                        let clean = proj
-                            .path
-                            .strip_prefix(r"\\?\")
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| proj.path.clone());
-                        let canonical = PathBuf::from(&clean).canonicalize();
-                        match canonical {
-                            Ok(c) => return Ok(c),
-                            Err(_) => return Ok(PathBuf::from(&clean)),
-                        }
-                    }
-                }
+    if let Some(sid) = session_id
+        && let Ok(Some(session)) = crate::db::sessions::get(sid)
+        && let Some(ref pid) = session.project_id
+        && let Ok(Some(proj)) = crate::db::projects::get(pid)
+    {
+        let p = PathBuf::from(&proj.path);
+        if p.is_dir() {
+            // Windows UNC 清理 + canonicalize
+            let clean = proj
+                .path
+                .strip_prefix(r"\\?\")
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| proj.path.clone());
+            let canonical = PathBuf::from(&clean).canonicalize();
+            match canonical {
+                Ok(c) => return Ok(c),
+                Err(_) => return Ok(PathBuf::from(&clean)),
             }
         }
     }
@@ -160,6 +158,24 @@ pub fn rel_of(root: &Path, path: &Path) -> Result<String, String> {
         .or_else(|_| path.strip_prefix(root))
         .map_err(|_| format!("`{}` 不在工作区内", path.display()))?;
     Ok(rel.to_string_lossy().replace('\\', "/"))
+}
+
+/// 目标路径是否落在会话工作区内(D3 读取审批边界用)。
+///
+/// 只读工具不再完全免打扰:相对路径以工作区为基准,天然算在内;绝对路径(含盘符 /
+/// UNC)按规范化结果比较,落在工作区外则需用户审批。空路径 = 工作区根本身,算在内。
+/// 解析失败时保守判为「不在工作区」,交给审批兜底。
+pub fn within_workspace(session_id: Option<&str>, path: &str) -> bool {
+    if path.trim().is_empty() {
+        return true;
+    }
+    let Ok(root) = resolve_workspace_root(session_id) else {
+        return false;
+    };
+    let Ok(abs) = resolve(&root, path, false) else {
+        return false;
+    };
+    rel_of(&root, &abs).is_ok()
 }
 
 #[cfg(test)]

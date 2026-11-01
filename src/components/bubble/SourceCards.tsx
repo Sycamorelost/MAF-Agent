@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import type { SourceItem } from '../../lib/ipc';
 import { sanitizeHttpUrl } from '../../lib/url';
-import { IconBrain } from '../icons';
+import { IconBrain, IconChevronDown, IconChevronRight } from '../icons';
 
-/** 联网来源卡片列表(渲染在气泡下方)。 */
+/** 联网来源卡片列表(渲染在气泡下方)。默认折叠、小字号:来源是辅助信息,不占主体版面。 */
 export function SourceCards({
   raw,
   onSaveSources,
@@ -12,6 +12,7 @@ export function SourceCards({
   onSaveSources?: (sources: SourceItem[]) => void;
 }) {
   const [saved, setSaved] = useState(false);
+  const [open, setOpen] = useState(false);
   if (!raw) return null;
   let sources: SourceItem[] = [];
   try {
@@ -28,10 +29,19 @@ export function SourceCards({
     }
   };
   return (
-    <div className="src-cards">
+    <div className={open ? 'src-cards open' : 'src-cards'}>
       <div className="src-cards-head">
-        <span>来源 ({sources.length})</span>
-        {onSaveSources && (
+        <button
+          type="button"
+          className="src-toggle"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          title={open ? '收起来源' : '展开来源'}
+        >
+          {open ? <IconChevronDown size={11} /> : <IconChevronRight size={11} />}
+          <span>来源 ({sources.length})</span>
+        </button>
+        {open && onSaveSources && (
           <button
             type="button"
             className="src-save"
@@ -47,32 +57,33 @@ export function SourceCards({
           </button>
         )}
       </div>
-      {sources.map((s) => {
-        const safeUrl = sanitizeHttpUrl(s.url);
-        if (!safeUrl) {
+      {open &&
+        sources.map((s) => {
+          const safeUrl = sanitizeHttpUrl(s.url);
+          if (!safeUrl) {
+            return (
+              <div key={s.id} className="src-card" title="链接不安全或格式非法,已屏蔽">
+                <span className="src-id">[{s.id}]</span>
+                <span className="src-title">{s.title || '无效链接'}</span>
+                <span className="src-domain">已屏蔽</span>
+              </div>
+            );
+          }
           return (
-            <div key={s.id} className="src-card" title="链接不安全或格式非法,已屏蔽">
+            <a
+              key={s.id}
+              className="src-card"
+              href={safeUrl}
+              target="_blank"
+              rel="noreferrer"
+              title={s.snippet}
+            >
               <span className="src-id">[{s.id}]</span>
-              <span className="src-title">{s.title || '无效链接'}</span>
-              <span className="src-domain">已屏蔽</span>
-            </div>
+              <span className="src-title">{s.title || s.url}</span>
+              <span className="src-domain">{domain(safeUrl)}</span>
+            </a>
           );
-        }
-        return (
-          <a
-            key={s.id}
-            className="src-card"
-            href={safeUrl}
-            target="_blank"
-            rel="noreferrer"
-            title={s.snippet}
-          >
-            <span className="src-id">[{s.id}]</span>
-            <span className="src-title">{s.title || s.url}</span>
-            <span className="src-domain">{domain(safeUrl)}</span>
-          </a>
-        );
-      })}
+        })}
     </div>
   );
 }

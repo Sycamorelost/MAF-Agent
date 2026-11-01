@@ -43,12 +43,12 @@ export class ErrorBoundary extends Component<Props, State> {
       >
         <div
           style={{
-            maxWidth: 560,
+            maxWidth: 'calc(560px * var(--ui-scale))',
             width: '100%',
             background: 'var(--err-soft)',
             borderRadius: 'var(--radius-m)',
             padding: 'var(--space-4)',
-            fontSize: 13,
+            fontSize: 'var(--font-sub)',
             lineHeight: 1.6,
             color: 'var(--text-2)',
             wordBreak: 'break-all',

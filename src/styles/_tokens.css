@@ -70,6 +70,9 @@
   --font-caption:calc(12px * var(--ui-scale));
   --font-micro:calc(11px * var(--ui-scale));
   --font-mini: calc(10px * var(--ui-scale));
+  /* 阅读正文字号:仅用于 .md(模型输出/报告/学习/记忆等所有长文本),
+     与界面正文(--font-body)分开,保证「界面紧凑、阅读舒适」。 */
+  --font-read: calc(15px * var(--ui-scale));
 
   /* ---- 品牌 · 图标蓝 ---- */
   --brand:        #1B6CA8;
@@ -128,19 +131,28 @@
   --shadow-card-h:   0 10px 30px rgba(var(--shadow-ambient),.12),   0 2px 6px rgba(var(--shadow-ambient),.05);  /* 卡片 hover/elevated */
   --shadow-soft:     0 4px 14px  rgba(var(--shadow-ambient),.08);                                        /* 弱悬浮 */
   --shadow-inset:    inset 0 1px 0 rgba(255,255,255,.4);                                     /* 高光内嵌 */
+  /* 输入卡/表单卡统一边界:1px 浅灰线 + 双层低透明度阴影(可见的「浮起」) */
+  --composer-border: #E6E6E6;
+  --shadow-composer: 0 1px 2px rgba(var(--shadow-ambient),.06), 0 4px 14px rgba(var(--shadow-ambient),.07);
+
+  /* 输入条控件统一度量(附件/联网/思考/权限/预设/模型选择器)
+     ★ 固定高必须配 line-height:1 + nowrap,否则中文行盒会顶破固定高被截断 */
+  --ctl-h:   calc(28px * var(--ui-scale));
+  --ctl-pad: calc(10px * var(--ui-scale));
 
   /* ---- 字体栈 ---- */
   --font:  "Inter","PingFang SC","Microsoft YaHei","Segoe UI","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;
   --font-mono: "JetBrains Mono","Cascadia Code","Consolas","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",monospace;
 
-  /* ---- 布局（跨页面硬约束） ---- */
-  --mempanel-w:   320px;
-  --sidebar-w:    280px;   /* 会话抽屉宽度(窄窗降档) */
-  --aside-w:      300px;   /* 页面左栏抽屉宽度(窄窗降档) */
-  --titlebar-h:   38px;
-  /* 对话页两档内容宽度:消息列更宽(间隔减半),输入框最宽(间隔≈原 2/5) */
-  --chat-max-w:      clamp(320px, 100%, 840px);
-  --composer-max-w:  clamp(340px, 100%, 840px);
+  /* ---- 布局（跨页面硬约束；栏宽/栏高随 --ui-scale 等比,避免字大栏窄） ---- */
+  --mempanel-w:   calc(320px * var(--ui-scale));
+  --sidebar-w:    calc(280px * var(--ui-scale));   /* 会话抽屉宽度(窄窗降档) */
+  --aside-w:      calc(300px * var(--ui-scale));   /* 页面左栏抽屉宽度(窄窗降档) */
+  --titlebar-h:   calc(38px * var(--ui-scale));
+  /* 对话页内容宽度:正文 720px ≈ 15px 中文 48 字/行(40–50 舒适区);
+     输入卡与正文同轴同宽,形成一列阅读区。 */
+  --chat-max-w:      clamp(320px, 100%, calc(720px * var(--ui-scale)));
+  --composer-max-w:  clamp(340px, 100%, calc(720px * var(--ui-scale)));
 
   /* ---- 水平间距系统（v3 · 所有栏/块/版统一约束） ----
      --pad-x:         主内容栏内水平 padding（主区、记忆面板、弹窗主区）
@@ -234,12 +246,13 @@ body{
 .icon-btn.on{background:var(--brand-soft);color:var(--brand-deep)}
 .icon-btn:disabled{opacity:.4;cursor:default}
 
-/* 轻量 chip:档位 / 权限 / 筛选项 */
+/* 轻量 chip:档位 / 权限 / 筛选项(与输入条 chip 同一度量,禁止各自定高) */
 .chip{
   display:inline-flex;align-items:center;gap:var(--space-1);flex:none;
-  height:calc(26px * var(--ui-scale));padding:0 var(--space-2);border-radius:var(--radius-s);
+  height:var(--ctl-h);padding:0 var(--ctl-pad);border-radius:var(--radius-s);
   border:1px solid var(--border);background:var(--bg-surface);
-  font-size:var(--font-micro);color:var(--text-2);transition:.15s;
+  font-size:var(--font-caption);line-height:1;white-space:nowrap;
+  color:var(--text-2);transition:.15s;
 }
 button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 
@@ -315,8 +328,8 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .menu-btn:hover,.menu-btn.on{background:var(--bg-hover);color:var(--text-1)}
 .nav-pop{
   position:absolute;top:calc(100% + 6px);left:0;z-index:var(--z-pop-card);
-  min-width:168px;padding: 8px;
-  display:flex;flex-direction:column;gap: 4px;
+  min-width:calc(168px * var(--ui-scale));padding:var(--space-2);
+  display:flex;flex-direction:column;gap:var(--space-1);
   background:rgba(var(--bg-main-rgb),var(--bg-glass-alpha-2));
   backdrop-filter:blur(50px) saturate(1.8);
   -webkit-backdrop-filter:blur(50px) saturate(1.8);
@@ -326,21 +339,21 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 }
 .nav-item{
   display:flex;align-items:center;gap:var(--space-2);
-  padding: 8px 12px;border:none;background:transparent;
+  min-height:var(--ctl-h);padding:0 var(--space-3);border:none;background:transparent;
   border-radius:var(--radius-s);cursor:pointer;
-  font-size:var(--font-sub);color:var(--text-2);
+  font-size:var(--font-sub);color:var(--text-2);line-height:1.2;
   font-family:var(--font);text-align:left;transition:.15s;
 }
 .nav-item:hover{background:var(--bg-hover);color:var(--text-1)}
 .nav-item.active{background:var(--bg-active);color:var(--text-1);font-weight:600}
 .nav-item.active svg{color:var(--brand)}
-.nav-sep{height:1px;margin: 4px 8px;background:var(--border)}
+.nav-sep{height:1px;margin:var(--space-1) var(--space-2);background:var(--border)}
 
 /* 玻璃组件组(标题栏内):会话抽屉 / 全局搜索 / 新建对话 */
 .tb-pill{
-  display:flex;align-items:center;gap: 4px;
+  display:flex;align-items:center;gap:var(--space-1);
   /* 负外边距抵消标题栏 8px gap,紧靠左侧 ⋮ 菜单 */
-  margin-left:-6px;padding: 4px;
+  margin-left:calc(-6px * var(--ui-scale));padding:var(--space-1);
   background:rgba(var(--bg-main-rgb),var(--bg-glass-alpha-3));
   backdrop-filter:blur(50px) saturate(1.8);
   -webkit-backdrop-filter:blur(50px) saturate(1.8);
@@ -363,7 +376,7 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   background:rgba(var(--bg-main-rgb),var(--bg-glass-alpha));
   backdrop-filter:blur(50px) saturate(1.8);
   -webkit-backdrop-filter:blur(50px) saturate(1.8);
-  border-right:1px solid var(--border);
+  border-right:1px solid var(--composer-border);
   box-shadow:var(--shadow-card-h);
   display:flex;flex-direction:column;
   padding:var(--space-4) var(--pad-x-narrow);
@@ -405,22 +418,8 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   padding: 4px 8px;outline:none;
 }
 
-/* 顶部栏已移除:搜索/新建对话收进标题栏玻璃 pill(Topbar 组件已删除) */
-.model-switch{
-  display:flex;align-items:center;gap:var(--space-2);
-  border:none;background:transparent;
-  border-radius:var(--radius-m);
-  font-size:var(--font-body-em);cursor:pointer;
-  padding: 8px 12px;font-family:var(--font);color:var(--text-1);
-  transition:.15s;
-}
-.model-switch:hover{background:var(--bg-hover)}
-.model-switch{min-width:0}
-.model-switch .model-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.model-switch .tag{
-  font-size:var(--font-mini);font-weight:600;color:var(--text-3);
-  border:1px solid var(--border);border-radius:var(--radius-s);padding: 4px 4px;
-}
+/* 顶部栏已移除:搜索/新建对话收进标题栏玻璃 pill(Topbar 组件已删除);
+   模型选择器已从会话头迁移到输入条右端(样式见 chat.css .composer-model) */
 
 /* 主区 stage */
 .stage{flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:var(--space-10) var(--pad-x) var(--space-4);display:flex;flex-direction:column;align-items:center}
@@ -456,15 +455,17 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .card-dark{background:var(--ink);color:#fff;border-color:var(--ink)}
 .card-dark:hover{background:var(--ink-hover)}
 
-/* 输入框（Composer） */
-.composer{width:100%;max-width:820px;margin-top:auto;margin-left:auto;margin-right:auto;padding-top:var(--space-6)}
+/* 输入框（Composer）:宽度与阅读列同轴(720px),由 1px 线 + 双层阴影形成浮起感 */
+.composer{width:100%;max-width:var(--composer-max-w);margin-top:auto;margin-left:auto;margin-right:auto;padding-top:var(--space-6)}
+/* 输入卡:统一 1px 浅灰线 + 双层小阴影(会话页/首页/工作台同一 token) */
 .composer-box{
-  border:1px solid var(--border);background:var(--bg-surface);
+  border:1px solid var(--composer-border);background:var(--bg-surface);
   border-radius:var(--radius-xl);
-  box-shadow:var(--shadow-card);
-  transition:border-color .15s,box-shadow .15s;
+  box-shadow:var(--shadow-composer);
+  transition:border-color .15s, box-shadow .15s;
 }
-.composer-box:focus-within{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-soft)}
+/* 聚焦只改线色,不再叠 2px ring + 1px border 的双重描边 */
+.composer-box:focus-within{border-color:var(--brand-line);box-shadow:var(--shadow-composer)}
 .composer-box textarea{
   width:100%;border:none;outline:none;resize:none;background:transparent;
   font-family:var(--font);font-size:var(--font-body);
@@ -473,12 +474,12 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .composer-box textarea::placeholder{color:var(--text-4)}
 /* 输入框高度拖拽把手:置于外框顶部,上下拖动调整 textarea 高度 */
 .composer-resize{
-  height:8px;flex-shrink:0;cursor:ns-resize;
+  height:calc(8px * var(--ui-scale));flex-shrink:0;cursor:ns-resize;
   display:flex;align-items:center;justify-content:center;
   touch-action:none;
 }
 .composer-resize::after{
-  content:"";width:40px;height:3px;border-radius:2px;
+  content:"";width:calc(40px * var(--ui-scale));height:calc(3px * var(--ui-scale));border-radius:2px;
   background:var(--border-strong);opacity:.35;
   transition:opacity .15s,background .15s;
 }
@@ -498,13 +499,14 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .tag.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
 .tag.err{background:var(--err-soft);border-color:transparent;color:var(--err)}
 
-/* 工具胶囊小按钮 */
+/* 工具胶囊小按钮:高度/内边距统一走 chip 度量 */
 .tool-chip{
-  display:inline-flex;align-items:center;gap:var(--space-1);
+  display:inline-flex;align-items:center;gap:var(--space-1);flex:0 0 auto;
+  height:var(--ctl-h);padding:0 var(--ctl-pad);
   border:1px solid var(--border);background:var(--bg-surface);
   border-radius:var(--radius-s);
-  font-size:var(--font-micro);color:var(--text-2);
-  padding:var(--space-1) var(--space-2);cursor:pointer;font-family:var(--font);
+  font-size:var(--font-caption);color:var(--text-2);line-height:1;white-space:nowrap;
+  cursor:pointer;font-family:var(--font);
   transition:.15s;
 }
 .tool-chip:hover{background:var(--bg-hover)}
@@ -524,7 +526,7 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   border-radius:var(--radius-s);
 }
 .tut-head .ti{
-  width:18px;height:18px;background:var(--brand);color:#fff;
+  width:calc(18px * var(--ui-scale));height:calc(18px * var(--ui-scale));background:var(--brand);color:#fff;
   display:flex;align-items:center;justify-content:center;
   font-size:var(--font-mini);font-weight:700;flex-shrink:0;
   border-radius:var(--radius-s);
@@ -543,12 +545,12 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   font-family:var(--font-mono);font-size:var(--font-micro);color:var(--text-2);
   margin-top:var(--space-2);
 }
-.copyline code{flex:1;padding: 8px 8px;overflow-x:auto;white-space:nowrap}
+.copyline code{flex:1;padding:var(--space-2);overflow-x:auto;white-space:nowrap}
 .copyline button{
   border:none;border-left:1px solid var(--border);
   background:var(--bg-side);
   font-size:var(--font-micro);color:var(--brand-deep);
-  padding: 8px 8px;cursor:pointer;flex-shrink:0;font-family:var(--font);
+  padding:var(--space-2);cursor:pointer;flex-shrink:0;font-family:var(--font);
   border-radius:0 var(--radius-s) var(--radius-s) 0;
 }
 .copyline button:hover{background:var(--brand-soft)}
@@ -560,23 +562,25 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
    会话气泡 / 研究报告 / 学习规划 / 去 AI 味 / 记忆预览 / 教程卡等所有模型输出
    共用这一套字号、行高、间距与组件样式;各容器只负责宽度与底色,不再各自复制。 */
 .md{
-  font-size:var(--font-body);line-height:1.7;color:var(--text-1);
+  font-size:var(--font-read);line-height:1.7;color:var(--text-1);
   overflow-wrap:anywhere;word-break:break-word;
 }
 .md > :first-child{margin-top:0}
 .md > :last-child{margin-bottom:0}
-.md p{margin:0 0 var(--space-2)}
+.md p{margin:0 0 var(--space-3)}
 .md strong{font-weight:600;color:var(--text-1)}
 .md em{font-style:italic}
-.md ul,.md ol{padding-left:var(--space-5);margin:var(--space-1) 0 var(--space-2)}
-.md li + li{margin-top:4px}
+.md ul,.md ol{padding-left:calc(20px * var(--ui-scale));margin:var(--space-1) 0 var(--space-3)}
+.md li + li{margin-top:calc(6px * var(--ui-scale))}
 .md input[type="checkbox"]{margin-right:var(--space-1);vertical-align:-1px}
+/* 标题阶梯:与 15px 正文形成 1.33 / 1.2 / 1.07 倍层级;h4–h6 不再低于正文 */
 .md h1,.md h2,.md h3,.md h4,.md h5,.md h6{
-  margin:var(--space-3) 0 var(--space-1);font-weight:600;line-height:1.4;color:var(--text-1);
+  margin:var(--space-3) 0 calc(6px * var(--ui-scale));font-weight:600;line-height:1.4;color:var(--text-1);
 }
-.md h1{font-size:var(--font-h2)}
-.md h2{font-size:var(--font-h3)}
-.md h3,.md h4,.md h5,.md h6{font-size:var(--font-body-em)}
+.md h1{font-size:calc(20px * var(--ui-scale));margin-top:calc(20px * var(--ui-scale))}
+.md h2{font-size:calc(18px * var(--ui-scale));margin-top:calc(16px * var(--ui-scale))}
+.md h3{font-size:calc(16px * var(--ui-scale));margin-top:calc(12px * var(--ui-scale))}
+.md h4,.md h5,.md h6{font-size:calc(15px * var(--ui-scale));margin-top:calc(10px * var(--ui-scale))}
 .md blockquote{
   border-left:4px solid var(--brand);padding-left:var(--space-3);
   margin:var(--space-2) 0;color:var(--text-2);
@@ -584,10 +588,12 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .md hr{border:none;border-top:1px solid var(--border);margin:var(--space-3) 0}
 .md a{color:var(--brand)}
 .md img{max-width:100%;border-radius:var(--radius-m)}
-.md table{border-collapse:collapse;margin:var(--space-2) 0;font-size:var(--font-sub);max-width:100%}
-.md th,.md td{border:1px solid var(--border);padding:var(--space-1) var(--space-2);text-align:left;vertical-align:top}
-.md th{background:var(--bg-side);font-weight:600}
-.md code{font-family:var(--font-mono);font-size:var(--font-sub);background:rgba(0,0,0,.06);border-radius:4px;padding:4px 4px}
+/* 宽表允许横向滚动,避免收窄阅读列后被裁切 */
+.md table{border-collapse:collapse;display:block;overflow-x:auto;margin:var(--space-3) 0;font-size:var(--font-sub);max-width:100%}
+/* 去竖线:只留横向分隔,中文表格更像「列表」而非 Excel 网格 */
+.md th,.md td{border:none;border-bottom:1px solid var(--border);padding:calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));text-align:left;vertical-align:top}
+.md th{background:color-mix(in srgb,var(--bg-hover) 32%,transparent);font-weight:600}
+.md code{font-family:var(--font-mono);font-size:var(--font-sub);background:color-mix(in srgb,var(--text-1) 7%,transparent);border-radius:4px;padding:1px 5px}
 .md pre{
   margin:var(--space-2) 0;background:var(--ink);color:#D6DCE5;
   padding:var(--space-3) var(--space-4);border-radius:var(--radius-m);
@@ -616,14 +622,21 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
      面板默认宽度由 usePanelWidth 读取 --mempanel-w,token 降档即生效;
      另配合按视口比例(45%)的限宽,确保窄窗下主区不被挤到不可用。 */
 @media (max-width:1100px){
-  :root{ --mempanel-w:280px; }
+  :root{ --mempanel-w:calc(280px * var(--ui-scale)); }
 }
 @media (max-width:900px){
-  :root{ --mempanel-w:260px; --sidebar-w:240px; --aside-w:260px; }
+  :root{
+    --mempanel-w:calc(260px * var(--ui-scale));
+    --sidebar-w:calc(240px * var(--ui-scale));
+    --aside-w:calc(260px * var(--ui-scale));
+  }
   .cards{flex-direction:column;max-width:480px}
 }
 @media (max-width:560px){
-  :root{ --sidebar-w:220px; --aside-w:240px; }
+  :root{
+    --sidebar-w:calc(220px * var(--ui-scale));
+    --aside-w:calc(240px * var(--ui-scale));
+  }
   .stage{padding:var(--space-6) var(--pad-x-narrow) var(--space-3)}
   .cards{gap:var(--space-2)}
   .composer-bar{padding:var(--space-2) var(--space-3) var(--space-3)}
@@ -633,9 +646,9 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   :root{
     --pad-x:var(--space-3);
     --pad-x-narrow:var(--space-2);
-    --sidebar-w:200px;
-    --aside-w:220px;
-    --titlebar-h:32px;
+    --sidebar-w:calc(200px * var(--ui-scale));
+    --aside-w:calc(220px * var(--ui-scale));
+    --titlebar-h:calc(32px * var(--ui-scale));
     --font-h1:calc(16px * var(--ui-scale));
     --font-display:calc(19px * var(--ui-scale));
     --font-h3:calc(13px * var(--ui-scale));
@@ -643,6 +656,7 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
     --font-sub:calc(11.5px * var(--ui-scale));
     --font-caption:calc(10.5px * var(--ui-scale));
     --font-micro:calc(9.5px * var(--ui-scale));
+    --font-read:calc(13px * var(--ui-scale));
   }
   .titlebar{gap:var(--space-1)}
   .menu-btn{width:calc(28px * var(--ui-scale));height:calc(28px * var(--ui-scale))}
@@ -653,7 +667,7 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 }
 /* 宽窗:栏宽升档,避免大屏下内容仍被限制在窄列 */
 @media (min-width:1600px){
-  :root{ --mempanel-w:360px; }
+  :root{ --mempanel-w:calc(360px * var(--ui-scale)); }
   .cards{max-width:960px}
   .composer{max-width:960px}
 }
@@ -665,12 +679,12 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
     --font-hero:calc(23px * var(--ui-scale)); --font-h1:calc(17px * var(--ui-scale)); --font-display:calc(20px * var(--ui-scale)); --font-h2:calc(15px * var(--ui-scale)); --font-h3:calc(14px * var(--ui-scale));
     --font-body:calc(13px * var(--ui-scale)); --font-body-em:calc(13px * var(--ui-scale)); --font-sub:calc(12px * var(--ui-scale));
     --font-caption:calc(11px * var(--ui-scale)); --font-micro:calc(10px * var(--ui-scale));
-    --titlebar-h:34px;
+    --font-read:calc(13.5px * var(--ui-scale));
+    --titlebar-h:calc(34px * var(--ui-scale));
   }
   .btn-primary,.btn-brand{padding:var(--space-1) var(--space-3)}
   .btn-ghost{padding:var(--space-1) var(--space-2)}
   .pill{padding: 8px 12px}
-  .tool-chip{padding:4px 8px}
   .chat-head{height:40px}
 }
 @media (min-width:1600px){
@@ -679,12 +693,12 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
     --font-hero:calc(30px * var(--ui-scale)); --font-h1:calc(21px * var(--ui-scale)); --font-display:calc(26px * var(--ui-scale)); --font-h2:calc(18px * var(--ui-scale)); --font-h3:calc(16px * var(--ui-scale));
     --font-body:calc(15px * var(--ui-scale)); --font-body-em:calc(15px * var(--ui-scale)); --font-sub:calc(14px * var(--ui-scale));
     --font-caption:calc(13px * var(--ui-scale)); --font-micro:calc(12px * var(--ui-scale)); --font-mini:calc(11px * var(--ui-scale));
-    --titlebar-h:42px;
+    --font-read:calc(16px * var(--ui-scale));
+    --titlebar-h:calc(42px * var(--ui-scale));
   }
   .btn-primary,.btn-brand{padding:var(--space-3) var(--space-5)}
   .btn-ghost{padding:var(--space-2) var(--space-3)}
   .pill{padding: 12px 20px}
-  .tool-chip{padding: 8px 12px}
   .chat-head{height:52px}
 }
 
@@ -731,6 +745,8 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   --bg-active:    #353C4A;
   --border:       #2C3240;
   --border-strong:#3D4456;
+  /* 深色底上不使用 #E6E6E6(会发白边),用边框强度与表面色混合 */
+  --composer-border: color-mix(in srgb, var(--border-strong) 55%, var(--bg-surface));
   --text-1:       #E5E8EF;
   --text-2:       #9BA3B4;
   --text-3:       #6B7280;
@@ -792,6 +808,36 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   --ink:          #141416;
   --ink-hover:    #222226;
   --shadow-ambient: 60,45,30;
+}
+
+/* 主题 7：曜石黑 obsidian —— 纯黑编译器底色，高对比低眩光（深色 IDE 观感） */
+:root[data-theme="obsidian"]{
+  --bg-frame:     #08080A;
+  --bg-main:      #0F0F12;    /* 编辑器主底 */
+  --bg-main-rgb:  15,15,18;
+  --bg-surface:   #17171C;    /* 卡片/输入框/composer */
+  --bg-surface-rgb: 23,23,28;
+  --bg-side:      #0B0B0E;    /* 侧栏/状态栏 */
+  --bg-hover:     #1D1D24;
+  --bg-active:    #27272F;
+  --border:       #24242C;
+  --border-strong:#3A3A45;
+  --composer-border: color-mix(in srgb, var(--border-strong) 55%, var(--bg-surface));
+  --text-1:       #E8E8ED;
+  --text-2:       #A3A3AE;
+  --text-3:       #767680;
+  --text-4:       #51515B;
+  --brand:        #4C9AF5;    /* IDE 蓝 */
+  --brand-deep:   #7CB8FF;
+  --brand-soft:   #18283F;
+  --brand-line:   #2A4768;
+  --ink:          #26262E;    /* 深色按钮/代码块底（高于主底，保证可见） */
+  --ink-hover:    #32323C;
+  /* 语义色提亮，暗底上保持可读 */
+  --ok:           #3FB950;
+  --warn:         #D29922;
+  --err:          #F85149;
+  --shadow-ambient: 0,0,0;
 }
 
 /* 主题 6：樱花粉 sakura —— 柔粉浅紫，清新明亮 */

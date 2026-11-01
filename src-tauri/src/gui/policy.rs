@@ -143,9 +143,11 @@ mod tests {
 
     #[test]
     fn wildcard_and_empty_process() {
-        let mut p = GuiPolicy::default();
-        p.enabled = true;
-        p.allowed_apps = vec!["*".into()];
+        let mut p = GuiPolicy {
+            enabled: true,
+            allowed_apps: vec!["*".into()],
+            ..Default::default()
+        };
         assert!(p.ensure_app("anything.exe").is_ok());
         p.allowed_apps = vec!["notepad.exe".into()];
         assert!(p.ensure_app("").is_err(), "空进程名一律拒绝");
@@ -153,10 +155,12 @@ mod tests {
 
     #[test]
     fn normalization_clamps_limits() {
-        let mut p = GuiPolicy::default();
-        p.element_ttl_secs = 99_999;
-        p.max_elements = 0;
-        p.max_text_len = 999_999;
+        let p = GuiPolicy {
+            element_ttl_secs: 99_999,
+            max_elements: 0,
+            max_text_len: 999_999,
+            ..Default::default()
+        };
         let n = p.normalized();
         assert_eq!(n.element_ttl_secs, 3600);
         assert_eq!(n.max_elements, 1);

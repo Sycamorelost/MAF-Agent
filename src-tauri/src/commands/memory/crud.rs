@@ -232,13 +232,16 @@ pub struct AppendMessageInput {
     /// 思考过程文本(V14;assistant 消息可选,默认空串)
     #[serde(default)]
     pub reasoning: Option<String>,
+    /// V36(P1):断流/报错时保存的部分内容(true = 已中断;前端气泡显示「已中断」)
+    #[serde(default)]
+    pub partial: bool,
 }
 
 /// 追加一条消息(写入会话当前激活分支)。
 #[tauri::command]
-pub async fn append_message(input: AppendMessageInput) -> Result<i64, String> {
+pub async fn append_message(input: AppendMessageInput) -> Result<messages::MessageRow, String> {
     let branch = sessions::active_branch(&input.session_id)?;
-    messages::append(
+    let id = messages::append_partial(
         &input.session_id,
         &input.role,
         &input.content,
@@ -248,7 +251,11 @@ pub async fn append_message(input: AppendMessageInput) -> Result<i64, String> {
         input.sources.as_deref(),
         input.reasoning.as_deref(),
         &branch,
-    )
+        input.partial,
+    )?;
+    // P12:返回完整行,前端可直接乐观插入(不再整页重拉)
+    messages::get_by_id(id)?
+        .ok_or_else(|| format!("消息 {id} 写入后读取失败"))
 }
 
 /// 列出分支可见的全部消息(branch_id 缺省 = 会话当前激活分支)。

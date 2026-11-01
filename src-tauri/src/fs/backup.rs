@@ -128,10 +128,10 @@ fn list_in(base: &Path, session_id: Option<&str>) -> Vec<BackupEntry> {
             continue;
         };
         // 按 session_id 过滤:调用方指定时才过滤
-        if let Some(sid) = session_id {
-            if meta.session_id.as_deref() != Some(sid) {
-                continue;
-            }
+        if let Some(sid) = session_id
+            && meta.session_id.as_deref() != Some(sid)
+        {
+            continue;
         }
         out.push(BackupEntry {
             id: entry.file_name().to_string_lossy().to_string(),

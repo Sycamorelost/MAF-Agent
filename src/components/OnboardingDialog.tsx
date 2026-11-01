@@ -37,7 +37,7 @@ export default function OnboardingDialog({ onDone }: OnboardingDialogProps) {
 
   return (
     <div className="dialog-mask">
-      <div className="dialog" style={{ maxWidth: 640 }}>
+      <div className="dialog" style={{ maxWidth: 'calc(640px * var(--ui-scale))' }}>
         {step === 0 && (
           <>
             <div className="dialog-head">欢迎使用 myAgent</div>
@@ -78,10 +78,10 @@ export default function OnboardingDialog({ onDone }: OnboardingDialogProps) {
                 <span>自定义底层 Prompt(不勾选则使用系统内置默认)</span>
               </label>
 
-              <div className="mcp-prompt-preview" style={{ maxHeight: 360 }}>
+              <div className="mcp-prompt-preview" style={{ maxHeight: 'calc(360px * var(--ui-scale))' }}>
                 <textarea
                   className="mcp-prompt-text"
-                  style={{ width: '100%', minHeight: 320, resize: 'vertical', border: 'none', outline: 'none', background: 'transparent' }}
+                  style={{ width: '100%', minHeight: 'calc(320px * var(--ui-scale))', resize: 'vertical', border: 'none', outline: 'none', background: 'transparent' }}
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
                   disabled={!useCustom}

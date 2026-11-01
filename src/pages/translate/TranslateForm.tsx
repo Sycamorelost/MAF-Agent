@@ -8,6 +8,8 @@ import {
   IconTrash,
   IconHistory,
   IconSend,
+  IconQuote,
+  IconX,
 } from '../../components/icons';
 /** value 传给 LLM 的英文语言名;label 为界面显示。 */
 const LANGS = [
@@ -36,6 +38,13 @@ interface Props {
   running: boolean;
   copied: boolean;
   error: string | null;
+  /** 来源出处(从对话带入时:会话标题 · 角色 · 时间) */
+  sourceLabel: string | null;
+  /** 原文因超长被截断,可一键换入全文 */
+  truncated: boolean;
+  fullChars: number;
+  onTranslateFull: () => void;
+  onDismissSource: () => void;
   srcChars: number;
   srcParas: number;
   outChars: number;
@@ -68,6 +77,11 @@ export default function TranslateForm({
   running,
   copied,
   error,
+  sourceLabel,
+  truncated,
+  fullChars,
+  onTranslateFull,
+  onDismissSource,
   srcChars,
   srcParas,
   outChars,
@@ -86,6 +100,13 @@ export default function TranslateForm({
   onClosePick,
   onSendToSession,
 }: Props) {
+  /** 来源卡预览:取原文前 3 行(超长时也只显示摘录) */
+  const sourcePreview = text
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('\n');
   return (
     <>
       {/* 右:翻译主区 */}
@@ -140,6 +161,35 @@ export default function TranslateForm({
             清空
           </button>
         </div>
+        {sourceLabel && (
+          <div className="tr-source">
+            <div className="tr-source-top">
+              <IconQuote size={13} />
+              <span className="tr-source-label" title={sourceLabel}>
+                {sourceLabel}
+              </span>
+              {truncated && (
+                <button
+                  type="button"
+                  className="tr-source-more"
+                  onClick={onTranslateFull}
+                  title="换入完整原文"
+                >
+                  翻译全文 · {fullChars} 字
+                </button>
+              )}
+              <button
+                type="button"
+                className="tr-source-x"
+                onClick={onDismissSource}
+                title="移除来源"
+              >
+                <IconX size={12} />
+              </button>
+            </div>
+            {sourcePreview && <div className="tr-source-preview">{sourcePreview}</div>}
+          </div>
+        )}
         <div className="tr-body">
           <div className="pane">
             <div className="pane-head">
@@ -269,7 +319,7 @@ export default function TranslateForm({
       {/* 发送到对话:会话选择 */}
       {pickOpen && (
         <div className="dialog-mask" onClick={onClosePick}>
-          <div className="dialog" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+          <div className="dialog" style={{ width: 'min(calc(440px * var(--ui-scale)), 92vw)' }} onClick={(e) => e.stopPropagation()}>
             <div className="dialog-head">发送到对话</div>
             <div className="dialog-body">
               <p

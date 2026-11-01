@@ -6,6 +6,7 @@ import * as ipc from '../lib/ipc';
 import { useProvidersStore } from '../stores/providers';
 import { useSessionsStore } from '../stores/sessions';
 import { useUiStore } from '../stores/ui';
+import { sessionPath } from '../lib/workbench';
 import { NavMenu } from './NavMenu';
 import GlobalSearch from './GlobalSearch';
 import AgentPickerDialog from './AgentPickerDialog';
@@ -92,7 +93,7 @@ export default function Titlebar() {
     // 统一为 provider/model 格式,便于按会话回填模型
     const modelId = current ? `${current.providerId}/${current.model}` : '';
     const id = await create(title, modelId, agentId);
-    nav(`/chat/${id}`);
+    nav(sessionPath(id));
   };
 
   return (

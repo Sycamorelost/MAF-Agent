@@ -17,6 +17,7 @@ import {
 } from '../lib/ipc';
 import { useSessionsStore } from '../stores/sessions';
 import { useAttachmentInsertStore } from '../stores/attachmentInsert';
+import { sessionPath } from '../lib/workbench';
 import {
   IconAttach,
   IconChat,
@@ -198,7 +199,7 @@ export default function AttachmentsPage() {
     try {
       const meta = await insertAttachmentToSession(target.id, e.meta.path);
       enqueue(target.id, [meta]);
-      nav(`/chat/${target.id}`);
+      nav(sessionPath(target.id));
     } catch (err) {
       flash('插入失败: ' + String(err));
     }
@@ -209,7 +210,7 @@ export default function AttachmentsPage() {
     if (sess && sess.active_branch !== e.branch_id) {
       void setActiveBranch(e.session_id, e.branch_id).catch(() => {});
     }
-    nav(`/chat/${e.session_id}?msg=${e.message_id}`);
+    nav(`${sessionPath(e.session_id)}?msg=${e.message_id}`);
   };
 
   const onDelete = async (e: AttachmentEntry) => {
@@ -273,7 +274,7 @@ export default function AttachmentsPage() {
         )}
         {groups.map((g) => (
           <div key={g.sessionId} className="att-group">
-            <button className="att-group-head" onClick={() => nav(`/chat/${g.sessionId}`)} title="打开会话">
+            <button className="att-group-head" onClick={() => nav(sessionPath(g.sessionId))} title="打开会话">
               <IconChat size={14} />
               <span className="t">{g.title}</span>
               <span className="n">{g.items.length}</span>

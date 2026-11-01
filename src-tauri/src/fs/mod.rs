@@ -3,5 +3,6 @@
 pub mod backup;
 pub mod docgen;
 pub mod formats;
+pub(crate) mod html_core;
 pub mod paths;
 pub mod text;

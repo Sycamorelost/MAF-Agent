@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as ipc from '../../lib/ipc';
+import { sessionPath } from '../../lib/workbench';
 import { useProvidersStore } from '../../stores/providers';
 import DrawForm, { STYLES } from './DrawForm';
 import DrawResult, { baseName, type ShownImage } from './DrawResult';
@@ -35,6 +36,9 @@ export default function DrawPage() {
   const [histCollapsed, setHistCollapsed] = useState(() => {
     try { return localStorage.getItem(HIST_COLLAPSED_KEY) === '1'; } catch { return false; }
   });
+  /** 实时组装预览(字数 / token / 截断 / 告警) */
+  const [composed, setComposed] = useState<ipc.ComposedPrompt | null>(null);
+  const [composedError, setComposedError] = useState<string | null>(null);
 
   const activeTemplate = readyTemplates.find((t) => t.id === providerId);
   const activeStyle = STYLES.find((s) => s.id === styleId) ?? STYLES[0];
@@ -68,6 +72,40 @@ export default function DrawPage() {
     if (!providerId && current) pickProvider(current.providerId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current, providerId]);
+
+  /** Prompt 实时组装预览:防抖 250ms,规则与后端 generate_image 完全一致。 */
+  useEffect(() => {
+    if (!providerId || !model.trim() || !prompt.trim()) {
+      setComposed(null);
+      setComposedError(null);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      ipc
+        .composeDrawPrompt({
+          provider_id: providerId,
+          model: model.trim(),
+          prompt,
+          negative: negative.trim() || null,
+          style_prompt: activeStyle.prompt || null,
+        })
+        .then((c) => {
+          if (!alive) return;
+          setComposed(c);
+          setComposedError(null);
+        })
+        .catch((e) => {
+          if (!alive) return;
+          setComposed(null);
+          setComposedError(String(e));
+        });
+    }, 250);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [providerId, model, prompt, negative, activeStyle.prompt]);
 
   const canRun = !!providerId && !!model.trim() && !!prompt.trim() && !running;
 
@@ -164,7 +202,7 @@ export default function DrawPage() {
         sources: null,
       });
       setUploadTarget(null);
-      nav(`/chat/${s.id}`);
+      nav(sessionPath(s.id));
     } catch (e) {
       showToast(String(e));
     }
@@ -203,6 +241,8 @@ export default function DrawPage() {
         onPromptChange={setPrompt}
         negative={negative}
         onNegativeChange={setNegative}
+        composed={composed}
+        composedError={composedError}
         styleId={styleId}
         onStyleChange={setStyleId}
         size={size}

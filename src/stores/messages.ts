@@ -31,6 +31,8 @@ interface MessagesState {
     tokens?: number,
     sources?: string | null,
     reasoning?: string,
+    /** V36(P1):断流/报错时保存的部分内容(true = 已中断) */
+    partial?: boolean,
   ) => Promise<number>;
   /** 删除单条消息并刷新 */
   remove: (sessionId: string, id: number) => Promise<void>;
@@ -56,7 +58,23 @@ const reasoningTimers: Record<string, ReturnType<typeof setTimeout> | undefined>
 // 思考计时:首个 reasoning chunk 到首个正文 chunk / done
 const reasoningStarts: Record<string, number> = {};
 
-export const useMessagesStore = create<MessagesState>((set, get) => ({
+export const useMessagesStore = create<MessagesState>((set, get) => {
+  /** P12:把刚写入的消息乐观插入缓存;缓存尚未加载时退回整页重拉,避免丢失更早历史。 */
+  const pushRow = async (sessionId: string, row: ipc.MessageRow) => {
+    const cur = get().bySession[sessionId];
+    if (!cur) {
+      await get().load(sessionId, true);
+      return;
+    }
+    set((s) => {
+      const list = s.bySession[sessionId] ?? [];
+      // 防止与后台分页加载产生重复行
+      if (list.some((m) => m.id === row.id)) return {};
+      return { bySession: { ...s.bySession, [sessionId]: [...list, row] } };
+    });
+  };
+
+  return {
   bySession: {},
   hasMore: {},
   streaming: {},
@@ -89,7 +107,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
   },
 
   appendUser: async (sessionId, content, modelId = null, attachments = null) => {
-    const id = await ipc.appendMessage({
+    const row = await ipc.appendMessage({
       session_id: sessionId,
       role: 'user',
       content,
@@ -97,8 +115,8 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
       tokens: 0,
       attachments,
     });
-    await get().load(sessionId, true);
-    return id;
+    await pushRow(sessionId, row);
+    return row.id;
   },
 
   appendAssistant: async (
@@ -108,8 +126,9 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
     tokens = 0,
     sources = null,
     reasoning = '',
+    partial = false,
   ) => {
-    const id = await ipc.appendMessage({
+    const row = await ipc.appendMessage({
       session_id: sessionId,
       role: 'assistant',
       content,
@@ -117,9 +136,10 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
       tokens,
       sources,
       reasoning: reasoning || null,
+      partial,
     });
-    await get().load(sessionId, true);
-    return id;
+    await pushRow(sessionId, row);
+    return row.id;
   },
 
   startStreaming: (sessionId) => {
@@ -234,4 +254,5 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
     });
     return { content, reasoning };
   },
-}));
+  };
+});

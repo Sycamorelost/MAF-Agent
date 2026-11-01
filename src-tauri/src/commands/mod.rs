@@ -5,12 +5,12 @@ pub mod aiflavor;
 pub mod attachment;
 pub mod capability;
 pub mod datadir;
+pub mod diagnostics;
 pub mod doc;
 pub mod export;
 pub mod fs;
 pub mod gui;
 pub mod mcp;
-pub(crate) mod mcp_builtin_tools;
 pub mod memory;
 pub mod notes;
 pub mod provider;
@@ -111,6 +111,7 @@ macro_rules! all_commands {
             crate::commands::provider::chat::chat_stream,
             crate::commands::provider::stream::cancel_stream,
             crate::commands::provider::image::generate_image,
+            crate::commands::provider::image::compose_draw_prompt,
             crate::commands::provider::image::list_images,
             crate::commands::provider::image::read_image,
             crate::commands::provider::image::image_to_session,
@@ -156,6 +157,8 @@ macro_rules! all_commands {
             crate::commands::presets::list_presets,
             crate::commands::presets::resolve_session_preset,
             crate::commands::presets::set_session_preset,
+            // 诊断:静默失败计数(P2,只读)
+            crate::commands::diagnostics::diagnostics_failure_counts,
             // 联网搜索(P0 自 research 迁出,IPC 名不变)
             crate::commands::websearch::get_search_config,
             crate::commands::websearch::save_search_config,
@@ -234,8 +237,14 @@ macro_rules! all_commands {
             crate::commands::mcp::mcp_resolve_approval,
             crate::commands::mcp::mcp_clear_session_allowed,
             crate::commands::mcp::mcp_collect_tools,
+            // P4:工具调用记录全文(按 id 按需加载)
+            crate::commands::mcp::mcp_get_tool_log,
             crate::commands::mcp::mcp_get_approval_policy,
             crate::commands::mcp::mcp_set_approval_policy,
+            // P8:完全信任临时授权(签发 / 吊销 / 状态)
+            crate::commands::mcp::mcp_grant_full_trust,
+            crate::commands::mcp::mcp_revoke_full_trust,
+            crate::commands::mcp::mcp_full_trust_status,
             // Phase 6:白名单 shell 命令(直接 Rust,极简安全)
             crate::commands::mcp::shell_whitelist_exec,
             // P2:能力令牌(预授权,仅内存)

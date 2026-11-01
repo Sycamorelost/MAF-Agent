@@ -1,12 +1,12 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ReasoningCapability } from '../../lib/ipc';
 import { THINKING_LEVEL_LABEL, effortHint } from '../../lib/thinkingHint';
 import type { ThinkingLevel, ThinkingSelection } from '../../stores/thinking';
 import {
-  IconAttach,
   IconBrain,
   IconChevronDown,
   IconGlobe,
+  IconPlus,
   IconSend,
   IconStop,
 } from '../icons';
@@ -33,6 +33,8 @@ interface Props {
   /** 发送按钮是否可用(原文非空或有附件,且未 disabled) */
   canSend: boolean;
   onSend: () => void;
+  /** 本会话模型选择器:置于工具条右端、发送按钮之前 */
+  model?: { name: string; ready: boolean; onOpen: () => void } | null;
   /** 追加到工具条的自定义 chip(智能体 / 会话设置等) */
   children?: ReactNode;
 }
@@ -48,10 +50,37 @@ export default function ToolBar({
   onStop,
   canSend,
   onSend,
+  model,
   children,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [thinkMenu, setThinkMenu] = useState(false);
+  /**
+   * 思考强度浮层的定位:固定定位,左边缘与「思考」chip 对齐(窄窗内自动钳制在窗口内)。
+   * 这里实测 chip 的矩形,换算出浮层距窗口底部的距离、左偏移与可用最大高度,
+   * 保证窄窗/矮窗都能完整显示(放不下时内部滚动),不被窗口左缘裁掉。
+   */
+  const thinkBtnRef = useRef<HTMLButtonElement>(null);
+  const [thinkPos, setThinkPos] = useState({ bottom: 8, maxH: 240, left: 8 });
+
+  const syncThinkPos = () => {
+    const r = thinkBtnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    // 浮层底边贴在 chip 顶边上方 8px;可用高度 = 窗口顶部到浮层底边的距离
+    const bottom = Math.max(8, window.innerHeight - r.top + 8);
+    // 左边缘从 chip 左边缘起算,超出窗口时向回收,最少留 8px
+    const menuW = Math.min(300, window.innerWidth - 24);
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - menuW - 8));
+    setThinkPos({ bottom, maxH: Math.max(140, window.innerHeight - bottom - 12), left });
+  };
+
+  useEffect(() => {
+    if (!thinkMenu) return;
+    syncThinkPos();
+    window.addEventListener('resize', syncThinkPos);
+    return () => window.removeEventListener('resize', syncThinkPos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thinkMenu]);
 
   return (
     <div className="composer-bar">
@@ -59,13 +88,13 @@ export default function ToolBar({
         <>
           <button
             type="button"
-            className="tool-chip"
+            className="tool-plus"
             onClick={() => fileRef.current?.click()}
             disabled={disabled}
             title="添加附件(docx / xlsx / pdf / 图片)"
+            aria-label="添加附件"
           >
-            <IconAttach size={13} />
-            <span>附件</span>
+            <IconPlus size={15} />
           </button>
           <input
             ref={fileRef}
@@ -109,6 +138,7 @@ export default function ToolBar({
         return (
           <span className="pin-wrap">
             <button
+              ref={thinkBtnRef}
               type="button"
               className={`tool-chip ${sel.on ? 'on' : ''}`}
               onClick={() => {
@@ -116,19 +146,25 @@ export default function ToolBar({
                   if (cap.can_disable) thinking.onSelect({ ...sel, on: !sel.on });
                   return;
                 }
+                if (!thinkMenu) syncThinkPos();
                 setThinkMenu((v) => !v);
               }}
               disabled={disabled || (locked && noLevels)}
               title={chipTitle}
             >
               <IconBrain size={13} />
-              <span>思考{!noLevels && sel.on ? ` · ${THINKING_LEVEL_LABEL[sel.level]}` : ''}</span>
+              <span className="ctl-chip-text">
+                思考{!noLevels && sel.on ? ` · ${THINKING_LEVEL_LABEL[sel.level]}` : ''}
+              </span>
               {!noLevels && <IconChevronDown size={11} />}
             </button>
             {thinkMenu && !noLevels && (
               <>
                 <div className="pin-backdrop" onClick={() => setThinkMenu(false)} />
-                <div className="pin-menu think-menu">
+                <div
+                  className="pin-menu think-menu"
+                  style={{ bottom: thinkPos.bottom, left: thinkPos.left, maxHeight: thinkPos.maxH }}
+                >
                   <div className="pin-menu-title">思考强度(实际发送参数)</div>
                   {(['light', 'medium', 'high', 'ultra'] as ThinkingLevel[]).map((lv) => (
                     <button
@@ -167,6 +203,19 @@ export default function ToolBar({
       })()}
       {children}
       <span className="spacer" />
+      {model && (
+        <button
+          type="button"
+          className="composer-model"
+          onClick={model.onOpen}
+          disabled={disabled}
+          title="切换本会话使用的模型"
+        >
+          <span className={`stat-dot ${model.ready ? 'ok' : 'warn'}`} />
+          <span className="model-name">{model.name}</span>
+          <IconChevronDown size={12} />
+        </button>
+      )}
       {sending && onStop ? (
         <button type="button" className="stop-btn" onClick={onStop} title="停止">
           <IconStop size={14} />

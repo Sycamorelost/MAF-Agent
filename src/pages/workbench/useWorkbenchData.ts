@@ -13,13 +13,14 @@ import {
   type MessageRow,
 } from '../../lib/ipc';
 import {
+  artifactsFromTraces,
   collectSessionTraces,
   extractArtifacts,
-  extractTraceBlocks,
-  mergeArtifacts,
-  parseTrace,
+  mergeArtifactLists,
+  parseClosedTraces,
   type Artifact,
   type SessionTrace,
+  type Trace,
 } from '../../lib/toolTrace';
 import { useMessagesStore } from '../../stores/messages';
 
@@ -42,22 +43,48 @@ export function useWorkbenchData(sessionId: string): WorkbenchData {
   const messages = useMessagesStore((s) => s.bySession[sessionId] ?? EMPTY_MESSAGES);
   const streaming = useMessagesStore((s) => s.streaming[sessionId] ?? '');
 
-  // 工具流水:历史消息 + 流式增量(伪消息 id=-1,不可跳转)
-  const traces = useMemo<SessionTrace[]>(() => {
-    const list = collectSessionTraces(messages);
-    if (streaming) {
-      for (const raw of extractTraceBlocks(streaming)) {
-        const trace = parseTrace(raw);
-        if (trace) list.push({ messageId: -1, created: '', trace });
-      }
-    }
-    return list;
-  }, [messages, streaming]);
+  // 历史消息的工具痕迹:只在消息变化时解析一次
+  const messageTraces = useMemo(() => collectSessionTraces(messages), [messages]);
 
-  const artifacts = useMemo<Artifact[]>(
-    () => mergeArtifacts(extractArtifacts(messages), streaming),
-    [messages, streaming],
+  // P13:流式正文增量解析 —— 只处理上次之后新增的「已闭合」maf-tool 块,
+  // 避免每 50ms 对不断变长的正文做全量重扫。
+  const streamCacheRef = useRef<{ content: string; traces: Trace[] } | null>(null);
+  const streamTraces = useMemo<Trace[]>(() => {
+    if (!streaming) {
+      streamCacheRef.current = null;
+      return [];
+    }
+    const cache = streamCacheRef.current;
+    if (cache && streaming.startsWith(cache.content)) {
+      const { traces, consumed } = parseClosedTraces(streaming.slice(cache.content.length));
+      cache.traces.push(...traces);
+      cache.content = streaming.slice(0, cache.content.length + consumed);
+      return [...cache.traces];
+    }
+    // 新流 / 内容被重置:从头解析一次
+    const { traces, consumed } = parseClosedTraces(streaming);
+    streamCacheRef.current = { content: streaming.slice(0, consumed), traces };
+    return [...traces];
+  }, [streaming]);
+
+  // 工具流水:历史消息 + 流式增量(伪消息 id=-1,不可跳转)
+  const traces = useMemo<SessionTrace[]>(
+    () => [
+      ...messageTraces,
+      ...streamTraces.map((trace) => ({ messageId: -1, created: '', trace })),
+    ],
+    [messageTraces, streamTraces],
   );
+
+  // 产物:历史消息解析一次;流式部分复用已解析 trace,不再按原文重扫
+  const artifacts = useMemo<Artifact[]>(() => {
+    const base = extractArtifacts(messages);
+    if (streamTraces.length === 0) return base;
+    const stepOffset = base.length > 0
+      ? Math.max(...base.map((a) => a.step ?? 0)) + 1
+      : 1;
+    return mergeArtifactLists(base, artifactsFromTraces(streamTraces, stepOffset));
+  }, [messages, streamTraces]);
 
   const [backups, setBackups] = useState<FsBackup[]>([]);
   const [budget, setBudget] = useState<BudgetStatus | null>(null);

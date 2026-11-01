@@ -15,6 +15,7 @@ import { useChatSettings } from './useChatSettings';
 import { useChatStream } from './useChatStream';
 import { useMessageActions } from './useMessageActions';
 import { describeSendError, toErrorMessage } from './streamErrors';
+import { quoteSourceLabel, type QuoteRef } from '../../lib/quote';
 export interface ChatSendParams {
   sessionId: string | undefined;
   session: SessionRow | undefined;
@@ -29,13 +30,16 @@ export interface ChatSendParams {
   pendingImages: Record<string, string>;
   setPendingAttachments: Dispatch<SetStateAction<AttachmentMeta[]>>;
   setPendingImages: Dispatch<SetStateAction<Record<string, string>>>;
+  /** 待发送引用(完整原文,发送时作为独立上下文注入) */
+  quotes: QuoteRef[];
+  setQuotes: Dispatch<SetStateAction<QuoteRef[]>>;
   /** F4:从指定消息分叉并重载消息/分支 */
   forkAndReload: (msgId: number) => Promise<void>;
 }
 export function useChatSend({
   sessionId, session, current, agent, messages, memoryBody,
   composerText, setComposerText, pendingAttachments, pendingImages,
-  setPendingAttachments, setPendingImages, forkAndReload,
+  setPendingAttachments, setPendingImages, quotes, setQuotes, forkAndReload,
 }: ChatSendParams) {
   const { appendUser, startStreaming, endStreaming } = useMessagesStore();
   const loadMemory = useMemoryStore((s) => s.load);
@@ -125,7 +129,7 @@ export function useChatSend({
   };
   // 消息操作与来源/钉入记忆
   const {
-    onTranslate, onQuote, onEditResend, onDelete, onRegenerate, onPickRetryModel,
+    onTranslate, onEditResend, onDelete, onRegenerate, onPickRetryModel,
     onSaveSources, onPin,
   } = useMessageActions({
     sessionId, setComposerText, setPendingAttachments, setPendingImages,
@@ -160,6 +164,8 @@ export function useChatSend({
     if (!sessionId) return;
     const atts = overrideAtt?.metas ?? pendingAttachments;
     const imgs = overrideAtt?.images ?? pendingImages;
+    // 引用在发送前定格:成功后清空,失败时随输入框一起回填
+    const quoteRefs = quotes;
     const text = (overrideText ?? composerText).trim();
     if ((!text && atts.length === 0) || sending) return;
     // 会话可能已被空对话清理逻辑删除(如离开后返回),发送前校验存在性
@@ -176,6 +182,13 @@ export function useChatSend({
     // 正文/思考内容等流式 chunk 到达后才填充显示(runStream 内的 startStreaming 为幂等复位)
     startStreaming(sessionId);
     setSending(true);
+    // 输入框/附件立即清空(必须在任何 await 之前):否则只要后续准备步骤(预检索/落库/
+    // 记忆预算/工具收集)稍慢,就会出现「已经显示正在思考,但文本还卡在输入框」的错位。
+    // 发送失败时在 catch 里回填,内容不会丢失。
+    setComposerText('');
+    setPendingAttachments([]);
+    setPendingImages({});
+    setQuotes([]);
     try {
       // 1. 组装用户消息原始内容(用于 db 展示)与注入内容(用于 LLM)
       // F9:LLM 注入侧把 [@note:..]/[@memory:..] 占位替换为检索片段正文;展示侧保留原始输入
@@ -184,11 +197,17 @@ export function useChatSend({
       });
       // R4:长文档本地预检索 —— 把与本次提问最相关的若干块直接注入(块数随会话预设 top_k),
       // 不依赖「工具总开关」与「模型是否主动调 doc_search」。失败不影响发送。
-      let llmContentBase = base;
+      // 引用上下文:以独立 <quote> 块注入,不进用户原文/展示内容,避免污染输入框
+      const quoteBlock = quoteRefs.length
+        ? `\n\n【引用内容 · 共 ${quoteRefs.length} 条】\n${quoteRefs
+            .map((q) => `<quote source="${quoteSourceLabel(q)}">\n${q.text}\n</quote>`)
+            .join('\n\n')}`
+        : '';
+      let llmContentBase = base + quoteBlock;
       if (text) {
         try {
           const hit = await ipc.docPrefetch(sessionId, text);
-          if (hit) llmContentBase = `${base}\n\n${hit}`;
+          if (hit) llmContentBase = `${llmContentBase}\n\n${hit}`;
         } catch {
           // 预检索失败时退回纯文档卡/全文注入
         }
@@ -215,9 +234,6 @@ export function useChatSend({
       }
       // 2. 持久化用户消息
       await appendUser(sessionId, displayContent, current?.model ?? null, attachmentsJson);
-      setComposerText('');
-      setPendingAttachments([]);
-      setPendingImages({});
       // 2.5 D3.5 记忆预算护栏:超限先压缩再发送
       await enforceMemoryBudget();
       // 3. 构建历史(system + 滑窗 + 附件注入)并流式
@@ -225,9 +241,15 @@ export function useChatSend({
     } catch (e) {
       // 会话在发送过程中被删除(如空会话清理竞态),提示用户重建
       setError(describeSendError(toErrorMessage(e)));
-      // 首页草稿直发失败:回填输入框,内容不丢失
-      if (overrideText !== undefined) setComposerText(text);
-      // 即时占位清理:此时错误必来自 runStream 之前的准备步骤(runStream 自吞错误),
+      // 发送前的准备步骤失败(runStream 自吞错误):回填输入框与附件,内容不丢失
+      // (首页草稿直发同样回填到输入框,便于用户重试)
+      setComposerText(text);
+      if (overrideAtt === undefined) {
+        setPendingAttachments(atts);
+        setPendingImages(imgs);
+        setQuotes(quoteRefs);
+      }
+      // 即时占位清理:此时错误必来自 runStream 之前的准备步骤,
       // 若流式占位仍在则收掉,避免留下永久光标
       endStreaming(sessionId);
       setSending(false);
@@ -250,7 +272,7 @@ export function useChatSend({
   return {
     sending, searching, error, setError, compressNotice, setCompressNotice, toast,
     retryTarget, setRetryTarget, thinkCap, buildSystemWith, onSend, onCancel, onTranslate,
-    onQuote, onEditResend, onDelete, onRegenerate, onPickRetryModel, onSaveSources, onPin,
+    onEditResend, onDelete, onRegenerate, onPickRetryModel, onSaveSources, onPin,
     onRecall, onToggleWebSearch,
   };
 }

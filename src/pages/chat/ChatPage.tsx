@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
+import type { VirtualizerHandle } from 'virtua';
 import { mcpClearSessionAllowed } from '../../lib/ipc/mcp';
 import StreamingBubble from '../../components/StreamingBubble';
 import Composer from '../../components/Composer';
@@ -28,11 +29,10 @@ import { useModelHandoff } from './useModelHandoff';
 import { ChatTodos } from './ChatTodos';
 import { useChatSend } from './useChatSend';
 import { useDraftHandoff } from './useDraftHandoff';
+import { buildQuote, type QuoteRef } from '../../lib/quote';
 
 /** 稳定空数组:避免 `?? []` 每次渲染生成新引用导致 MessageList memo 失效。 */
 const EMPTY_MESSAGES: MessageRow[] = [];
-/** 长会话渲染窗口(P2 性能):默认只挂载最近 N 条,更早的分页/展开按需加载,控制 DOM 体量。 */
-const RENDER_WINDOW = 120;
 
 export default function ChatPage() {
   const { id: sessionId } = useParams<{ id: string }>();
@@ -60,10 +60,25 @@ export default function ChatPage() {
   const [composerText, setComposerText] = useState('');
   const [pendingAttachments, setPendingAttachments] = useState<AttachmentMeta[]>([]);
   const [pendingImages, setPendingImages] = useState<Record<string, string>>({});
+  /** 引用条:完整原文留在 state,输入框只显示摘要;发送时作为独立上下文注入 */
+  const [quotes, setQuotes] = useState<QuoteRef[]>([]);
+  /** 引用消息(选区优先):最多保留 3 条,超出替换最早一条 */
+  const handleQuote = useCallback(
+    (content: string, meta?: { role?: string; createdAt?: string }) => {
+      const selected = typeof window !== 'undefined' ? window.getSelection()?.toString().trim() : '';
+      const text = selected && selected.length > 0 ? selected : content;
+      setQuotes((prev) => [...prev, buildQuote(text, meta?.role ?? 'assistant', meta?.createdAt)].slice(-3));
+    },
+    [],
+  );
   const [modelSwitchOpen, setModelSwitchOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<VirtualizerHandle | null>(null);
+  const listWrapRef = useRef<HTMLDivElement>(null);
+  /** P3:虚拟列表在滚动容器内的起始偏移(上方横幅/任务清单等兄弟节点占位) */
+  const [listMargin, setListMargin] = useState(0);
 
   const session = sessions.find((s) => s.id === sessionId);
   const messages = sessionId ? (bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
@@ -71,26 +86,39 @@ export default function ChatPage() {
   // ---------- D16 / val.md §5.8:工作台模式下,预设/权限 chip 落在 Composer 工具条内 ----------
   const defaultWb = useDefaultWorkbench();
   const isWork = resolveMode(session?.workbench_mode, defaultWb ?? 'chat') === 'work';
-  // ---------- P2:长会话渲染窗口(默认只渲染最近 RENDER_WINDOW 条,可手动展开全部) ----------
-  const [expandAll, setExpandAll] = useState(false);
-  useEffect(() => setExpandAll(false), [sessionId]);
-  const folded = !expandAll && messages.length > RENDER_WINDOW;
-  const visibleMessages = folded ? messages.slice(-RENDER_WINDOW) : messages;
-
   /** 前插历史标记:加载更早一页时抑制「自动滚到底部」,避免把视口甩走 */
   const prependingRef = useRef(false);
 
-  /** 加载更早一页并保持视口位置(内容前插后补偿滚动高度差) */
+  /** 加载更早一页并保持视口位置(Virtualizer shift 以列表尾部为锚点自动补偿高度差) */
   const onLoadOlder = async () => {
     if (!sessionId) return;
-    const sc = scrollRef.current;
-    const before = sc ? sc.scrollHeight : 0;
+    if (!useMessagesStore.getState().hasMore[sessionId]) return;
     prependingRef.current = true;
     await loadOlder(sessionId);
-    requestAnimationFrame(() => {
-      if (sc) sc.scrollTop += sc.scrollHeight - before;
-    });
   };
+
+  // ---------- P3:虚拟列表起始偏移测量(横幅/任务清单等上方兄弟节点高度会动态变化) ----------
+  useLayoutEffect(() => {
+    const measure = () => {
+      const wrap = listWrapRef.current;
+      const sc = scrollRef.current;
+      if (!wrap || !sc) return;
+      const m = Math.max(
+        0,
+        Math.round(wrap.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop),
+      );
+      setListMargin((prev) => (Math.abs(prev - m) <= 1 ? prev : m));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    const sc = scrollRef.current;
+    if (sc) {
+      ro.observe(sc);
+      if (sc.firstElementChild) ro.observe(sc.firstElementChild);
+    }
+    return () => ro.disconnect();
+  }, [sessionId]);
   // ---------- B2:当前会话绑定的 Agent ----------
   const agent = useMemo(
     () => (session?.agent_id ? agentTemplates.find((t) => t.agent_id === session.agent_id) ?? null : null),
@@ -127,6 +155,8 @@ export default function ChatPage() {
     pendingImages,
     setPendingAttachments,
     setPendingImages,
+    quotes,
+    setQuotes,
     forkAndReload,
   });
   const activeBranch = session?.active_branch ?? 'main';
@@ -140,31 +170,46 @@ export default function ChatPage() {
   useEffect(() => {
     const target = searchParams.get('msg');
     if (!target || messages.length === 0) return;
-    const el = document.getElementById(`msg-${target}`);
-    if (!el) {
-      // 目标消息在折叠窗口外:先展开全部再定位
-      if (folded) {
-        setExpandAll(true);
-        return;
-      }
-      // 目标消息在更早分页里:继续向前加载,直到命中(或已无更早消息)
-      if (hasMore && sessionId) {
-        if (!locatingRef.current) {
-          locatingRef.current = true;
-          void loadOlder(sessionId);
+    const idx = messages.findIndex((m) => String(m.id) === target);
+    if (idx >= 0) {
+      // P3:虚拟列表只挂载视口附近消息,离屏目标用 index 定位;
+      // 定位后等待条目挂载再闪烁高亮(高度测量可能需几帧)
+      listRef.current?.scrollToIndex(idx, { align: 'center' });
+      let attempts = 0;
+      let raf = 0;
+      let timer = 0;
+      const highlight = () => {
+        const el = document.getElementById(`msg-${target}`);
+        if (!el) {
+          if (++attempts < 12) {
+            raf = requestAnimationFrame(highlight);
+          } else {
+            setSearchParams({}, { replace: true });
+          }
+          return;
         }
-        return;
+        el.scrollIntoView({ block: 'center' });
+        el.classList.add('msg-flash');
+        timer = window.setTimeout(() => el.classList.remove('msg-flash'), 1800);
+        setSearchParams({}, { replace: true });
+      };
+      raf = requestAnimationFrame(highlight);
+      return () => {
+        cancelAnimationFrame(raf);
+        if (timer) window.clearTimeout(timer);
+      };
+    }
+    // 目标消息在更早分页里:继续向前加载,直到命中(或已无更早消息)
+    if (hasMore && sessionId) {
+      if (!locatingRef.current) {
+        locatingRef.current = true;
+        void loadOlder(sessionId);
       }
-      // 目标消息不存在(已被删除):清掉定位参数
-      setSearchParams({}, { replace: true });
       return;
     }
-    el.scrollIntoView({ block: 'center' });
-    el.classList.add('msg-flash');
-    const t = window.setTimeout(() => el.classList.remove('msg-flash'), 1800);
+    // 目标消息不存在(已被删除):清掉定位参数
     setSearchParams({}, { replace: true });
-    return () => window.clearTimeout(t);
-  }, [searchParams, messages.length, setSearchParams, folded, hasMore, sessionId, loadOlder]);
+  }, [searchParams, messages, setSearchParams, hasMore, sessionId, loadOlder]);
 
   // 进入会话时加载消息和 memory
   useEffect(() => {
@@ -232,7 +277,15 @@ export default function ChatPage() {
       return;
     }
     if (msgTargetRef.current) return;
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    // P3:虚拟列表条目按需挂载,直接 scrollTo(scrollHeight) 会因高度估算偏短;
+    // 先按 index 定位到最后一条(库内部会在测量后校正),再补滚动一次以覆盖列表下方元素。
+    const n = messages.length;
+    if (n > 0) listRef.current?.scrollToIndex(n - 1, { align: 'end' });
+    const sc = scrollRef.current;
+    const raf = requestAnimationFrame(() => {
+      sc?.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(raf);
   }, [sessionId, messages.length]);
 
   // ---------- D3.1/D3.2:模型切换交接 ----------
@@ -264,12 +317,10 @@ export default function ChatPage() {
             mode={isWork ? 'work' : 'chat'}
             activeBranch={activeBranch}
             branchRefresh={branchRefresh}
-            current={current}
             memCollapsed={memPanel.collapsed}
             outlineOpen={outlineOpen}
             onToggleMemPanel={memPanel.toggleCollapse}
             onToggleOutline={() => setOutlineOpen((v) => !v)}
-            onOpenModelSwitch={() => setModelSwitchOpen(true)}
             onError={chat.setError}
           />
           <div className="chat-scroll" ref={scrollRef}>
@@ -345,29 +396,23 @@ export default function ChatPage() {
                   </button>
                 </div>
               )}
-              {folded && (
-                <div className="load-older">
-                  <button
-                    type="button"
-                    className="load-older-btn"
-                    onClick={() => setExpandAll(true)}
-                  >
-                    已折叠 {messages.length - RENDER_WINDOW} 条(性能保护),点击展开全部
-                  </button>
-                </div>
-              )}
-              <MessageList
-                messages={visibleMessages}
-                lastAssistantId={lastAssistantId}
-                onQuote={chat.onQuote}
-                onTranslate={chat.onTranslate}
-                onEditResend={chat.onEditResend}
-                onDelete={chat.onDelete}
-                onRegenerate={chat.onRegenerate}
-                onRetryModel={chat.setRetryTarget}
-                onSaveSources={chat.onSaveSources}
-                onPin={chat.onPin}
-              />
+              <div ref={listWrapRef}>
+                <MessageList
+                  messages={messages}
+                  scrollRef={scrollRef}
+                  listRef={listRef}
+                  startMargin={listMargin}
+                  lastAssistantId={lastAssistantId}
+                  onQuote={handleQuote}
+                  onTranslate={chat.onTranslate}
+                  onEditResend={chat.onEditResend}
+                  onDelete={chat.onDelete}
+                  onRegenerate={chat.onRegenerate}
+                  onRetryModel={chat.setRetryTarget}
+                  onSaveSources={chat.onSaveSources}
+                  onPin={chat.onPin}
+                />
+              </div>
               {hasStreaming && sessionId && (
                 <StreamingBubble sessionId={sessionId} modelId={current?.model ?? null} />
               )}
@@ -398,6 +443,8 @@ export default function ChatPage() {
             attachments={pendingAttachments}
             onPickFiles={handlePickFiles}
             onRemoveAttachment={handleRemoveAttachment}
+            quotes={quotes}
+            onRemoveQuote={(qid) => setQuotes((prev) => prev.filter((q) => q.id !== qid))}
             onRecall={chat.onRecall}
             webSearch={session?.web_search_enabled ?? false}
             onToggleWebSearch={chat.onToggleWebSearch}
@@ -414,6 +461,11 @@ export default function ChatPage() {
                   }
                 : null
             }
+            model={{
+              name: current ? current.model : '未配置模型',
+              ready: !!current,
+              onOpen: () => setModelSwitchOpen(true),
+            }}
           >
             {/* D16 / §5.8:工作台模式下权限 chip 落在 composer-bar 内(靠近输入区);
                 预设 chip 已在会话头(ui-design b3),此处不重复 */}

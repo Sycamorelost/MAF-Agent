@@ -15,6 +15,8 @@ export interface Trace {
   elapsedMs: number | null;
   /** 关联的目标级任务 id(发送时若有 running 任务则打上;旧块无此字段) */
   taskId: string | null;
+  /** 审计日志行 id(P4:按 id 拉取完整输出;旧块无此字段) */
+  logId: number | null;
 }
 
 /** 工具名 → 动作短语(未知工具回退工具名)。 */
@@ -22,6 +24,11 @@ const ACTION: Record<string, string> = {
   // 内置:文件
   fs_read_text: '读取文件',
   fs_write_text: '写入文件',
+  fs_write: '写入文件',
+  fs_edit: '编辑文件',
+  fs_write_begin: '开始写入文件',
+  fs_write_chunk: '追加写入',
+  fs_write_finish: '完成写入文件',
   fs_list: '列出目录',
   fs_delete: '删除文件',
   fs_move: '移动文件',
@@ -83,7 +90,7 @@ export function actionLabel(tool: string): string {
 export function parseTrace(raw: string): Trace | null {
   try {
     const v = JSON.parse(raw) as {
-      s?: unknown; t?: unknown; ok?: unknown; c?: unknown; a?: unknown; ms?: unknown; tid?: unknown;
+      s?: unknown; t?: unknown; ok?: unknown; c?: unknown; a?: unknown; ms?: unknown; tid?: unknown; lid?: unknown;
     };
     if (typeof v.t !== 'string' || !v.t) return null;
     return {
@@ -94,6 +101,7 @@ export function parseTrace(raw: string): Trace | null {
       args: typeof v.a === 'string' ? v.a : null,
       elapsedMs: typeof v.ms === 'number' && Number.isFinite(v.ms) ? v.ms : null,
       taskId: typeof v.tid === 'string' && v.tid ? v.tid : null,
+      logId: typeof v.lid === 'number' && Number.isFinite(v.lid) ? v.lid : null,
     };
   } catch {
     return null;
@@ -174,6 +182,19 @@ export function extractTraceBlocks(content: string): string[] {
   return out;
 }
 
+/** P13:只解析「已闭合」的 maf-tool 块,并返回已消费到的字符位置(供流式增量解析)。
+ *  未闭合的尾部不计入 consumed,下一次从该位置继续,避免每 50ms 全量重扫。 */
+export function parseClosedTraces(text: string): { traces: Trace[]; consumed: number } {
+  const traces: Trace[] = [];
+  let consumed = 0;
+  for (const m of text.matchAll(BLOCK_RE)) {
+    consumed = (m.index ?? 0) + m[0].length;
+    const t = parseTrace(m[1]);
+    if (t) traces.push(t);
+  }
+  return { traces, consumed };
+}
+
 /** 会话级工具痕迹条目(绑定来源消息,供工具流水跳转)。 */
 export interface SessionTrace {
   messageId: number;
@@ -209,7 +230,10 @@ export interface Artifact {
   step: number | null;
 }
 
-const WRITE_TOOLS = new Set(['fs_write_text', 'fs_write', 'fs_export_docx', 'fs_export_xlsx', 'write_file']);
+const WRITE_TOOLS = new Set([
+  'fs_write_text', 'fs_write', 'fs_edit', 'fs_write_finish',
+  'fs_export_docx', 'fs_export_xlsx', 'write_file',
+]);
 const IMAGE_EXTS = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 
 function baseName(p: string): string {
@@ -223,6 +247,17 @@ function writePathOf(args: string | null): string | null {
   try {
     const v = JSON.parse(args) as { path?: unknown };
     return typeof v.path === 'string' && v.path ? v.path : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 分批写入(fs_write_finish)的参数只有 write_id;从工具结果 JSON 的 rel 取目标路径。 */
+function resultPathOf(content: string): string | null {
+  if (!content) return null;
+  try {
+    const v = JSON.parse(content) as { rel?: unknown };
+    return typeof v.rel === 'string' && v.rel ? v.rel : null;
   } catch {
     return null;
   }
@@ -264,7 +299,7 @@ export function extractArtifacts(
       step += 1;
       const trace = parseTrace(raw);
       if (!trace || !trace.ok || !WRITE_TOOLS.has(trace.tool)) continue;
-      const p = writePathOf(trace.args);
+      const p = writePathOf(trace.args) ?? resultPathOf(trace.content);
       if (!p) continue;
       out.push({
         kind: 'file',
@@ -284,37 +319,56 @@ export function extractArtifacts(
   return out.filter((a, i) => lastIndex.get(`${a.kind}:${a.path}`) === i);
 }
 
+/** 由已解析的 trace 生成流式产物条目(stepOffset 为历史产物最大步号+1)。 */
+export function artifactsFromTraces(
+  traces: Trace[],
+  stepOffset: number,
+  messageId = -1,
+  created = '',
+): Artifact[] {
+  const extra: Artifact[] = [];
+  traces.forEach((trace, i) => {
+    if (!trace.ok || !WRITE_TOOLS.has(trace.tool)) return;
+    const p = writePathOf(trace.args) ?? resultPathOf(trace.content);
+    if (!p) return;
+    extra.push({
+      kind: 'file',
+      name: baseName(p),
+      path: p,
+      size: null,
+      messageId,
+      created,
+      isImage: IMAGE_EXTS.test(p),
+      step: stepOffset + i,
+    });
+  });
+  return extra;
+}
+
+/** 同一路径只保留最近一次产出。 */
+function dedupeArtifacts(list: Artifact[]): Artifact[] {
+  const lastIndex = new Map<string, number>();
+  list.forEach((a, i) => lastIndex.set(`${a.kind}:${a.path}`, i));
+  return list.filter((a, i) => lastIndex.get(`${a.kind}:${a.path}`) === i);
+}
+
+/** 合并两组产物(同路径取后一次);extra 为空时原样返回 base。 */
+export function mergeArtifactLists(base: Artifact[], extra: Artifact[]): Artifact[] {
+  if (extra.length === 0) return base;
+  return dedupeArtifacts([...base, ...extra]);
+}
+
 /** 运行时把流式增量里的写文件工具块合并进产物列表(与 traces 同链路,实时更新产物面板)。 */
 export function mergeArtifacts(base: Artifact[], streaming: string): Artifact[] {
   if (!streaming) return base;
   const stepOffset = base.length > 0
     ? Math.max(...base.map((a) => a.step ?? 0)) + 1
     : 1;
-  const extra: Artifact[] = [];
-  let i = 0;
-  for (const raw of extractTraceBlocks(streaming)) {
-    i += 1;
-    const trace = parseTrace(raw);
-    if (!trace || !trace.ok || !WRITE_TOOLS.has(trace.tool)) continue;
-    const p = writePathOf(trace.args);
-    if (!p) continue;
-    extra.push({
-      kind: 'file',
-      name: baseName(p),
-      path: p,
-      size: null,
-      messageId: -1,
-      created: '',
-      isImage: IMAGE_EXTS.test(p),
-      step: stepOffset + i - 1,
-    });
-  }
-  if (extra.length === 0) return base;
+  const traces = extractTraceBlocks(streaming)
+    .map(parseTrace)
+    .filter((t): t is Trace => t !== null);
   // 同一路径去重:流式里同一路径多次写取后一次
-  const merged = [...base, ...extra];
-  const lastIndex = new Map<string, number>();
-  merged.forEach((a, idx) => lastIndex.set(`${a.kind}:${a.path}`, idx));
-  return merged.filter((a, idx) => lastIndex.get(`${a.kind}:${a.path}`) === idx);
+  return mergeArtifactLists(base, artifactsFromTraces(traces, stepOffset));
 }
 
 /** 子智能体(delegate)结果解析:成功「【子智能体「X」的执行结果】\n...」,失败「子智能体「X」执行失败:...」。 */

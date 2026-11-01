@@ -97,6 +97,8 @@ fn scope_of(plan_id: Option<&str>) -> String {
 }
 
 /// 当前引擎:生产 = learningcenter/bank;测试 = target/test-tmp 下隔离目录(不污染真实数据)。
+// cfg 分裂成两段,测试分支需要显式 return(clippy 建议的省略写法在 test 构建下会类型不匹配)
+#[allow(clippy::needless_return)]
 fn fs() -> &'static BankFs {
     #[cfg(test)]
     {
@@ -212,7 +214,7 @@ pub fn list(
                 .unwrap_or(true)
         })
         .collect();
-    items.sort_by(|a, b| b.id.cmp(&a.id));
+    items.sort_by_key(|q| std::cmp::Reverse(q.id));
     let total = items.len() as i64;
     let limit = limit.clamp(1, 200) as usize;
     let offset = offset as usize;

@@ -211,6 +211,9 @@ pub enum StreamChunk {
         /// 执行耗时毫秒(P6 工具流水用;审批等待不计入)
         #[serde(default)]
         elapsed_ms: Option<u64>,
+        /// 审计日志行 id(P4:前端「查看完整输出」按 id 拉全文;未记录时为 None)
+        #[serde(default)]
+        log_id: Option<i64>,
     },
 }
 

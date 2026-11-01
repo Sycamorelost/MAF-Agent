@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "myAgent",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "identifier": "com.metaagent.float",
   "build": {
     "frontendDist": "../dist",
@@ -16,8 +16,8 @@
         "title": "myAgent",
         "width": 880,
         "height": 620,
-        "minWidth": 380,
-        "minHeight": 280,
+        "minWidth": 520,
+        "minHeight": 420,
         "resizable": true,
         "fullscreen": false,
         "decorations": false,

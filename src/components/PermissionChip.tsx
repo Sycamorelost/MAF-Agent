@@ -4,7 +4,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { IconShield } from './icons';
-import { mcpGetApprovalPolicy, type ApprovalMode } from '../lib/ipc/mcp';
+import {
+  mcpFullTrustStatus,
+  mcpGetApprovalPolicy,
+  mcpGrantFullTrust,
+  mcpRevokeFullTrust,
+  type ApprovalMode,
+} from '../lib/ipc/mcp';
 import type { PermissionMode } from '../lib/ipc/types';
 import { useSessionsStore } from '../stores/sessions';
 
@@ -26,13 +32,32 @@ export function PermissionChip({ sessionId, onError }: Props) {
   const setPermissionMode = useSessionsStore((s) => s.setPermissionMode);
   const [global, setGlobal] = useState<ApprovalMode>('workspace');
   const [open, setOpen] = useState(false);
+  /** P8:本会话可用的完全信任临时授权状态 */
+  const [ftActive, setFtActive] = useState(false);
+  const [ftRemaining, setFtRemaining] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  const refreshFt = () =>
+    mcpFullTrustStatus(sessionId)
+      .then((s) => {
+        setFtActive(s.active);
+        setFtRemaining(s.remaining_secs);
+      })
+      .catch(() => {});
 
   useEffect(() => {
     mcpGetApprovalPolicy()
       .then((p) => setGlobal(p.mode))
       .catch(() => {});
   }, []);
+
+  // P8:定时刷新授权剩余时间(到期后 chip 会提示「未授权」)
+  useEffect(() => {
+    refreshFt();
+    const timer = setInterval(refreshFt, 30_000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   // 点击外部收起菜单
   useEffect(() => {
@@ -47,18 +72,28 @@ export function PermissionChip({ sessionId, onError }: Props) {
   const override: PermissionMode = session?.permission_mode ?? 'inherit';
   const effective: ApprovalMode = override === 'inherit' ? global : override;
   const note = MODES.find((m) => m.id === effective)?.note ?? '';
+  // 声明为完全信任但临时授权缺失/过期:后端实际按工作区档执行
+  const unauthorized = effective === 'full' && !ftActive;
 
   const pick = async (mode: PermissionMode) => {
     setOpen(false);
-    if (mode === override) return;
+    // 相同档位默认不重复确认;但完全信任允许再次点击「续期」,
+    // 以及全局 full 未授权时允许在此一键补授权
+    const reGrantGlobal = mode === 'inherit' && unauthorized;
+    if (mode === override && mode !== 'full' && !reGrantGlobal) return;
     const desc = mode === 'inherit' ? `跟随全局(${labelOf(global)})` : labelOf(mode);
     const warn =
-      mode === 'full'
-        ? '\n\n注意:本会话工具调用将不再询问,命令直接执行。shell 白名单与 GUI 自动化仍由全局「完全信任」控制。'
+      mode === 'full' || reGrantGlobal
+        ? '\n\n注意:将签发 60 分钟完全信任临时授权,到期自动回落;期间工具不再询问、命令直接执行(写删仍备份并审计)。'
         : '';
     if (!window.confirm(`本会话权限档切为「${desc}」,仅影响当前会话。${warn}`)) return;
     try {
       await setPermissionMode(sessionId, mode);
+      // P8:进入 full 先落库会话覆盖,再签发绑定本会话的临时授权;离开时按会话吊销
+      if (mode === 'full') await mcpGrantFullTrust(sessionId, 60);
+      else if (reGrantGlobal) await mcpGrantFullTrust(undefined, 60);
+      else if (override === 'full') await mcpRevokeFullTrust(sessionId);
+      await refreshFt();
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
     }
@@ -69,11 +104,20 @@ export function PermissionChip({ sessionId, onError }: Props) {
       <button
         type="button"
         className={`perm-chip is-${effective}`}
-        title={`${note}${override !== 'inherit' ? '(本会话已覆盖全局默认)' : ''}`}
+        title={
+          unauthorized
+            ? `${note}\n完全信任临时授权未生效或已到期,实际按「工作区」档执行;点击可签发 60 分钟授权。`
+            : `${note}${override !== 'inherit' ? '(本会话已覆盖全局默认)' : ''}${
+                ftActive && effective === 'full' ? `\n临时授权剩余 ${Math.ceil(ftRemaining / 60)} 分钟` : ''
+              }`
+        }
         onClick={() => setOpen((v) => !v)}
       >
         <IconShield size={12} />
-        {labelOf(effective)}
+        <span className="ctl-chip-text">
+          {labelOf(effective)}
+          {unauthorized && ' · 未授权'}
+        </span>
         {override !== 'inherit' && <i className="perm-dot" />}
       </button>
       {open && (

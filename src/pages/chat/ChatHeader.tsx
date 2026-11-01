@@ -37,28 +37,24 @@ interface ChatHeaderProps {
   activeBranch: string;
   /** 递增信号:同一分支内分叉后也强制重载分支列表 */
   branchRefresh: number;
-  current: { providerId: string; model: string } | null;
   memCollapsed: boolean;
   outlineOpen: boolean;
   onToggleMemPanel: () => void;
   onToggleOutline: () => void;
-  onOpenModelSwitch: () => void;
   onError: (msg: string) => void;
 }
 
-/** 会话头部:标题 / 分支指示条 / 本会话模型 / 记忆面板开关。 */
+/** 会话头部:标题 / 分支指示条 / 模式切换 / 记忆面板与纲要开关。 */
 export function ChatHeader({
   title,
   sessionId,
   mode,
   activeBranch,
   branchRefresh,
-  current,
   memCollapsed,
   outlineOpen,
   onToggleMemPanel,
   onToggleOutline,
-  onOpenModelSwitch,
   onError,
 }: ChatHeaderProps) {
   // ---------- F4:会话分支树 ----------
@@ -389,17 +385,6 @@ export function ChatHeader({
           <IconLayers size={14} />
         </button>
       )}
-      <button
-        type="button"
-        className="model-switch"
-        onClick={onOpenModelSwitch}
-        title="切换本会话使用的模型"
-      >
-        <span className={`stat-dot ${current ? 'ok' : 'warn'}`} />
-        <span className="model-name">{current ? current.model : '未配置模型'}</span>
-        {current && <span className="tag">{current.providerId}</span>}
-        <IconChevronDown size={13} />
-      </button>
       <div style={{ position: 'relative' }}>
         <button
           type="button"

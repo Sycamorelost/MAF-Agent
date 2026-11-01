@@ -40,6 +40,33 @@ export interface ImageMeta {
   seed: number | null;
   guidance: number | null;
   created: string;
+  /** 实际发给模型的组装后 Prompt(旧作品无此字段) */
+  final_prompt?: string | null;
+  /** 模型族: sdxl / flux / openai / cogview / generic */
+  prompt_family?: string | null;
+  /** 组装后 Prompt 的估算 token 数 */
+  est_tokens?: number | null;
+}
+
+/** 前端实时预览用的 Prompt 组装输入(与 generate_image 同一套规则)。 */
+export interface ComposeDrawPromptInput {
+  provider_id: string;
+  model: string;
+  prompt: string;
+  negative?: string | null;
+  style_prompt?: string | null;
+}
+
+/** 组装结果:预览看到的内容就是实际发给模型的内容。 */
+export interface ComposedPrompt {
+  prompt: string;
+  family: string;
+  family_label: string;
+  max_chars: number;
+  chars: number;
+  est_tokens: number;
+  truncated: boolean;
+  warnings: string[];
 }
 
 /** 历史作品条目:缩略图 + meta。 */
@@ -52,6 +79,10 @@ export interface ImageListItem {
 
 export const generateImage = (input: GenerateImageInput) =>
   invoke<ImageResultItem[]>('generate_image', { input });
+
+/** 只组装 Prompt(不发起生成),用于绘图页实时显示字数 / token / 截断告警。 */
+export const composeDrawPrompt = (input: ComposeDrawPromptInput) =>
+  invoke<ComposedPrompt>('compose_draw_prompt', { input });
 
 export const listImages = () => invoke<ImageListItem[]>('list_images');
 

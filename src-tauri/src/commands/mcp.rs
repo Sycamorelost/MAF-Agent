@@ -1,11 +1,11 @@
-//! MCP 相关 Tauri commands —— Phase 5:配置 + 运行时 + HITL 审批 + 内置时间。
+//! MCP 相关 Tauri commands —— Phase 5:配置 + 运行时 + HITL 审批。
 
 use crate::mcp::{
     self, ApprovalPolicy, ApprovalResult, ApprovalStore, McpConfig, McpRuntime, McpServerConfig,
     McpToolCall,
 };
 use crate::paths::data_dir as data_dir_fn;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
@@ -112,6 +112,66 @@ pub async fn mcp_get_approval_policy() -> Result<ApprovalPolicy, String> {
 #[tauri::command]
 pub async fn mcp_set_approval_policy(policy: ApprovalPolicy) -> Result<(), String> {
     mcp::approval::save_policy(&data_dir_fn(), &policy)
+}
+
+/// P8:完全信任的临时授权状态(供设置页与会话权限 chip 展示)。
+#[derive(Debug, Clone, Serialize)]
+pub struct FullTrustStatus {
+    pub active: bool,
+    pub remaining_secs: u64,
+    pub session_id: Option<String>,
+}
+
+/// P8:签发临时授权 —— 默认 60 分钟,可绑定单个会话;要求当前档位为「完全信任」
+/// (或该会话的权限覆盖为 full)。到时/撤销/策略改动/重启后自动失效。
+#[tauri::command]
+pub async fn mcp_grant_full_trust(
+    session_id: Option<String>,
+    minutes: Option<u64>,
+) -> Result<u64, String> {
+    let dir = data_dir_fn();
+    let minutes = minutes.unwrap_or(mcp::approval::DEFAULT_FULL_TRUST_MINUTES);
+    let granted = mcp::approval::grant_full_trust(&dir, session_id.as_deref(), minutes)?;
+    mcp::audit(
+        &dir,
+        "full_trust_grant",
+        "-",
+        "-",
+        &format!("session={session_id:?} minutes={granted}"),
+    );
+    Ok(granted)
+}
+
+/// P8:立即吊销临时授权(切档 / 用户手动关闭时调用)。
+#[tauri::command]
+pub async fn mcp_revoke_full_trust(session_id: Option<String>) -> Result<(), String> {
+    mcp::approval::revoke_full_trust_for(session_id.as_deref());
+    mcp::audit(
+        &data_dir_fn(),
+        "full_trust_revoke",
+        "-",
+        "-",
+        &format!("session={session_id:?}"),
+    );
+    Ok(())
+}
+
+/// P8:查询某会话是否持有有效的完全信任授权及剩余秒数。
+#[tauri::command]
+pub async fn mcp_full_trust_status(session_id: Option<String>) -> Result<FullTrustStatus, String> {
+    let dir = data_dir_fn();
+    let remaining = mcp::approval::full_trust_remaining(&dir, session_id.as_deref());
+    Ok(FullTrustStatus {
+        active: remaining.is_some(),
+        remaining_secs: remaining.unwrap_or(0),
+        session_id,
+    })
+}
+
+/// P4:按 id 读取工具调用记录全文(前端「查看完整输出」按需加载,避免历史消息膨胀)。
+#[tauri::command]
+pub async fn mcp_get_tool_log(id: i64) -> Result<Option<crate::db::tool_log::ToolCallLog>, String> {
+    Ok(crate::db::tool_log::get(id))
 }
 
 #[tauri::command]
@@ -247,8 +307,9 @@ pub async fn mcp_call_tool_with_approval(
         return Ok(runtime.call_tool(call, dir).await);
     }
 
-    // 完全信任:跳过能力令牌和审批弹窗,直接调用(只保留审计)
-    if mcp::approval::load_policy(&dir).mode == mcp::ApprovalMode::Full {
+    // 完全信任(P8:档位 + 有效临时授权):跳过能力令牌和审批弹窗,直接调用(只保留审计)
+    let policy = mcp::approval::load_policy(&dir);
+    if mcp::approval::effective_mode(&policy, &dir, None) == mcp::ApprovalMode::Full {
         mcp::audit(
             &dir,
             "full_trust_call",
@@ -379,36 +440,8 @@ pub async fn mcp_clear_session_allowed(approvals: State<'_, ApprovalStore>) -> R
 }
 
 // ============ 内置时间工具(Phase 6) ============
-
-#[derive(Serialize, Deserialize)]
-pub struct NowResult {
-    pub iso: String,
-    pub unix_ms: i64,
-    pub tz: String,
-    pub date: String,
-    pub time: String,
-    pub weekday: String,
-}
-
-#[tauri::command]
-pub async fn get_now(_tz: Option<String>) -> Result<NowResult, String> {
-    use chrono::Local;
-    let now = Local::now();
-    let weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
-    let wd_idx = now.format("%u").to_string().parse::<usize>().unwrap_or(1);
-    Ok(NowResult {
-        iso: now.to_rfc3339(),
-        unix_ms: now.timestamp_millis(),
-        tz: now.format("%:z").to_string(),
-        date: now.format("%Y-%m-%d").to_string(),
-        time: now.format("%H:%M:%S").to_string(),
-        weekday: weekday_names
-            .get(wd_idx - 1)
-            .copied()
-            .unwrap_or("")
-            .to_string(),
-    })
-}
+// 实现已上提到 `mcp::time_tool`(执行层不再依赖命令层),`get_now` 工具直接调用该模块;
+// 这里不再保留 IPC 包装(前端从未调用,注册表也未登记)。
 
 // ============ Phase 5e:工具定义下发(前端随 chat_stream 传给模型) ============
 
@@ -429,13 +462,15 @@ pub async fn mcp_collect_tools(
         .lock()
         .map(|c| (c.tools_enabled, c.builtin_tools))
         .unwrap_or((false, false));
-    let full_trust = mcp::approval::load_policy(&dir).mode == mcp::ApprovalMode::Full;
+    let policy = mcp::approval::load_policy(&dir);
+    let full_trust = mcp::approval::effective_mode(&policy, &dir, session_id.as_deref())
+        == mcp::ApprovalMode::Full;
 
     let mut out: Vec<crate::provider::ToolDef> = Vec::new();
     // 只读内置工具(get_now / todo / sys / fs 读 / file_extract / doc_search / doc_read …)
     // 默认可用:它们不改变磁盘与系统状态,且是长文档分析的前置能力。
     if builtin_enabled {
-        out.extend(super::mcp_builtin_tools::readonly_tool_defs());
+        out.extend(crate::mcp::tool_spec::readonly_tool_defs());
     }
     // 完全信任模式:GUI 自动化工具(ui_*)也下发
     if full_trust {
@@ -445,7 +480,7 @@ pub async fn mcp_collect_tools(
     // 注意:必须在 tools_enabled 提前返回之前下发 —— 内置工具只受 builtin_tools 门控,
     // tools_enabled 管的是 MCP server 工具;放 return 之后会导致内置写工具永不下发。
     if builtin_enabled {
-        out.extend(super::mcp_builtin_tools::write_tool_defs());
+        out.extend(crate::mcp::tool_spec::write_tool_defs());
     }
     // 总开关关闭:不再下发 MCP server 工具
     if !tools_enabled {
@@ -562,7 +597,9 @@ pub async fn shell_whitelist_exec(
 ) -> Result<String, String> {
     let data_dir = crate::paths::data_dir();
     let cwd = cwd.as_deref();
-    let full = crate::mcp::approval::load_policy(&data_dir).mode == crate::mcp::ApprovalMode::Full;
+    let policy = crate::mcp::approval::load_policy(&data_dir);
+    let full = crate::mcp::approval::effective_mode(&policy, &data_dir, None)
+        == crate::mcp::ApprovalMode::Full;
     if full {
         if let Some(pattern) = crate::mcp::shell::dangerous_pattern(&cmd, &args)
             && !confirm_danger.unwrap_or(false)
@@ -660,7 +697,7 @@ mod tests {
     /// 内置工具定义与 dispatcher 的 builtin 判定必须同名,否则模型调不到。
     #[test]
     fn builtin_tool_names_match_dispatcher_whitelist() {
-        let tools = crate::commands::mcp_builtin_tools::builtin_tool_defs();
+        let tools = crate::mcp::tool_spec::builtin_tool_defs();
         assert!(!tools.is_empty());
         for t in tools {
             assert!(

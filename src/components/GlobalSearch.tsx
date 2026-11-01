@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { searchAll, type SearchResults } from '../lib/ipc';
+import { sessionPath } from '../lib/workbench';
 import { useSessionsStore } from '../stores/sessions';
 import { IconBrain, IconChat, IconNote, IconSearch, IconX } from './icons';
 
@@ -135,9 +136,9 @@ export default function GlobalSearch() {
           .setActiveBranch(item.sessionId, item.branchId)
           .catch(() => {});
       }
-      nav(`/chat/${item.sessionId}?msg=${item.messageId}`);
+      nav(`${sessionPath(item.sessionId)}?msg=${item.messageId}`);
     } else {
-      nav(`/chat/${item.sessionId}`);
+      nav(sessionPath(item.sessionId));
     }
   };
 

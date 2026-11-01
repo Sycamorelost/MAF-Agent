@@ -52,7 +52,7 @@ export default function MemoryHandoffDialog({
 
   return (
     <div className="dialog-mask" onClick={onCancel}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()} style={{ width: 520 }}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()} style={{ width: 'min(calc(520px * var(--ui-scale)), 92vw)' }}>
         <div className="dialog-head">模型切换 · 记忆交接</div>
         <div className="dialog-body">
           <div className="handoff-route">

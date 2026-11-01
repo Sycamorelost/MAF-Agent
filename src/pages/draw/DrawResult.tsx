@@ -231,7 +231,7 @@ export default function DrawResult({
       {/* 上传到对话:会话选择 */}
       {uploadTarget && (
         <div className="dialog-mask" onClick={onCloseUpload}>
-          <div className="dialog" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+          <div className="dialog" style={{ width: 'min(calc(440px * var(--ui-scale)), 92vw)' }} onClick={(e) => e.stopPropagation()}>
             <div className="dialog-head">上传到对话</div>
             <div className="dialog-body">
               <p

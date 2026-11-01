@@ -51,6 +51,9 @@ pub(crate) fn unit_context(
     Ok((topic, level, lang, name, difficulty, why, existing))
 }
 
+/// plans 表读出的原始行:(subject, grade_band, exam_target, daily_minutes, preferences)。
+type PlanRow = (Option<String>, Option<String>, Option<String>, i64, Option<String>);
+
 /// 读取计划的学习者配置(V31 起;旧计划三列为 NULL → generic,行为同现状)。
 /// plans.subject 落库时已被归一为 key,这里对历史原文数据再做一次归一兜底。
 pub(crate) fn plan_profile(
@@ -58,7 +61,7 @@ pub(crate) fn plan_profile(
     plan_id: &str,
     difficulty: Option<i64>,
 ) -> template::LearnerProfile {
-    let row: Option<(Option<String>, Option<String>, Option<String>, i64, Option<String>)> = conn
+    let row: Option<PlanRow> = conn
         .query_row(
             "SELECT subject, grade_band, exam_target, daily_minutes, preferences FROM plans WHERE id=?1",
             [plan_id],
