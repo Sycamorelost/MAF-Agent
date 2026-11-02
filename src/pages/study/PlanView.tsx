@@ -63,7 +63,7 @@ export function PlanView() {
 
   const warn = (e: unknown) => alert(e instanceof Error ? e.message : String(e));
 
-  // 「深入研究」:研究页已移除,改为新建普通会话并把主题预填进输入框(同划词提问路径)
+  // 「深入研究」:研究页已移除,改为新建普通会话并把主题预填进输入框(同预填文本路径)
   const deepDig = async (nodeName: string) => {
     try {
       const prefill = await studyIpc.studyDeepDig(active.id, nodeName);

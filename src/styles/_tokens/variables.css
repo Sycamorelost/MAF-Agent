@@ -1,0 +1,190 @@
+/* ================================================================
+ *  myAgent · UI Design Tokens
+ *  唯一真源：所有 HTML 页面 <link> 本文件；禁止页面内硬编码颜色/圆角/间距/字号
+ *  规范见 05-ui-design-system.md
+ * ================================================================ */
+
+:root{
+  /* ---- 圆角（v3 明确嵌套配对：外圆角 - 内边距 = 内部元素圆角） ----
+     配对规则：
+       radius-xl(18px) 容器 padding ≥ 10px → 内部元素用 radius-m/l (8-10px)
+       radius-l (14px) 容器 padding ≥ 8px  → 内部元素用 radius-s/m (8px)
+       radius-m (10px) 容器 padding ≥ 6px  → 内部元素用 radius-s    (8px)
+       radius-s ( 8px) 容器 padding ≥ 4px  → 内部元素同圆角或更小
+     ★ 嵌套容器的 padding 不得小于 (外圆角 - 内圆角) 的差值
+  */
+  /* 圆角随 --ui-scale 等比缩放:字体放大时整体视觉比例一致,不出现「字大框小」 */
+  --radius-xl: calc(18px * var(--ui-scale));  /* 大卡片 / 特色助手卡 */
+  --radius-l:  calc(14px * var(--ui-scale));  /* 面板 / 输入框外框 / 弹窗内卡 */
+  --radius-m:  calc(10px * var(--ui-scale));  /* 按钮 / 胶囊标签 / 主按钮 */
+  --radius-s:  calc( 8px * var(--ui-scale));  /* 小组件 / 工具开关 / 次级按钮 */
+
+  /* ---- 间距（4 的倍数网格，v3 明确使用场景；随 --ui-scale 等比缩放，跟随字号） ----
+     核心网格：8 / 16 / 24 / 32
+     次网格  ：4 / 12 / 20 / 40
+     同框 gap = 容器内边距的 1/2（容器 padding 16 → 内部 gap 8）
+  */
+  --space-1:  calc(4px  * var(--ui-scale));
+  --space-2:  calc(8px  * var(--ui-scale));
+  --space-3:  calc(12px * var(--ui-scale));
+  --space-4:  calc(16px * var(--ui-scale));
+  --space-5:  calc(20px * var(--ui-scale));
+  --space-6:  calc(24px * var(--ui-scale));
+  --space-8:  calc(32px * var(--ui-scale));
+  --space-10: calc(40px * var(--ui-scale));
+
+  /* ---- 图层尺度（z-index，唯一真源；禁止在组件中硬编码） ----
+     base: 10    抽屉关闭按钮等固定控件
+     drawer: 20  会话/页面左栏抽屉
+     pop: 25     标题栏浮层遮罩
+     pop+1: 26   搜索/导航浮层卡片
+     tooltip: 35 hover 提示
+     menu: 40    钉入记忆/消息溢出菜单
+     modal: 50   审批弹窗/确认对话框
+     top: 99     全局加载与最高层通知
+  */
+  --z-base: 10;
+  --z-drawer: 20;
+  --z-pop: 25;
+  --z-pop-card: 26;
+  --z-tooltip: 35;
+  --z-menu: 40;
+  --z-modal: 50;
+  --z-top: 99;
+  /* 高层弹层:图片灯箱 / 全局 Toast,需凌驾于所有模态之上 */
+  --z-lightbox: 400;
+  --z-toast: 410;
+  /* 全屏打印/导出遮罩:必须凌驾于一切之上(含灯箱/Toast),使用 int32 最大值 */
+  --z-print: 2147483647;
+
+  /* ---- 字号阶梯(全部乘以 --ui-scale:设置页「字体大小」等比缩放字号/间距/圆角) ---- */
+  --ui-scale: 1;
+  --font-hero: calc(26px * var(--ui-scale));
+  --font-h1:   calc(19px * var(--ui-scale));   /* 大卡片标题 / AI检测页主标题 */
+  --font-display:calc(22px * var(--ui-scale));  /* 用量统计大数字 */
+  --font-h2:   calc(16px * var(--ui-scale));
+  --font-h3:   calc(15px * var(--ui-scale));
+  --font-body: calc(14px * var(--ui-scale));
+  --font-body-em:calc(14px * var(--ui-scale));
+  --font-sub:  calc(13px * var(--ui-scale));
+  --font-caption:calc(12px * var(--ui-scale));
+  --font-micro:calc(11px * var(--ui-scale));
+  --font-mini: calc(10px * var(--ui-scale));
+  /* 阅读正文字号:仅用于 .md(模型输出/报告/学习/记忆等所有长文本),
+     与界面正文(--font-body)分开,保证「界面紧凑、阅读舒适」。 */
+  --font-read: calc(15px * var(--ui-scale));
+
+  /* ---- 品牌 · 图标蓝 ---- */
+  --brand:        #1B6CA8;
+  --brand-deep:   #14557F;
+  --brand-soft:   #EAF3FA;
+  --brand-line:   #CBE0EF;
+
+  /* ---- 中性 ---- */
+  --bg-frame:     #FFFFFF;
+  --bg-main:      #F5F5F5;
+  --bg-main-rgb:  245,245,245;          /* 数字组,供 rgba(var(--bg-main-rgb), alpha) 拼接 */
+  --bg-surface:   #FFFFFF;            /* 卡片/composer/dialog/pill/tool-chip/md 等表面底 */
+  --bg-surface-rgb: 255,255,255;      /* 表面色数字组,供顶层弹窗拼 solid 背景(避免与壁纸透明变量叠加) */
+  --bg-side:      #FFFFFF;
+  --bg-hover:     #E8E8E8;
+  --bg-active:    #DADADA;
+
+  --border:       #E0E0E0;
+  --border-strong:#C0C0C0;
+
+  /* ---- 玻璃面板透明度（sidebar/nav-pop/tb-pill，每主题可覆盖） ---- */
+  --bg-glass-alpha:   .86;
+  --bg-glass-alpha-2: .82;
+  --bg-glass-alpha-3: .65;
+
+  /* ---- 阴影环境色数字组（供 rgba(var(--shadow-ambient), alpha) 拼阴影） ---- */
+  --shadow-ambient: 40,50,80;
+
+  /* ---- 文字 ---- */
+  --text-1:       #0D0D12;
+  --text-2:       #565869;
+  --text-3:       #8E8EA0;
+  --text-4:       #B4B4C0;
+
+  /* ---- 深色底（ink） ---- */
+  --ink:          #141416;
+  --ink-hover:    #222226;
+
+  /* ---- 语义 ---- */
+  --ok:           #1F9254;
+  --warn:         #C67A09;
+  --err:          #C93B3B;
+
+  /* ---- 语义衍生色（由 token 混合得出，不引入新色值） ---- */
+  --brand-tint:   color-mix(in srgb, var(--brand) 8%, var(--bg-surface));
+  --ok-soft:      color-mix(in srgb, var(--ok) 10%, var(--bg-surface));
+  --warn-soft:    color-mix(in srgb, var(--warn) 10%, var(--bg-surface));
+  --err-soft:     color-mix(in srgb, var(--err) 10%, var(--bg-surface));
+
+  /* ---- 阴影（v3 环境色 + 低透明度 + 大模糊，透气不脏） ----
+     ambient 色基于 --bg-frame：rgba(40,50,80,...) 灰蓝环境，非纯黑
+     透明度 ~12-18%，blur 40-80px，偏移压低
+  */
+  --shadow-frame:    0 28px 64px rgba(var(--shadow-ambient),.12),   0 4px 14px rgba(var(--shadow-ambient),.05);  /* 窗口外框 */
+  --shadow-card:     0 1px 3px   rgba(var(--shadow-ambient),.04),   0 1px 2px rgba(var(--shadow-ambient),.03);  /* 卡片静息 */
+  --shadow-card-h:   0 10px 30px rgba(var(--shadow-ambient),.12),   0 2px 6px rgba(var(--shadow-ambient),.05);  /* 卡片 hover/elevated */
+  --shadow-soft:     0 4px 14px  rgba(var(--shadow-ambient),.08);                                        /* 弱悬浮 */
+  --shadow-inset:    inset 0 1px 0 rgba(255,255,255,.4);                                     /* 高光内嵌 */
+  /* 输入卡/表单卡统一边界:1px 浅灰线 + 双层低透明度阴影(可见的「浮起」) */
+  --composer-border: #E6E6E6;
+  --shadow-composer: 0 1px 2px rgba(var(--shadow-ambient),.06), 0 4px 14px rgba(var(--shadow-ambient),.07);
+
+  /* 输入条控件统一度量(附件/联网/思考/权限/预设/模型选择器)
+     ★ 固定高必须配 line-height:1 + nowrap,否则中文行盒会顶破固定高被截断 */
+  --ctl-h:   calc(28px * var(--ui-scale));
+  --ctl-pad: calc(10px * var(--ui-scale));
+
+  /* ---- 字体栈 ---- */
+  --font:  "Inter","PingFang SC","Microsoft YaHei","Segoe UI","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;
+  --font-mono: "JetBrains Mono","Cascadia Code","Consolas","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",monospace;
+
+  /* ---- 布局（跨页面硬约束；栏宽/栏高随 --ui-scale 等比,避免字大栏窄） ---- */
+  --mempanel-w:   calc(320px * var(--ui-scale));
+  --sidebar-w:    calc(280px * var(--ui-scale));   /* 会话抽屉宽度(窄窗降档) */
+  --aside-w:      calc(300px * var(--ui-scale));   /* 页面左栏抽屉宽度(窄窗降档) */
+  --titlebar-h:   calc(38px * var(--ui-scale));
+  /* 对话页内容宽度:正文 720px ≈ 15px 中文 48 字/行(40–50 舒适区);
+     输入卡与正文同轴同宽,形成一列阅读区。 */
+  --chat-max-w:      clamp(320px, 100%, calc(720px * var(--ui-scale)));
+  --composer-max-w:  clamp(340px, 100%, calc(720px * var(--ui-scale)));
+
+  /* ---- 水平间距系统（v3 · 所有栏/块/版统一约束） ----
+     --pad-x:         主内容栏内水平 padding（主区、记忆面板、弹窗主区）
+     --pad-x-narrow:  窄栏内水平 padding（侧栏等窄栏）
+     --gap-row:       列间 gap（rail / sidebar / main / mempanel 之间）
+     ★ 同一行内所有栏的内容边缘应在视觉栅格上对齐
+  */
+  --pad-x:         var(--space-4);   /* 16px — 主栏 */
+  --pad-x-narrow:  var(--space-3);   /* 12px — 窄栏 */
+  --gap-row:       0px;              /* 栏间无缝（用 border 分隔，见 sidebar border-right） */
+}
+
+/* ---- 全局重置 + 字体 ---- */
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:var(--font);
+  font-size:var(--font-body);
+  color:var(--text-1);
+  background:var(--bg-frame);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  line-height:1.65;
+}
+
+/* ---- 全局滚动条 ---- */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-3)}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-corner{background:transparent}
+
+/* ---- 文本溢出工具类 ---- */
+.ellipsis{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+

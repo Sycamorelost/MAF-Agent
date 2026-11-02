@@ -31,7 +31,6 @@ mod presets;
 mod project_rules;
 mod provider;
 mod retrieval;
-mod selection;
 mod settings;
 mod study;
 mod sys;
@@ -42,11 +41,18 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
-/// 从托盘恢复主窗口:show + unminimize + focus。
+/// 关闭主窗口时隐藏到托盘:先移除任务栏按钮,再 hide。
+fn hide_to_tray(window: &tauri::Window) {
+    let _ = window.set_skip_taskbar(true);
+    let _ = window.hide();
+}
+
+/// 从托盘恢复主窗口:恢复任务栏按钮 → 还原最小化 → show → focus。
 fn show_main_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
-        let _ = w.show();
+        let _ = w.set_skip_taskbar(false);
         let _ = w.unminimize();
+        let _ = w.show();
         let _ = w.set_focus();
     }
 }
@@ -86,9 +92,6 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn run() {
-    // 进程级 DPI 感知:保证划词等全局坐标按物理像素计算,不偏移。
-    selection::ensure_dpi_aware();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         // M-15:顶级导航白名单(必须在静态 main 窗口创建前的 Builder 阶段注册)
@@ -194,9 +197,6 @@ pub fn run() {
                 log::warn!("预置知识库种子失败: {e}");
             }
 
-            // 迭代 D9:启动全局输入监听(划词提问)
-            selection::spawn_listener(app.handle().clone());
-
             // 系统托盘:最小化进托盘后从这里恢复主窗口
             if let Err(e) = setup_tray(app.handle()) {
                 log::error!("tray setup failed: {e}");
@@ -226,28 +226,23 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // 主窗口最小化时按设置隐藏到托盘(覆盖任务栏右键等一切最小化路径)
+            // 仅处理主窗口的关闭请求;最小化是普通最小化,不进托盘
             if window.label() != "main" {
                 return;
             }
             match event {
-                // 点 × 的行为跟随「最小化到托盘」开关:
+                // 点 × 的行为跟随「关闭时最小化到托盘」开关:
                 //   开关开 → 不销毁窗口,隐藏到托盘(托盘「退出」才真正结束进程);
                 //   开关关 → 直接结束应用
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     if settings::load().minimize_to_tray {
                         api.prevent_close();
-                        let _ = window.hide();
+                        hide_to_tray(window);
                     } else {
                         window.app_handle().exit(0);
                     }
                 }
-                tauri::WindowEvent::Resized(_)
-                    if settings::load().minimize_to_tray
-                        && window.is_minimized().unwrap_or(false) =>
-                {
-                    let _ = window.hide();
-                }
+                // 最小化始终是普通最小化,窗口留在任务栏,不进托盘
                 _ => {}
             }
         })

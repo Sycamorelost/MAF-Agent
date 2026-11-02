@@ -21,7 +21,18 @@ pub(super) async fn exec(name: &str, args: &Value, session_id: Option<&str>) -> 
                 .get("max_chars")
                 .and_then(|v| v.as_u64())
                 .map(|n| n as usize);
-            match crate::websearch::page::fetch_page(url, max).await {
+            let start = args
+                .get("start_index")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+            // 检索意图最长 200 字符:再长也没有新增关键词,只会拖慢分词
+            let query: Option<String> = args
+                .get("query")
+                .and_then(|v| v.as_str())
+                .map(|q| q.trim())
+                .filter(|q| !q.is_empty())
+                .map(|q| q.chars().take(200).collect());
+            match crate::websearch::page::fetch_page(url, max, start, query.as_deref()).await {
                 Ok(page) => {
                     // D7:抓取事件落库(地址/标题/正文字数),便于排查「模型看了哪个页面」
                     crate::db::events::append(
@@ -32,6 +43,8 @@ pub(super) async fn exec(name: &str, args: &Value, session_id: Option<&str>) -> 
                             "title": page.title,
                             "chars": page.total_chars,
                             "truncated": page.truncated,
+                            "query": query,
+                            "start_index": page.offset,
                         })
                         .to_string(),
                     );
@@ -41,7 +54,7 @@ pub(super) async fn exec(name: &str, args: &Value, session_id: Option<&str>) -> 
                     crate::db::events::append(
                         session_id,
                         "web_fetch",
-                        &serde_json::json!({ "url": url, "error": e }).to_string(),
+                        &serde_json::json!({ "url": url, "query": query, "error": e }).to_string(),
                     );
                     (format!("抓取失败:{e}"), false)
                 }

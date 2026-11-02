@@ -1,0 +1,233 @@
+/* ============ D3.3 版本列表 + diff ============ */
+/* ============ 设置(模板 06) ============ */
+.set-nav {
+  width: calc(200px * var(--ui-scale)); flex-shrink: 0;
+  background: var(--bg-side); border-right: 1px solid var(--border);
+  padding: var(--space-3) var(--pad-x-narrow);
+  overflow-y: auto;
+}
+.set-nav .grp {
+  font-size: var(--font-micro); color: var(--text-4);
+  padding: var(--space-3) var(--pad-x-narrow) var(--space-1);
+  letter-spacing: .5px; font-weight: 500;
+}
+.set-nav .grp:first-child { padding-top: 0; }
+.set-nav .it {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 8px var(--pad-x-narrow);
+  border-radius: var(--radius-s);
+  font-size: var(--font-caption); color: var(--text-2);
+  cursor: pointer; border-left: 2px solid transparent; transition: .15s;
+}
+.set-nav .it:hover { background: var(--bg-hover); color: var(--text-1); }
+.set-nav .it.on { background: var(--bg-active); color: var(--text-1); border-left-color: var(--brand); font-weight: 600; }
+
+.set-content {
+  flex: 1; overflow-y: auto; min-width: 0;
+  padding: var(--space-5) var(--pad-x);
+  background: var(--bg-surface); min-height: 0; }
+.set-content h2 { font-size: var(--font-h2); font-weight: 650; color: var(--text-1); line-height: 1.4; }
+.set-desc { font-size: var(--font-caption); color: var(--text-3); margin: var(--space-1) 0 var(--space-4); line-height: 1.7; }
+
+/* 关于页:产品标识区 + 条款文档(v1.9.0) */
+.set-product { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-5) var(--pad-x); }
+.set-product-logo { width: 56px; height: 56px; flex-shrink: 0; }
+.set-product-info { min-width: 0; }
+.set-product-name { font-size: var(--font-h2); font-weight: 700; color: var(--text-1); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-product-ver { font-size: var(--font-caption); color: var(--text-4); margin-top: 4px; }
+.set-product-tagline { font-size: var(--font-body); color: var(--text-2); margin-top: var(--space-2); line-height: 1.65; }
+/* 条款文档:正文限宽保证可读行长;条目编号独立成列,正文悬挂缩进对齐 */
+.set-terms { font-size: var(--font-body); color: var(--text-2); line-height: 1.75; max-width: 74ch; }
+.set-term { padding: var(--space-4) 0; }
+.set-term:first-child { padding-top: var(--space-1); }
+.set-term + .set-term { border-top: 1px dashed var(--border); }
+.set-term-h {
+  font-size: var(--font-h3); font-weight: 650; color: var(--text-1);
+  margin: 0 0 var(--space-2); padding-left: var(--space-3);
+  border-left: 4px solid var(--brand, var(--accent)); line-height: 1.4;
+}
+.set-term-item {
+  display: flex; align-items: baseline; gap: var(--space-2);
+  padding-left: calc(var(--space-3) + 4px);
+}
+.set-term-item + .set-term-item { margin-top: var(--space-2); }
+.set-term-no {
+  flex: 0 0 auto; min-width: 2.2em; font-size: var(--font-caption); font-weight: 600;
+  color: var(--text-4); font-variant-numeric: tabular-nums;
+}
+.set-term-body { min-width: 0; }
+.set-term-body p { margin: 0; }
+.set-term-body ul { margin: var(--space-1) 0 0; padding-left: var(--space-5); }
+.set-term-body li { margin: 4px 0; }
+.set-term-foot {
+  margin: var(--space-4) 0 0; padding: var(--space-3);
+  background: var(--bg-side); border-radius: var(--radius-m);
+  font-size: var(--font-caption); color: var(--text-4); line-height: 1.6;
+}
+
+/* 分区卡片统一边界:1px composer 线 + 静息阴影,圆角统一 radius-l */
+.set-card {
+  border: 1px solid var(--composer-border); border-radius: var(--radius-l);
+  background: var(--bg-surface); box-shadow: var(--shadow-card);
+  margin-bottom: var(--space-4); overflow: hidden;
+}
+.set-card-h {
+  padding: var(--space-3) var(--pad-x); border-bottom: 1px solid var(--border);
+  font-size: var(--font-h3); font-weight: 600; color: var(--text-1);
+  display: flex; align-items: center; gap: var(--space-2);
+  line-height: 1.4;
+}
+.set-card-h .st {
+  margin-left: auto; font-size: var(--font-micro); font-weight: 400;
+  color: var(--ok); display: inline-flex; align-items: center; gap: var(--space-1);
+}
+.set-card-h .st.warn { color: var(--warn); }
+.set-card-h .st.date { color: var(--text-4); font-weight: 400; }
+.set-card-b { padding: var(--space-4) var(--pad-x); }
+.set-row {
+  display: flex; gap: var(--space-3); align-items: center;
+  flex-wrap: wrap; row-gap: var(--space-1);
+}
+.set-row + .set-row { margin-top: var(--space-3); }
+/* 导航菜单排序(设置 · 导航菜单):整行拖拽,放下即写盘并广播 */
+.set-row.set-drag {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-s);
+  cursor: grab;
+  user-select: none;
+  transition: background .15s, box-shadow .15s, opacity .15s;
+}
+.set-row.set-drag:hover { background: var(--bg-hover); }
+.set-row.set-drag.dragging { opacity: .45; cursor: grabbing; }
+/* 落点:整行描边高亮(放下后会占据该行位置,上拖下拖语义一致) */
+.set-row.set-drag.drop-target {
+  box-shadow: inset 0 0 0 2px var(--brand);
+  background: var(--brand-soft);
+}
+.set-drag-handle {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: var(--text-4); cursor: grab;
+  transition: color .15s;
+}
+.set-row.set-drag:hover .set-drag-handle { color: var(--text-2); }
+.set-row > .lbl { width: calc(130px * var(--ui-scale)); flex-shrink: 0; font-size: var(--font-caption); color: var(--text-2); }
+/* 字段基准 200px:空间不足时整组换行,不被压成「看不清的窄条」 */
+.set-row > .pg-field { flex: 1 1 200px; min-width: 0; }
+.set-prov-line .pg-field { flex: 1 1 200px; min-width: 0; }
+.set-sub { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px dashed var(--border); }
+.set-prov { display: flex; align-items: center; gap: var(--space-2); }
+.set-prov .nm { font-size: var(--font-caption); font-weight: 600; color: var(--text-1); }
+.set-prov .url { margin-left: auto; font-size: var(--font-micro); color: var(--text-4); font-family: var(--font-mono); }
+.set-prov-line { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.set-hint { font-size: var(--font-caption); color: var(--text-4); }
+.set-table { width: 100%; border-collapse: collapse; font-size: var(--font-caption); }
+.set-table th {
+  font-size: var(--font-micro); color: var(--text-3); text-align: left;
+  padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); font-weight: 600;
+}
+.set-table td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); color: var(--text-2); }
+.set-table tr:last-child td { border-bottom: none; }
+.set-table .mn { font-family: var(--font-mono); font-size: var(--font-micro); color: var(--text-1); }
+.set-actions { display: flex; gap: var(--space-2); align-items: center; }
+.set-actions .sp { flex: 1; }
+
+/* 生成时长快捷档位(设置 · 能力 · 生成时长):胶囊按钮,窄窗自动换行 */
+.gen-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.gen-chip {
+  height: calc(26px * var(--ui-scale)); padding: 0 var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-s);
+  background: transparent; color: var(--text-3); cursor: pointer;
+  font-size: var(--font-caption); line-height: 1; white-space: nowrap;
+}
+.gen-chip:hover { background: var(--bg-hover); border-color: var(--brand-line); color: var(--brand-deep); }
+.gen-chip.on {
+  background: var(--brand-soft); border-color: var(--brand-line);
+  color: var(--brand-deep); font-weight: 600;
+}
+
+/* 字段组(label + 控件): 窄窗时按「组」整体换行,避免 label 与控件被拆散 */
+.set-fld {
+  display: flex; align-items: center; gap: var(--space-2);
+  flex: 1 1 200px; min-width: 0;
+}
+.set-fld > .lbl { width: auto; flex-shrink: 0; }
+.set-fld > .pg-field { flex: 1 1 200px; min-width: 0; }
+.mcard-b .set-fld { flex-basis: 170px; }
+.mcard-b .set-fld > .lbl { width: auto; }
+
+/* 表单控件:高度约 34px(随 --ui-scale),去掉上下内边距 + 单行行高,避免中文被裁切 */
+.set-content .pg-field:not(textarea),
+.set-content .set-row > input:not([type="range"]):not([type="checkbox"]):not([type="radio"]) {
+  height: calc(34px * var(--ui-scale));
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.4;
+}
+/* 按钮 / chip:统一 --ctl-h,单行不换行,空间不足时整颗落行 */
+.set-content .btn,
+.set-content .btn-primary,
+.set-content .btn-ghost {
+  height: var(--ctl-h);
+  line-height: 1;
+  padding-top: 0;
+  padding-bottom: 0;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.set-content .seg > button,
+.set-content .cap-scope,
+.set-content .usage-drill button {
+  height: var(--ctl-h);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ============ 设置页窄窗自适应(断点对齐 _tokens.css) ============ */
+@media (max-width: 1024px) {
+  /* 多 Key 槽位: 备注框保留最小可用宽度, 权重/掩码/启停等固定项不被压缩, 空间不足整组换行 */
+  .key-slot { flex-wrap: wrap; row-gap: var(--space-1); }
+  .key-slot .pg-field { flex: 1 1 150px; min-width: 120px; }
+  .key-slot .key-mask {
+    max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* 新增 Key / 添加模型行: 输入框带最小基准, 空间不足时按钮组自然落到下一行 */
+  .prov-card-b .set-prov-line .pg-field { flex: 1 1 120px; }
+}
+@media (max-width: 768px) {
+  /* 左设置导航 → 顶部横向滚动条(此宽度下全局 rail 已隐藏) */
+  .pg-settings { flex-direction: column; }
+  .pg-settings .resize-handle { display: none; }
+  .pg-settings > .set-nav {
+    width: auto !important; flex-direction: row; flex-wrap: nowrap;
+    overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain;
+    border-right: none; border-bottom: 1px solid var(--border);
+    padding: var(--space-2) var(--pad-x-narrow);
+  }
+  .pg-settings > .set-nav > div {
+    display: flex; align-items: center; gap: var(--space-1);
+    flex: 0 0 auto; padding-right: var(--space-2); margin-right: var(--space-2);
+    border-right: 1px dashed var(--border);
+  }
+  .pg-settings > .set-nav > div:last-child {
+    border-right: none; margin-right: 0; padding-right: 0;
+  }
+  .pg-settings > .set-nav .grp { padding: 0 var(--space-1); white-space: nowrap; }
+  .pg-settings > .set-nav .it {
+    border-left: none; white-space: nowrap; padding: 8px var(--space-2);
+  }
+  .pg-settings > .set-content { padding: var(--space-4) var(--pad-x-narrow); }
+}
+@media (max-width: 600px) {
+  /* 单标签行竖排,字段组内 label 落到控件上方 */
+  .set-row { flex-wrap: wrap; row-gap: var(--space-1); }
+  .set-row > .lbl { width: 100%; }
+  .mcard-b .set-row > .lbl { width: 100%; }
+  .set-fld, .mcard-b .set-fld { flex-basis: 100%; flex-wrap: wrap; }
+  .set-fld > .lbl { width: 100%; }
+  .set-fld > .pg-field { flex: 1 1 100%; }
+  .set-actions { flex-wrap: wrap; }
+  .key-slots-h { gap: var(--space-2); }
+  .key-slots-h .sp { display: none; }
+  .usage-bar-row .nm { width: calc(130px * var(--ui-scale)); }
+}
+

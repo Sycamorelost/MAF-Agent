@@ -1,0 +1,562 @@
+/* ============ Composer(停靠式 + 白底输入卡) ============
+   基础样式 .composer / .composer-box / .composer-bar / .tool-chip 由 _tokens.css 提供;
+   对话页底部使用 .composer-docked(无分隔线,靠留白与输入卡边框区分)。 */
+
+.composer.composer-docked {
+  width: 100%;
+  max-width: min(100%, var(--chat-max-w));
+  margin: 0 auto;
+  padding: var(--space-2) 0 var(--space-3);
+  background: transparent;
+  flex-shrink: 0;
+  z-index: 2;
+}
+.composer-docked .composer-box {
+  /* 输入卡与正文同轴同宽(720px):阅读区与输入区形成「一列」 */
+  max-width: min(100%, var(--chat-max-w));
+  margin: 0 auto;
+  border: 1px solid var(--composer-border);
+  border-radius: var(--radius-m);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-composer);
+}
+.composer-docked textarea { min-height: 44px; padding-top: var(--space-2); }
+/* 聚焦只把线色转为品牌线,不再叠加 2px 光环(避免双重描边) */
+.composer-docked .composer-box:focus-within {
+  background: var(--bg-surface);
+  border-color: var(--brand-line);
+  box-shadow: var(--shadow-composer);
+}
+.composer-box { position: relative; }
+
+/* 主页输入框:与文案同列居中,不再顶到底部(间距对齐 ui-design 01 · 24px) */
+.home .composer { margin-top: var(--space-6); padding-top: 0; }
+
+/* 拖拽文件进入 composer 的高亮反馈 */
+.composer.composer-drag .composer-box {
+  outline: 2px dashed var(--brand, #3b82f6);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--brand, #3b82f6) 8%, transparent);
+}
+
+/* F9:@ 召回候选浮层(复用 GlobalSearch 的 gs-item 视觉) */
+.at-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--z-menu);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card-h);
+  max-height: calc(280px * var(--ui-scale));
+  overflow-y: auto;
+  padding-bottom: var(--space-1);
+}
+.composer-box .attach-list {
+  padding: var(--space-2) var(--pad-x) 0;
+}
+
+/* 引用条:来源 + 单行摘要 + 移除;完整原文留在 state,发送时注入独立上下文。
+   与附件 tray 同层,不占输入框正文;同宽同高对齐 composer 控件。 */
+.quote-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--ui-scale));
+  padding: var(--space-2) var(--pad-x) 0;
+}
+.quote-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--ui-scale));
+  min-width: 0;
+  max-width: 100%;
+  height: calc(28px * var(--ui-scale));
+  padding: 0 calc(10px * var(--ui-scale));
+  border: 1px solid var(--composer-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-hover) 32%, var(--bg-surface));
+  color: var(--text-2);
+  font-size: var(--font-caption);
+  line-height: 1;
+}
+.quote-chip > svg { flex: 0 0 auto; color: var(--text-4); }
+.quote-meta {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.quote-excerpt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.quote-x {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(18px * var(--ui-scale));
+  height: calc(18px * var(--ui-scale));
+  margin-right: calc(-4px * var(--ui-scale));
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+}
+.quote-x:hover { background: var(--bg-active, var(--bg-hover)); color: var(--text-1); }
+.quote-more {
+  align-self: center;
+  font-size: var(--font-micro);
+  color: var(--text-4);
+}
+
+/* F4:会话分支指示条与分支列表浮层(对话页头部) */
+.branch-chip-wrap { position: relative; display: inline-flex; }
+.branch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 4px var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: .15s;
+  white-space: nowrap;
+}
+.branch-chip:hover { background: var(--bg-hover); color: var(--text-1); }
+.branch-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-menu);
+  width: calc(280px * var(--ui-scale));
+  max-height: calc(320px * var(--ui-scale));
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card-h);
+  padding: var(--space-1);
+}
+.branch-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-s);
+}
+.branch-item:hover { background: var(--bg-hover); }
+.branch-item.active { background: var(--bg-active, var(--bg-hover)); }
+.branch-item-main { flex: 1; min-width: 0; cursor: pointer; }
+.branch-item-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-sub);
+  font-weight: 600;
+  color: var(--text-1);
+}
+.branch-item-sub {
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.branch-item > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-3);
+  border: none;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.branch-item > button:hover { background: var(--bg-main); color: var(--text-1); }
+.branch-item > button.branch-del-confirm {
+  width: auto;
+  padding: 0 var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--err);
+  border: 1px solid var(--err);
+}
+.branch-rename-row { display: flex; align-items: center; gap: var(--space-1); flex: 1; }
+.branch-rename-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font);
+  font-size: var(--font-sub);
+  background: var(--bg-input, var(--bg-main));
+  color: var(--text-1);
+}
+.branch-rename-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-2);
+  border: none;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+.branch-rename-row button:hover { background: var(--bg-main); }
+
+.composer .send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  padding: 0;
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: .15s;
+}
+.composer .send svg { display: block; width: 18px; height: 18px; }
+.composer .send:hover { background: var(--ink-hover); }
+.composer .send:disabled { opacity: .45; cursor: not-allowed; }
+.composer .stop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  padding: 0;
+  background: #e5484d;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: .15s;
+}
+.composer .stop-btn svg { display: block; width: 14px; height: 14px; }
+.composer .stop-btn:hover { background: #d13c41; }
+
+/* 输入条控件统一度量:附件圆钮 / 联网 / 思考 / 权限 / 预设 / 模型选择器
+   28px 固定高 + line-height:1 + nowrap + 不压缩;超长名称在文字 span 内省略。
+   ★ 这样中文字盒不会顶破固定高,也不会被 flex 压成两行后上下截断。 */
+.composer-bar .tool-chip,
+.perm-chip,
+.preset-chip,
+.composer-model {
+  height: var(--ctl-h);
+  padding: 0 var(--ctl-pad);
+  line-height: 1;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  font-family: var(--font);
+  font-size: var(--font-caption);
+}
+/* chip 内文字可省略(预设名 / 权限名 / 模型名 / 智能体名) */
+.ctl-chip-text {
+  min-width: 0;
+  max-width: calc(160px * var(--ui-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tool-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  padding: 0;
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--text-2);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: .15s;
+}
+.tool-plus:hover { background: var(--bg-hover); color: var(--text-1); }
+.tool-plus:disabled { opacity: .5; cursor: not-allowed; }
+.composer-model {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: calc(200px * var(--ui-scale));
+  min-width: 0;
+  background: var(--bg-surface);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  transition: .15s;
+}
+.composer-model:hover { border-color: var(--border-strong); color: var(--text-1); }
+.composer-model:disabled { opacity: .5; cursor: not-allowed; }
+.composer-model .model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* tool-chip 开启态别名(模板为 .on,兼容既有 .active) */
+.tool-chip.active {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+.tool-chip:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Composer 待发送附件 chip 列表 */
+.attach-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: calc(240px * var(--ui-scale));
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--text-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--composer-border);
+  border-radius: var(--radius-m);
+}
+.attach-chip .attach-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.attach-chip .attach-size { color: var(--text-4); flex-shrink: 0; }
+.attach-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(16px * var(--ui-scale));
+  height: calc(16px * var(--ui-scale));
+  border-radius: 50%;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.attach-x:hover { background: var(--bg-hover); color: var(--text-1); }
+
+/* 消息内附件卡片 */
+.attach-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  max-width: 100%;
+}
+.msg.user .attach-cards { justify-content: flex-end; }
+.attach-card {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--bg-hover) 42%, var(--bg-main));
+  border: none;
+  border-radius: var(--radius-m);
+  color: var(--text-2);
+  font-size: var(--font-caption);
+}
+.attach-card-info { min-width: 0; text-align: left; }
+.attach-card-name {
+  max-width: calc(220px * var(--ui-scale));
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+}
+.attach-card-kind { color: var(--text-4); }
+.attach-thumb {
+  max-width: calc(200px * var(--ui-scale));
+  max-height: calc(140px * var(--ui-scale));
+  border-radius: var(--radius-m);
+  border: none;
+  cursor: zoom-in;
+  display: block;
+}
+
+/* 消息 hover 操作工具条 */
+.msg-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  opacity: 0;
+  transition: .15s;
+}
+.msg:hover .msg-actions { opacity: 1; }
+.msg-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-s);
+  color: var(--text-3);
+  transition: .1s;
+}
+.msg-actions button:hover { background: var(--bg-hover); color: var(--text-1); }
+
+/* 钉入记忆的节选择浮层(F8) */
+.pin-wrap { position: relative; display: inline-flex; }
+.pin-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); cursor: default; }
+.pin-menu {
+  position: absolute;
+  bottom: calc(28px * var(--ui-scale));
+  right: 0;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  min-width: calc(168px * var(--ui-scale));
+  padding: var(--space-1);
+  /* --bg-1 在 tokens 中并不存在(原写法静默失效=全透明),浮层必须不透明;
+     用 surface 而非 main:深色主题下浮层才比页面更亮、边界可辨 */
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card-h);
+}
+.pin-menu-title {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-caption);
+  color: var(--text-4);
+}
+.pin-menu button {
+  justify-content: flex-start !important;
+  width: 100% !important;
+  height: auto !important;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-sub);
+  text-align: left;
+}
+
+/* 消息操作栏溢出菜单:复制常驻,其余收入「⋯」(折叠冗余、窄窗不溢出) */
+.more-wrap { position: relative; display: inline-flex; }
+.more-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); cursor: default; }
+.more-menu {
+  position: absolute;
+  bottom: calc(28px * var(--ui-scale));
+  right: 0;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  min-width: calc(160px * var(--ui-scale));
+  padding: var(--space-1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card-h);
+}
+.more-menu > button, .more-sub > button {
+  display: flex !important;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: flex-start !important;
+  width: 100% !important;
+  height: auto !important;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-sub);
+  color: var(--text-2);
+  text-align: left;
+  border-radius: var(--radius-s);
+}
+.more-menu > button:hover, .more-sub > button:hover { background: var(--bg-hover); color: var(--text-1); }
+.more-menu > button.danger:hover { color: var(--err); background: var(--err-soft); }
+.more-sub { position: relative; display: block; }
+.more-sub-menu {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  margin-right: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  min-width: calc(132px * var(--ui-scale));
+  padding: var(--space-1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card-h);
+}
+.more-sub-menu button {
+  justify-content: flex-start !important;
+  width: 100% !important;
+  height: auto !important;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-sub);
+  text-align: left;
+  border-radius: var(--radius-s);
+}
+.more-sub-menu button:hover { background: var(--bg-hover); color: var(--text-1); }
+
+/* msg-meta 排版收紧:模型/时间/tokens 与操作栏视觉分组,间距遵循 token */
+.msg-meta { gap: var(--space-1) var(--space-2); }
+
+/* 思考强度下拉(v1.9.0 工作块 I;v2.1.2 改为与 chip 左缘对齐的固定浮层):
+   左边缘跟随「思考」chip(窄窗自动钳制在窗口内,不再被左缘裁切),
+   宽度随窗口收窄、高度受窗口限制(超出内部滚动);bottom / left / max-height
+   由 ToolBar.tsx 按 chip 的实测矩形注入。 */
+.think-menu {
+  position: fixed;
+  right: auto;
+  width: min(300px, calc(100vw - var(--space-6)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-1);
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+}
+.think-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-s);
+  font-size: var(--font-sub);
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font);
+}
+.think-item:hover { background: var(--bg-hover); }
+.think-item.active {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-1);
+  padding: calc(var(--space-2) - 1px) calc(var(--space-3) - 1px);
+}
+.think-item .hint {
+  font-size: var(--font-micro);
+  color: var(--text-4);
+  font-family: var(--font-mono);
+}
+.think-item.active .hint { color: var(--brand); }
+.think-divider { height: 1px; margin: var(--space-1) var(--space-2); background: var(--border); }
+

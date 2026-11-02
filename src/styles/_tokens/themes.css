@@ -1,0 +1,163 @@
+/* ================================================================
+ *  预制主题（通过 <html data-theme="..."> 切换）
+ *  每套覆盖背景/文字/边框/品牌/遮罩/阴影环境色，保证 WCAG AA 对比度
+ *  default 即 :root 默认值，无需单独声明
+ * ================================================================ */
+
+/* 主题 2：雾霾蓝 haze —— 灰蓝冷色，降低纯白刺眼感 */
+:root[data-theme="haze"]{
+  --bg-frame:     #DCE3EC;
+  --bg-main:      #F4F6FA;
+  --bg-main-rgb:  244,246,250;
+  --bg-surface:   #FFFFFF;
+  --bg-surface-rgb: 255,255,255;
+  --bg-side:      #EEF1F6;
+  --bg-hover:     #E6EAF2;
+  --bg-active:    #DDE2EC;
+  --border:       #D4DAE4;
+  --border-strong:#B8C2D0;
+  --text-1:       #151A22;
+  --text-2:       #465062;
+  --text-3:       #81889A;
+  --text-4:       #A8AFC0;
+  --brand:        #2C6FA0;
+  --brand-deep:   #1F5278;
+  --brand-soft:   #E0EEF8;
+  --brand-line:   #B7D3E8;
+  --ink:          #141416;
+  --ink-hover:    #222226;
+  --shadow-ambient: 40,50,80;
+}
+
+/* 主题 3：深夜蓝 midnight —— 深蓝近黑，护眼暗主题 */
+:root[data-theme="midnight"]{
+  --bg-frame:     #141821;
+  --bg-main:      #1E222C;
+  --bg-main-rgb:  30,34,44;
+  --bg-surface:   #262B36;
+  --bg-surface-rgb: 38,43,54;
+  --bg-side:      #191D26;
+  --bg-hover:     #2E3440;
+  --bg-active:    #353C4A;
+  --border:       #2C3240;
+  --border-strong:#3D4456;
+  /* 深色底上不使用 #E6E6E6(会发白边),用边框强度与表面色混合 */
+  --composer-border: color-mix(in srgb, var(--border-strong) 55%, var(--bg-surface));
+  --text-1:       #E5E8EF;
+  --text-2:       #9BA3B4;
+  --text-3:       #6B7280;
+  --text-4:       #4B5261;
+  --brand:        #4A90D9;
+  --brand-deep:   #6BAEEA;
+  --brand-soft:   #1E3A52;
+  --brand-line:   #2E5376;
+  --ink:          #0D1117;
+  --ink-hover:    #161B24;
+  --shadow-ambient: 0,0,0;
+}
+
+/* 主题 4：松烟绿 pine —— 低饱和墨绿，自然沉稳 */
+:root[data-theme="pine"]{
+  --bg-frame:     #E0E6E1;
+  --bg-main:      #F1F4F1;
+  --bg-main-rgb:  241,244,241;
+  --bg-surface:   #FFFFFF;
+  --bg-surface-rgb: 255,255,255;
+  --bg-side:      #E6EBE6;
+  --bg-hover:     #DCE4DC;
+  --bg-active:    #D0D8D0;
+  --border:       #D4DDD5;
+  --border-strong:#B5C2B7;
+  --text-1:       #15221B;
+  --text-2:       #445448;
+  --text-3:       #758479;
+  --text-4:       #9FABA2;
+  --brand:        #2E7D5B;
+  --brand-deep:   #1F5C42;
+  --brand-soft:   #E4F0EA;
+  --brand-line:   #B8D4C2;
+  --ink:          #141416;
+  --ink-hover:    #222226;
+  --shadow-ambient: 30,50,40;
+}
+
+/* 主题 5：暖橙日落 sunset —— 暖米底 + 橙调，黄昏氛围 */
+:root[data-theme="sunset"]{
+  --bg-frame:     #EDE4D8;
+  --bg-main:      #FBF6EF;
+  --bg-main-rgb:  251,246,239;
+  --bg-surface:   #FFFFFF;
+  --bg-surface-rgb: 255,255,255;
+  --bg-side:      #F0E8DC;
+  --bg-hover:     #E8DEC8;
+  --bg-active:    #DDCEB6;
+  --border:       #E4D9C5;
+  --border-strong:#C9B99E;
+  --text-1:       #2A2318;
+  --text-2:       #5A4E3C;
+  --text-3:       #8C7E68;
+  --text-4:       #B0A48F;
+  --brand:        #D1693D;
+  --brand-deep:   #A84E28;
+  --brand-soft:   #FCE7DC;
+  --brand-line:   #F4C4A8;
+  --ink:          #141416;
+  --ink-hover:    #222226;
+  --shadow-ambient: 60,45,30;
+}
+
+/* 主题 7：曜石黑 obsidian —— 纯黑编译器底色，高对比低眩光（深色 IDE 观感） */
+:root[data-theme="obsidian"]{
+  --bg-frame:     #08080A;
+  --bg-main:      #0F0F12;    /* 编辑器主底 */
+  --bg-main-rgb:  15,15,18;
+  --bg-surface:   #17171C;    /* 卡片/输入框/composer */
+  --bg-surface-rgb: 23,23,28;
+  --bg-side:      #0B0B0E;    /* 侧栏/状态栏 */
+  --bg-hover:     #1D1D24;
+  --bg-active:    #27272F;
+  --border:       #24242C;
+  --border-strong:#3A3A45;
+  --composer-border: color-mix(in srgb, var(--border-strong) 55%, var(--bg-surface));
+  --text-1:       #E8E8ED;
+  --text-2:       #A3A3AE;
+  --text-3:       #767680;
+  --text-4:       #51515B;
+  --brand:        #4C9AF5;    /* IDE 蓝 */
+  --brand-deep:   #7CB8FF;
+  --brand-soft:   #18283F;
+  --brand-line:   #2A4768;
+  --ink:          #26262E;    /* 深色按钮/代码块底（高于主底，保证可见） */
+  --ink-hover:    #32323C;
+  /* 语义色提亮，暗底上保持可读 */
+  --ok:           #3FB950;
+  --warn:         #D29922;
+  --err:          #F85149;
+  --shadow-ambient: 0,0,0;
+}
+
+/* 主题 6：樱花粉 sakura —— 柔粉浅紫，清新明亮 */
+:root[data-theme="sakura"]{
+  --bg-frame:     #EDE4EC;
+  --bg-main:      #FBF5F8;
+  --bg-main-rgb:  251,245,248;
+  --bg-surface:   #FFFFFF;
+  --bg-surface-rgb: 255,255,255;
+  --bg-side:      #F3E9EF;
+  --bg-hover:     #EBDDE4;
+  --bg-active:    #DECAD4;
+  --border:       #E4D5DD;
+  --border-strong:#C9B4C1;
+  --text-1:       #2D1F2A;
+  --text-2:       #5E4D58;
+  --text-3:       #8F7D87;
+  --text-4:       #B3A3AC;
+  --brand:        #C96B9A;
+  --brand-deep:   #A04E76;
+  --brand-soft:   #F9E4EE;
+  --brand-line:   #E8B6CE;
+  --ink:          #141416;
+  --ink-hover:    #222226;
+  --shadow-ambient: 60,40,55;
+}
+

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import * as ipc from '../../lib/ipc';
-import { IconChevronDown, IconEdit } from '../../components/icons';
+import { IconChevronDown, IconEdit, IconTrash } from '../../components/icons';
 import { CardPriceEditor } from './CardPriceEditor';
 import { capToValue, numOrNull, MEMORY_STRATEGY_OPTIONS, THINK_CAP_OPTIONS } from './constants';
 
@@ -11,6 +11,9 @@ export function ModelConfigCard({
   card,
   onPatch,
   onSaveCard,
+  selected,
+  onSelect,
+  onRemove,
 }: {
   providerId: string;
   model: string;
@@ -18,6 +21,11 @@ export function ModelConfigCard({
   card: ipc.ModelCard | undefined;
   onPatch: (model: string, patch: Partial<ipc.ModelOverride>) => void;
   onSaveCard: () => void;
+  /** 批量选择勾选态(未传 onSelect 时不渲染勾选框) */
+  selected?: boolean;
+  onSelect?: (v: boolean) => void;
+  /** 单个删除(未传则不渲染删除按钮) */
+  onRemove?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [editingPrice, setEditingPrice] = useState(false);
@@ -64,6 +72,15 @@ export function ModelConfigCard({
   return (
     <div className={`mcard${open ? ' open' : ''}${enabled ? '' : ' off'}`}>
       <div className="mcard-h" onClick={() => setOpen((v) => !v)}>
+        {onSelect && (
+          <input
+            type="checkbox"
+            checked={!!selected}
+            title="选择(用于批量删除)"
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onSelect(e.target.checked)}
+          />
+        )}
         <IconChevronDown size={14} className="arr" />
         <span className="nm">{name}</span>
         {alias && <span className="mid">{model}</span>}
@@ -85,6 +102,18 @@ export function ModelConfigCard({
           <span className="dot" />
           {enabled ? '启用' : '停用'}
         </span>
+        {onRemove && (
+          <button
+            className="prov-del"
+            title="从列表删除该模型"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          >
+            <IconTrash size={13} />
+          </button>
+        )}
       </div>
       <div className="mcard-b">
         <div className="set-row">

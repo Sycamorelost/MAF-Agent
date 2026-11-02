@@ -71,16 +71,12 @@ export interface AppSettings {
   summarize_provider_id: string | null;
   /** 提炼专用模型(null = 用当前会话模型) */
   summarize_model: string | null;
-  /** 划词提问:任意应用中连按两次 Ctrl+C 唤起主窗口 */
-  selection_ask_enabled: boolean;
-  /** 主窗口最小化时隐藏到托盘 */
+  /** 关闭主窗口时隐藏到托盘(最小化仍是普通最小化) */
   minimize_to_tray: boolean;
   /** 导航菜单中隐藏的功能项(对话/设置始终显示) */
   hidden_nav_items: string[];
   /** 导航菜单的显示顺序(存功能项 key;未列出的项按内置顺序补在末尾) */
   nav_order: string[];
-  /** 对话上下文窗口:每轮携带的历史消息条数(0 = 全部;默认 24) */
-  context_window_messages: number;
   /** 自由人格模式:true = system 不追加身份锚,仅保留 Base 物理契约(R3 A1) */
   bare_mode: boolean;
   /** 首次启动引导是否已完成(R3 首次安装向导) */

@@ -105,7 +105,6 @@ pub async fn dispatch_tool_calls(
                     "builtin",
                     &tool_name,
                     args.clone(),
-                    session_id,
                     forced,
                 )
                 .await
@@ -125,8 +124,7 @@ pub async fn dispatch_tool_calls(
                 args.clone()
             };
             // 审批通过后才真正执行(顺序不可颠倒:shell_exec 有副作用);
-            // P8:shell 放开白名单需要「完全信任」且持有有效的临时授权(全局或本会话),
-            // 仅有档位声明而授权已过期时按工作区档执行(白名单校验照常生效)。
+            // 「完全信任」档下 shell 放开白名单直接执行;其余档位按工作区规则校验白名单。
             let trust_shell = crate::mcp::approval::effective_mode(
                 &crate::mcp::approval::load_policy(&data_dir),
                 &data_dir,
@@ -193,7 +191,6 @@ pub async fn dispatch_tool_calls(
             &server,
             &tool_name,
             args,
-            session_id,
             false,
         )
         .await
@@ -338,7 +335,6 @@ async fn ask_approval(
     server: &str,
     tool: &str,
     args: Value,
-    session_id: Option<&str>,
     forced: bool,
 ) -> Option<Value> {
     // P1:高危 shell 命令(格式化/删根/改注册表等)强制人工确认。
@@ -350,21 +346,9 @@ async fn ask_approval(
     {
         return Some(args);
     }
-    let mut policy = super::approval::load_policy(data_dir);
-    // 会话级权限档覆盖(D11/V25):非 inherit 时替换全局档位;
-    // allow 白名单沿用全局配置(它只在 workspace 档生效,与档位正交)。
-    if let Some(sid) = session_id
-        && let Some(mode) = crate::db::sessions::permission_mode_override(sid)
-    {
-        policy.mode = match mode.as_str() {
-            "ask" => super::approval::ApprovalMode::Ask,
-            "full" => super::approval::ApprovalMode::Full,
-            _ => super::approval::ApprovalMode::Workspace,
-        };
-    }
-    // P8:声明为「完全信任」但临时授权缺失/过期/会话不匹配时,实际按「工作区」档执行,
-    // 能力令牌消费条件也随之自动收缩,避免残留令牌在失效后继续免审批。
-    policy.mode = super::approval::effective_mode(&policy, data_dir, session_id);
+    // 审批档是全局永久设置(设置页统一授权,持久化在 mcp-approval.json):
+    // 所有会话、所有环境共用一个档位,不存在会话级覆盖。
+    let policy = super::approval::load_policy(data_dir);
     let risk = super::approval::assess_risk(server, tool, &args);
     // 能力令牌:已并入「完全信任」总开关 —— 仅完全信任模式下才消费令牌,
     // 避免 full 期间签发的残留令牌在切回逐次/工作区档后继续免审批。

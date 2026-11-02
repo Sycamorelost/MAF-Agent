@@ -6,6 +6,14 @@ import type { MemoryStrategy, SessionRow } from '../../lib/ipc';
 import * as ipc from '../../lib/ipc';
 import { estimateTokens } from '../../lib/memoryInject';
 
+/** D3.2:模型切换完成后的横幅数据。 */
+export interface SwitchBanner {
+  from: string;
+  to: string;
+  tokens: number;
+  injected: string;
+}
+
 export interface ModelHandoffParams {
   sessionId: string | undefined;
   session: SessionRow | undefined;
@@ -27,12 +35,7 @@ export function useModelHandoff({
   /** 检测到模型切换时弹出的交接信息 */
   const [handoff, setHandoff] = useState<{ from: string; to: string } | null>(null);
   /** 切换完成后的横幅(D3.2) */
-  const [switchBanner, setSwitchBanner] = useState<{
-    from: string;
-    to: string;
-    tokens: number;
-    injected: string;
-  } | null>(null);
+  const [switchBanner, setSwitchBanner] = useState<SwitchBanner | null>(null);
   const [showInjected, setShowInjected] = useState(false);
   const prevModelRef = useRef<string | null>(null);
 

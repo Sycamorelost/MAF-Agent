@@ -4,7 +4,7 @@ import * as ipc from '../../lib/ipc';
 import { sessionPath } from '../../lib/workbench';
 import { useProvidersStore } from '../../stores/providers';
 import DrawForm, { STYLES } from './DrawForm';
-import DrawResult, { baseName, type ShownImage } from './DrawResult';
+import DrawResult, { type ShownImage } from './DrawResult';
 
 /** 历史作品面板折叠状态缓存键 */
 const HIST_COLLAPSED_KEY = 'draw-hist-collapsed';
@@ -140,11 +140,14 @@ export default function DrawPage() {
 
   /* ---------- 操作条 ---------- */
 
-  const onDownload = (img: ShownImage) => {
-    const a = document.createElement('a');
-    a.href = img.dataUrl;
-    a.download = baseName(img.path);
-    a.click();
+  /** 下载:走原生另存为对话框(WebView2 不认 <a download> 的 data: URL)。 */
+  const onDownload = async (img: ShownImage) => {
+    try {
+      const saved = await ipc.saveImageAs(img.path);
+      if (saved) showToast('已保存');
+    } catch (e) {
+      showToast(`保存失败:${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   const onCopy = async (img: ShownImage) => {

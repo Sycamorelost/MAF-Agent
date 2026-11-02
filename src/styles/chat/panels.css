@@ -1,0 +1,130 @@
+/* ============ 思考折叠块(对齐 ui-design 12 · 思考卡) ============ */
+.reasoning-block {
+  border: none;
+  border-radius: var(--radius-m);
+  /* 过程容器统一 1 档底色:32% hover 与主底混合 */
+  background: color-mix(in srgb, var(--bg-hover) 32%, var(--bg-main));
+  overflow: hidden;
+}
+.reasoning-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  text-align: left;
+}
+.reasoning-head:hover { color: var(--text-1); }
+.reasoning-head svg { flex: none; color: var(--text-3); }
+.reasoning-head b { font-weight: 600; color: var(--text-2); font-size: var(--font-caption); }
+.reasoning-head .sp { flex: 1; }
+.reasoning-tok {
+  font-family: var(--font-mono);
+  font-size: var(--font-micro);
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.reasoning-block.open .reasoning-head { border-bottom: none; }
+.reasoning-body {
+  /* 高度/滚动/内边距统一由下方「展开/收起过渡」规则定义,这里只管排版 */
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* 思考中脉冲点:三个圆点依次呼吸 */
+.reasoning-pulse {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.reasoning-pulse::before,
+.reasoning-pulse::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-4);
+  animation: reasoning-breathe 1.2s ease-in-out infinite;
+}
+.reasoning-pulse::after { animation-delay: .4s; }
+.reasoning-pulse::before { animation-delay: 0s; }
+@keyframes reasoning-breathe {
+  0%, 100% { opacity: .25; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.thinking-label { color: var(--text-2); }
+
+/* token 拆分展示:思考 N tok / 回答 M tok */
+.tok-split { color: var(--text-4); }
+
+/* ============ MemPanel(右记忆面板) ============ */
+/* ============ MemPanel(右记忆面板) ============ */
+
+.mempanel {
+  width: var(--mempanel-w);
+  border-left: none;
+  background: color-mix(in srgb, var(--bg-hover) 36%, var(--bg-main));
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.mem-head {
+  padding: var(--space-3) var(--pad-x);
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mem-head .t { font-size: var(--font-h3); font-weight: 600; }
+.mem-head .actions { display: flex; gap: var(--space-1); }
+.mem-head .actions button {
+  height: var(--ctl-h);
+  padding: 0 var(--ctl-pad);
+  line-height: 1;
+  white-space: nowrap;
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  border-radius: var(--radius-s);
+}
+.mem-head .actions button:hover { background: var(--bg-hover); color: var(--text-1); }
+.mem-frontmatter {
+  padding: var(--space-3) var(--pad-x);
+  border-bottom: none;
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: color-mix(in srgb, var(--bg-hover) 55%, var(--bg-main));
+}
+.mem-frontmatter .k { color: var(--text-4); margin-right: var(--space-2); }
+.mem-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--pad-x);
+  font-family: var(--font-mono);
+  font-size: var(--font-caption);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--text-2); min-height: 0; }
+.mem-view.edit {
+  font-family: var(--font);
+  resize: none;
+  border: none;
+  outline: none;
+  background: var(--bg-main);
+  width: 100%;
+  color: var(--text-1);
+  font-size: var(--font-body);
+}
+

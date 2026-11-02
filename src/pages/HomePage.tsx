@@ -11,11 +11,7 @@ import Composer from '../components/Composer';
 import Toast from '../components/Toast';
 import AgentPickerDialog from '../components/AgentPickerDialog';
 import {
-  IconEdit,
   IconHistory,
-  IconLayers,
-  IconLanguages,
-  IconResearch,
   agentIconComponent,
 } from '../components/icons';
 import { useSessionsStore } from '../stores/sessions';
@@ -31,38 +27,6 @@ import type { SkippedFile } from '../lib/attachmentDrop';
 
 /** 首页默认提示语(用户可在设置 · 主题与字体大小 · 首页中自定义)。 */
 export const DEFAULT_HOME_PROMPT = 'myAgent | 向更美好的生活出发！';
-
-/** 快捷开始:点击只填入输入框,不直接发送,避免误触发模型计费。 */
-const QUICK_PROMPTS = [
-  {
-    key: 'write',
-    title: '写作润色',
-    desc: '起草 · 改写 · 总结',
-    prompt: '帮我润色下面这段文字,保持原意,让表达更自然:',
-    Icon: IconEdit,
-  },
-  {
-    key: 'research',
-    title: '深度研究',
-    desc: '联网检索 · 多步分析',
-    prompt: '请联网检索,围绕这个主题给出一份带引用来源的分析:',
-    Icon: IconResearch,
-  },
-  {
-    key: 'translate',
-    title: '翻译对比',
-    desc: '中英互译 · 术语统一',
-    prompt: '翻译成英文,并给出两种更地道的表达:',
-    Icon: IconLanguages,
-  },
-  {
-    key: 'code',
-    title: '代码助手',
-    desc: '解释 · 调试 · 重构',
-    prompt: '解释这段代码的作用,并指出潜在问题:',
-    Icon: IconLayers,
-  },
-];
 
 /** 最近对话的相对时间(失败兜底为空串,不阻塞渲染)。 */
 function relTime(iso: string): string {
@@ -333,29 +297,6 @@ export default function HomePage() {
           {error}
         </div>
       )}
-
-      {/* 快捷开始:只填词不发送,零额外 token */}
-      <section className="home-quick" aria-label="快捷开始">
-        <div className="home-sec-head">快捷开始</div>
-        <div className="home-quick-grid">
-          {QUICK_PROMPTS.map(({ key, title, desc, prompt, Icon }) => (
-            <button
-              key={key}
-              type="button"
-              className="home-quick-card"
-              title="点击填入输入框"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setText(prompt)}
-            >
-              <span className="qi">
-                <Icon size={14} />
-              </span>
-              <span className="qt">{title}</span>
-              <span className="qd">{desc}</span>
-            </button>
-          ))}
-        </div>
-      </section>
 
       {(recents.length > 0 || recentError) && (
         <section className="home-recent" aria-label="最近对话">

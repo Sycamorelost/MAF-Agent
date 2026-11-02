@@ -554,6 +554,38 @@ pub async fn read_image(path: String) -> Result<String, String> {
     ))
 }
 
+/// 「下载」:原生另存为对话框 + 复制到用户选定路径;取消返回 None。
+/// (WebView2 不认 `<a download>` 的 data: URL,必须走原生对话框。)
+#[tauri::command]
+pub async fn save_image_as(
+    app: tauri::AppHandle,
+    src_path: String,
+) -> Result<Option<String>, String> {
+    let src = std::path::PathBuf::from(&src_path);
+    ensure_in_images_dir(&src)?;
+    let name = src
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "image.png".into());
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_dialog::DialogExt;
+        app.dialog()
+            .file()
+            .set_title("保存图片")
+            .set_file_name(&name)
+            .add_filter("图片", &["png", "jpg", "jpeg", "webp"])
+            .blocking_save_file()
+            .and_then(|p| p.into_path().ok())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(dst) = picked else {
+        return Ok(None);
+    };
+    std::fs::copy(&src, &dst).map_err(|e| format!("保存图片失败: {e}"))?;
+    Ok(Some(dst.display().to_string()))
+}
+
 /// 「上传到对话」:把已生成图片复制为指定会话的图片附件,返回附件元数据。
 #[tauri::command]
 pub async fn image_to_session(

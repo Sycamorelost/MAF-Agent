@@ -377,7 +377,7 @@ pub fn delete_if_empty(id: &str) -> Result<bool, String> {
 }
 
 /// 批量清理空会话(0 条消息且 updated 早于 grace_secs 秒前),返回被删会话 id 列表。
-/// grace 避免误删「刚创建还没发第一条消息」的会话(划词链路先建会话后发消息)。
+/// grace 避免误删「刚创建还没发第一条消息」的会话(先建会话后发消息的链路)。
 pub fn prune_empty(grace_secs: i64) -> Result<Vec<String>, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     let cutoff = (chrono::Local::now() - chrono::Duration::seconds(grace_secs.max(0))).to_rfc3339();

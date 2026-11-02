@@ -3,7 +3,7 @@ import * as ipc from '../../lib/ipc';
 import { studyMemoryDigest } from '../../lib/ipc/study';
 import { parseHumanVoiceLevel, type HumanVoiceLevel } from '../../lib/humanVoice';
 
-/** 当前模型与发送流程相关的全局设置探测:上下文窗口、全裸模式、物理契约、文字质感、思考能力、学习进度摘要。 */
+/** 当前模型与发送流程相关的全局设置探测:全裸模式、物理契约、文字质感、思考能力、学习进度摘要。 */
 export function useChatSettings(current: { providerId: string; model: string } | null) {
   // 当前模型的思考能力(手动修正 > 内置规则表推断;查询失败按不支持处理,控件整体隐藏)
   const [thinkCap, setThinkCap] = useState<ipc.ReasoningCapability | null>(null);
@@ -30,9 +30,6 @@ export function useChatSettings(current: { providerId: string; model: string } |
       alive = false;
     };
   }, []);
-  /** 全局上下文窗口(条数):会话自身未设置(max_context_messages=0)时作为默认值。
-   *  默认 24 条 ≈ 12 轮,避免长会话把全部历史原样重发导致 token 线性膨胀。 */
-  const [ctxWindow, setCtxWindow] = useState(24);
   /** 全裸模式(R3 A1):true = system 不追加身份锚,仅保留物理契约(人格全交智能体/中转模型) */
   const [bareMode, setBareMode] = useState(false);
   /** 用户自定义底层物理契约(空 = 内置默认) */
@@ -45,7 +42,6 @@ export function useChatSettings(current: { providerId: string; model: string } |
       .getSettings()
       .then((s) => {
         if (!alive) return;
-        setCtxWindow(s.context_window_messages ?? 24);
         setBareMode(!!s.bare_mode);
         setCustomContract(s.custom_base_prompt ?? null);
         setHumanVoiceLevel(parseHumanVoiceLevel(s.human_voice_level));
@@ -55,5 +51,5 @@ export function useChatSettings(current: { providerId: string; model: string } |
       alive = false;
     };
   }, []);
-  return { ctxWindow, bareMode, customContract, humanVoiceLevel, thinkCap, studyDigest };
+  return { bareMode, customContract, humanVoiceLevel, thinkCap, studyDigest };
 }

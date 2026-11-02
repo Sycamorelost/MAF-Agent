@@ -1,7 +1,9 @@
-//! 设置 · 运行时预设视图(P5 / D18 / D19):全局默认档选择 + 四档能力对照(只读)。
+//! 设置 · 运行时预设视图(P5 / D18 / D19):全局默认档选择 + 四档能力对照(只读)
+//! + 单次生成时长上限(与预设同页,便于统一调整运行参数)。
 //! 预设与权限解耦:这里只决定工具/上下文/检索的默认档,审批档位仍在「MCP 工具」里管。
 
 import { useEffect, useState } from 'react';
+import * as ipc from '../../lib/ipc';
 import { IconCheck, IconGauge } from '../../components/icons';
 import { listPresets, type Preset } from '../../lib/ipc/presets';
 import {
@@ -11,14 +13,18 @@ import {
   retrievalSummary,
   toolsSummary,
 } from '../../lib/presets/resolve';
+import { GenerationView } from './GenerationView';
 
 export interface PresetsViewProps {
   /** 当前全局默认档 id;null = 设置尚未加载 */
   current: string | null;
   onSelect: (presetId: string) => void;
+  settings: ipc.AppSettings | null;
+  /** 局部设置即时保存(失败会 throw) */
+  onSave: (patch: Partial<ipc.AppSettings>) => Promise<void>;
 }
 
-export function PresetsView({ current, onSelect }: PresetsViewProps) {
+export function PresetsView({ current, onSelect, settings, onSave }: PresetsViewProps) {
   const [presets, setPresets] = useState<Preset[]>([]);
 
   useEffect(() => {
@@ -105,6 +111,8 @@ export function PresetsView({ current, onSelect }: PresetsViewProps) {
           </table>
         </div>
       </div>
+
+      <GenerationView settings={settings} onSave={onSave} />
 
       <div className="set-note">
         <IconGauge size={14} />

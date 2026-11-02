@@ -1,6 +1,6 @@
 import { type ComponentType } from 'react';
 import * as ipc from '../../lib/ipc';
-import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconTranslate, IconQuote, IconChart, IconPlus, IconFileText, IconLayers, IconGauge, IconClock } from '../../components/icons';
+import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconTranslate, IconChart, IconPlus, IconFileText, IconGauge } from '../../components/icons';
 
 export const ENGINES = [
   { id: 'bocha', name: '博查 Bocha' },
@@ -18,7 +18,7 @@ export const NAV: NavGroup[] = [
     grp: '模型',
     items: [
       { id: 'providers', label: '模型服务商', icon: IconBot },
-      { id: 'memory', label: '记忆与提炼', icon: IconBrain },
+      { id: 'memory', label: '记忆管理', icon: IconBrain },
     ],
   },
   {
@@ -26,8 +26,6 @@ export const NAV: NavGroup[] = [
     items: [
       { id: 'search', label: '联网搜索', icon: IconGlobe },
       { id: 'translate', label: '翻译', icon: IconTranslate },
-      { id: 'selection', label: '划词提问', icon: IconQuote },
-      { id: 'generation', label: '生成时长', icon: IconClock },
     ],
   },
   {
@@ -35,7 +33,6 @@ export const NAV: NavGroup[] = [
     items: [
       { id: 'appearance', label: '外观与首页', icon: IconFileText },
       { id: 'navmenu', label: '导航菜单', icon: IconChat },
-      { id: 'workbench', label: '工作台模式', icon: IconLayers },
       { id: 'presets', label: '运行时预设', icon: IconGauge },
     ],
   },
@@ -55,7 +52,6 @@ export const NAV: NavGroup[] = [
 
 /** 导航菜单可见性开关项(对话/设置固定保留,不在此列)。 */
 export const NAV_VISIBILITY: { key: string; label: string }[] = [
-  { key: 'work', label: '专业工作台' },
   { key: 'plan', label: '学习中心' },
   { key: 'draw', label: '绘图' },
   { key: 'translate', label: '翻译' },
@@ -143,7 +139,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
     name: '软件描述与授权范围',
     items: [
       {
-        text: '3.1 本软件（myAgent）是 MAF 团队旗下的 Agent 产品，一款专为学习、调研而创造的智能体框架软件，提供本地会话、文件即记忆、学习规划、知识库、翻译、绘画、划词提问等框架功能。本软件自身不生产、不持有大模型内容,模型能力由用户自行配置的模型服务商提供。',
+        text: '3.1 本软件（myAgent）是 MAF 团队旗下的 Agent 产品，一款专为学习、调研而创造的智能体框架软件，提供本地会话、文件即记忆、学习规划、知识库、翻译、绘画等框架功能。本软件自身不生产、不持有大模型内容,模型能力由用户自行配置的模型服务商提供。',
       },
       {
         text: '3.2 本软件以 Apache License 2.0 开源发布，源码见 https://github.com/Sycamorelost/MAF-Agent 。您对本软件的安装、运行、修改、分发以及商业使用，均以仓库根目录 LICENSE 授予的权利为准；本条款仅作补充说明，与 LICENSE 冲突时以 LICENSE 为准。(免费与无广告承诺见第十四条。)',
@@ -277,7 +273,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
         text: '10.3 因您自行更改数据目录、删除数据文件、使用非开发者提供的版本,或未按软件说明操作而导致的数据丢失或软件异常,开发者不承担责任。',
       },
       {
-        text: '10.4 「完全信任」授权模式(含其解锁的临时授权与 GUI 自动化)为您在设置页明示选择开启的高权限模式。开启后,模型输出可直接触发本机命令执行、文件写入与鼠标键盘操作,不再逐次询问;您应仅在同时信任所用模型与全部工具输出内容时开启。因开启该模式而产生的任何操作后果,由您自行承担。',
+        text: '10.4 「完全信任」授权模式(含其解锁的 GUI 自动化)为您在设置页明示选择开启的高权限模式。开启后,模型输出可直接触发本机命令执行、文件写入与鼠标键盘操作,不再逐次询问;您应仅在同时信任所用模型与全部工具输出内容时开启。因开启该模式而产生的任何操作后果,由您自行承担。',
       },
     ],
   },

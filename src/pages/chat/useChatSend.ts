@@ -21,6 +21,9 @@ import { quoteSourceLabel, type QuoteRef } from '../../lib/quote';
 
 /** P2-8:准备阶段(预检索/联网/落库)用户点「停止」的哨兵错误 —— 静默收尾,不当失败提示 */
 class PrepCancelled extends Error {}
+/** 上下文条数兜底:会话未单独设置、且预设尚未解析完成/解析失败时使用(24 条 ≈ 12 轮),
+ *  避免首轮把全部历史原样重发。正常情况下一律以运行时预设的 context.max_messages 为准。 */
+const FALLBACK_CTX_MESSAGES = 24;
 export interface ChatSendParams {
   sessionId: string | undefined;
   session: SessionRow | undefined;
@@ -75,10 +78,10 @@ export function useChatSend({
   const [retryTarget, setRetryTarget] = useState<BubbleMessage | null>(null);
   /** F8:钉入记忆后的轻提示(多行文件导入清单常驻,可手动关闭) */
   const { toast, showToast, hideToast } = useToast();
-  // 模型能力 / 学习进度 / 上下文窗口 / 全裸模式 / 物理契约 / 文字质感等设置
-  const { ctxWindow, bareMode, customContract, humanVoiceLevel, thinkCap, studyDigest } =
+  // 模型能力 / 学习进度 / 全裸模式 / 物理契约 / 文字质感等设置
+  const { bareMode, customContract, humanVoiceLevel, thinkCap, studyDigest } =
     useChatSettings(current);
-  /** P5 / D19:会话生效预设的上下文条数上限(会话未单独设置时优先于全局滑窗;0 = 未解析/解析失败回落)。 */
+  /** P5 / D19:会话生效预设的上下文条数上限(会话未单独设置时生效;0 = 未解析/解析失败,回落兜底值)。 */
   const [presetCtxMax, setPresetCtxMax] = useState(0);
   useEffect(() => {
     if (!sessionId) {
@@ -138,7 +141,7 @@ export function useChatSend({
     const latest = useMessagesStore.getState().bySession[sessionId] ?? [];
     return rebuildSendHistory(
       latest,
-      session?.max_context_messages || presetCtxMax || ctxWindow,
+      session?.max_context_messages || presetCtxMax || FALLBACK_CTX_MESSAGES,
       buildSystem(),
       // C2:doc_pipeline=resident 的智能体一律注入文档卡,细节交给 doc_search/doc_read
       { resident: agent?.doc_pipeline === 'resident' },
@@ -163,11 +166,11 @@ export function useChatSend({
     if (notice) setCompressNotice(notice);
   };
   /** 构建带滑窗与附件注入的历史(系统提示算 1 条;历史消息条数 = maxMsg,0=全部)。
-   *  条数优先级(D19):会话单独设置 > 会话生效预设 > 全局设置(默认 24 条)。 */
+   *  条数优先级(D19):会话单独设置 > 会话生效预设(未解析时回落 FALLBACK_CTX_MESSAGES)。 */
   const buildHistory = (extraUser: { content: string; images?: string[] } | null) =>
     buildSendHistory(
       messages,
-      session?.max_context_messages || presetCtxMax || ctxWindow,
+      session?.max_context_messages || presetCtxMax || FALLBACK_CTX_MESSAGES,
       buildSystem(),
       extraUser,
       { resident: agent?.doc_pipeline === 'resident' },

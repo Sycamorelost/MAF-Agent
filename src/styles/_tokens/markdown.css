@@ -1,0 +1,144 @@
+/* ============ Markdown 统一排版模板(全局唯一) ============
+   会话气泡 / 研究报告 / 学习规划 / 去 AI 味 / 记忆预览 / 教程卡等所有模型输出
+   共用这一套字号、行高、间距与组件样式;各容器只负责宽度与底色,不再各自复制。 */
+.md{
+  font-size:var(--font-read);line-height:1.7;color:var(--text-1);
+  overflow-wrap:anywhere;word-break:break-word;
+}
+.md > :first-child{margin-top:0}
+.md > :last-child{margin-bottom:0}
+.md p{margin:0 0 var(--space-3)}
+.md strong{font-weight:600;color:var(--text-1)}
+.md em{font-style:italic}
+.md ul,.md ol{padding-left:calc(20px * var(--ui-scale));margin:var(--space-1) 0 var(--space-3)}
+.md li + li{margin-top:calc(6px * var(--ui-scale))}
+.md input[type="checkbox"]{margin-right:var(--space-1);vertical-align:-1px}
+/* 标题阶梯:与 15px 正文形成 1.33 / 1.2 / 1.07 倍层级;h4–h6 不再低于正文 */
+.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{
+  margin:var(--space-3) 0 calc(6px * var(--ui-scale));font-weight:600;line-height:1.4;color:var(--text-1);
+}
+.md h1{font-size:calc(20px * var(--ui-scale));margin-top:calc(20px * var(--ui-scale))}
+.md h2{font-size:calc(18px * var(--ui-scale));margin-top:calc(16px * var(--ui-scale))}
+.md h3{font-size:calc(16px * var(--ui-scale));margin-top:calc(12px * var(--ui-scale))}
+.md h4,.md h5,.md h6{font-size:calc(15px * var(--ui-scale));margin-top:calc(10px * var(--ui-scale))}
+.md blockquote{
+  border-left:4px solid var(--brand);padding-left:var(--space-3);
+  margin:var(--space-2) 0;color:var(--text-2);
+}
+.md hr{border:none;border-top:1px solid var(--border);margin:var(--space-3) 0}
+.md a{color:var(--brand)}
+.md img{max-width:100%;border-radius:var(--radius-m)}
+/* 宽表允许横向滚动,避免收窄阅读列后被裁切 */
+.md table{border-collapse:collapse;display:block;overflow-x:auto;margin:var(--space-3) 0;font-size:var(--font-sub);max-width:100%}
+/* 去竖线:只留横向分隔,中文表格更像「列表」而非 Excel 网格 */
+.md th,.md td{border:none;border-bottom:1px solid var(--border);padding:calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));text-align:left;vertical-align:top}
+.md th{background:color-mix(in srgb,var(--bg-hover) 32%,transparent);font-weight:600}
+.md code{font-family:var(--font-mono);font-size:var(--font-sub);background:color-mix(in srgb,var(--text-1) 7%,transparent);border-radius:4px;padding:1px 5px}
+.md pre{
+  margin:var(--space-2) 0;background:var(--ink);color:#D6DCE5;
+  padding:var(--space-3) var(--space-4);border-radius:var(--radius-m);
+  overflow-x:auto;font-family:var(--font-mono);font-size:var(--font-sub);line-height:1.6;
+}
+.md pre code{background:transparent;padding:0;font-size:inherit}
+/* 代码块:容器(.codeblock/.codeblock-header)样式在 chat.css 全局生效,这里只补齐 Markdown 内的定位 */
+.md .codeblock{position:relative;margin:var(--space-2) 0}
+.md .codeblock pre{margin:0}
+/* KaTeX:行内公式略放大;块级公式超宽时横向滚动,避免撑破气泡/报告容器 */
+.md .katex{font-size:1.05em}
+.katex-display{overflow-x:auto;overflow-y:hidden}
+/* 教程卡内的 Markdown:只补容器底色与内边距 */
+.tut-body .md{background:var(--bg-surface);border-radius:var(--radius-m);margin-top:var(--space-2);padding:var(--space-3)}
+
+/* 记忆状态点 */
+.stat-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.stat-dot.ok{background:var(--ok)}
+.stat-dot.warn{background:var(--warn)}
+.stat-dot.err{background:var(--err)}
+.stat-dot.info{background:var(--brand)}
+
+/* ---- 响应式断点（统一所有页面） ----
+   ★ 栏宽策略:只「降档」、不硬隐藏。
+     面板可见性由折叠态决定,优先级:用户手动展开 > 断点默认。
+     面板默认宽度由 usePanelWidth 读取 --mempanel-w,token 降档即生效;
+     另配合按视口比例(45%)的限宽,确保窄窗下主区不被挤到不可用。 */
+@media (max-width:1100px){
+  :root{ --mempanel-w:calc(280px * var(--ui-scale)); }
+}
+@media (max-width:900px){
+  :root{
+    --mempanel-w:calc(260px * var(--ui-scale));
+    --sidebar-w:calc(240px * var(--ui-scale));
+    --aside-w:calc(260px * var(--ui-scale));
+  }
+  .cards{flex-direction:column;max-width:480px}
+}
+@media (max-width:560px){
+  :root{
+    --sidebar-w:calc(220px * var(--ui-scale));
+    --aside-w:calc(240px * var(--ui-scale));
+  }
+  .stage{padding:var(--space-6) var(--pad-x-narrow) var(--space-3)}
+  .cards{gap:var(--space-2)}
+  .composer-bar{padding:var(--space-2) var(--space-3) var(--space-3)}
+}
+/* 极窄窗(380-420px):压低内边距/字号/标题栏高度,组件缩成图标按钮 */
+@media (max-width:420px){
+  :root{
+    --pad-x:var(--space-3);
+    --pad-x-narrow:var(--space-2);
+    --sidebar-w:calc(200px * var(--ui-scale));
+    --aside-w:calc(220px * var(--ui-scale));
+    --titlebar-h:calc(32px * var(--ui-scale));
+    --font-h1:calc(16px * var(--ui-scale));
+    --font-display:calc(19px * var(--ui-scale));
+    --font-h3:calc(13px * var(--ui-scale));
+    --font-body:calc(12.5px * var(--ui-scale));
+    --font-sub:calc(11.5px * var(--ui-scale));
+    --font-caption:calc(10.5px * var(--ui-scale));
+    --font-micro:calc(9.5px * var(--ui-scale));
+    --font-read:calc(13px * var(--ui-scale));
+  }
+  .titlebar{gap:var(--space-1)}
+  .menu-btn{width:calc(28px * var(--ui-scale));height:calc(28px * var(--ui-scale))}
+  .tb-pill{padding: 4px;gap: 4px}
+  .tb-pill-btn{width:calc(24px * var(--ui-scale));height:calc(22px * var(--ui-scale))}
+  .tb-pill-btn svg{width:13px;height:13px}
+  .win-btn{width:calc(28px * var(--ui-scale))}
+}
+/* 宽窗:栏宽升档,避免大屏下内容仍被限制在窄列 */
+@media (min-width:1600px){
+  :root{ --mempanel-w:calc(360px * var(--ui-scale)); }
+  .cards{max-width:960px}
+  .composer{max-width:960px}
+}
+
+/* ---- 窗口尺寸自适应:字号/按钮/栏高随窗口宽度缩放,不再固定 ---- */
+@media (max-width:1100px){
+  :root{
+    /* 窄窗口基准字号下移,仍乘以用户设置的 --ui-scale */
+    --font-hero:calc(23px * var(--ui-scale)); --font-h1:calc(17px * var(--ui-scale)); --font-display:calc(20px * var(--ui-scale)); --font-h2:calc(15px * var(--ui-scale)); --font-h3:calc(14px * var(--ui-scale));
+    --font-body:calc(13px * var(--ui-scale)); --font-body-em:calc(13px * var(--ui-scale)); --font-sub:calc(12px * var(--ui-scale));
+    --font-caption:calc(11px * var(--ui-scale)); --font-micro:calc(10px * var(--ui-scale));
+    --font-read:calc(13.5px * var(--ui-scale));
+    --titlebar-h:calc(34px * var(--ui-scale));
+  }
+  .btn-primary,.btn-brand{padding:var(--space-1) var(--space-3)}
+  .btn-ghost{padding:var(--space-1) var(--space-2)}
+  .pill{padding: 8px 12px}
+  .chat-head{height:40px}
+}
+@media (min-width:1600px){
+  :root{
+    /* 宽窗口基准字号上移,仍乘以用户设置的 --ui-scale */
+    --font-hero:calc(30px * var(--ui-scale)); --font-h1:calc(21px * var(--ui-scale)); --font-display:calc(26px * var(--ui-scale)); --font-h2:calc(18px * var(--ui-scale)); --font-h3:calc(16px * var(--ui-scale));
+    --font-body:calc(15px * var(--ui-scale)); --font-body-em:calc(15px * var(--ui-scale)); --font-sub:calc(14px * var(--ui-scale));
+    --font-caption:calc(13px * var(--ui-scale)); --font-micro:calc(12px * var(--ui-scale)); --font-mini:calc(11px * var(--ui-scale));
+    --font-read:calc(16px * var(--ui-scale));
+    --titlebar-h:calc(42px * var(--ui-scale));
+  }
+  .btn-primary,.btn-brand{padding:var(--space-3) var(--space-5)}
+  .btn-ghost{padding:var(--space-2) var(--space-3)}
+  .pill{padding: 12px 20px}
+  .chat-head{height:52px}
+}
+

@@ -1,12 +1,8 @@
-//! 应用级设置(迭代 D3.7,迭代 D9 扩展划词提问),落盘 `data/settings.json`。
+//! 应用级设置,落盘 `settings.json`。
 
 use std::{fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
-
-fn default_true() -> bool {
-    true
-}
 
 /// 应用设置。所有字段缺省 = 走默认行为。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,10 +13,7 @@ pub struct AppSettings {
     /// 提炼专用模型(空 = 用当前会话模型)
     #[serde(default)]
     pub summarize_model: Option<String>,
-    /// 划词提问:任意应用中连按两次 Ctrl+C 唤起主窗口
-    #[serde(default = "default_true")]
-    pub selection_ask_enabled: bool,
-    /// 主窗口最小化时隐藏到托盘(默认关:最小化保留任务栏图标,点 × 才进托盘)
+    /// 关闭主窗口时隐藏到托盘(默认关:点 × 直接退出;最小化始终保留任务栏图标)
     #[serde(default)]
     pub minimize_to_tray: bool,
     /// 导航菜单中隐藏的功能项(对话/设置始终显示;空 = 全部显示)
@@ -29,9 +22,6 @@ pub struct AppSettings {
     /// 导航菜单的显示顺序(存功能项 key;未列出的项按内置顺序补在末尾)
     #[serde(default)]
     pub nav_order: Vec<String>,
-    /// 对话上下文窗口:每轮携带的历史消息条数(0 = 全部;默认 24)
-    #[serde(default = "default_context_window")]
-    pub context_window_messages: u32,
     /// 全裸模式(R3 A1):true = system 不追加身份锚,仅保留 Base 物理契约;
     /// 人格全交智能体提示或用户自带人设的中转模型
     #[serde(default)]
@@ -148,10 +138,6 @@ fn default_attachment_folder_limit() -> u32 {
     10
 }
 
-fn default_context_window() -> u32 {
-    24
-}
-
 fn default_workbench() -> String {
     "chat".into()
 }
@@ -169,11 +155,9 @@ impl Default for AppSettings {
         Self {
             summarize_provider_id: None,
             summarize_model: None,
-            selection_ask_enabled: true,
             minimize_to_tray: false,
             hidden_nav_items: Vec::new(),
             nav_order: Vec::new(),
-            context_window_messages: default_context_window(),
             bare_mode: false,
             first_run_completed: false,
             custom_base_prompt: None,
@@ -239,7 +223,6 @@ mod tests {
         let back: AppSettings = serde_json::from_str(&text).unwrap();
         assert_eq!(back.summarize_provider_id.as_deref(), Some("deepseek"));
         assert_eq!(back.summarize_model.as_deref(), Some("deepseek-chat"));
-        assert!(back.selection_ask_enabled);
         assert!(!back.minimize_to_tray);
         assert!(back.hidden_nav_items.is_empty());
     }
@@ -250,7 +233,6 @@ mod tests {
         let back: AppSettings = serde_json::from_str("{}").unwrap();
         assert!(back.summarize_provider_id.is_none());
         assert!(back.summarize_model.is_none());
-        assert!(back.selection_ask_enabled);
         assert!(!back.minimize_to_tray);
         // 生成时长未配置时沿用旧版行为(10 分钟)
         assert_eq!(back.chat_timeout_minutes, DEFAULT_CHAT_TIMEOUT_MINUTES);

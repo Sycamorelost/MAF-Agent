@@ -1,0 +1,193 @@
+/* ================================================================
+ * 专业 Agent 工作台(P3 结构调整):WorkbenchHome / 会话页 work 态 / 设置·工作台模式
+ * 只新增样式,不改 chat.css;色值与间距全部走 _tokens.css。
+ * P3-1 路由收敛:WorkbenchPage 三栏外壳已拆(.wb-page/.wb-body/.wb-main/.wb-side 容器随之删除),
+ * 检查器宽度变量保留;.wb-side-* 列表样式由会话切换浮窗(P3-2)复用。
+ * ================================================================ */
+
+:root { --wb-inspector-w: calc(352px * var(--ui-scale)); }
+@media (max-width: 1279px) {
+  :root { --wb-inspector-w: calc(312px * var(--ui-scale)); }
+}
+
+.flip { transform: rotate(180deg); }
+
+/* 会话列表(参考豆包侧栏:纯扁平、无卡片、无 hover 背景) */
+.wb-side-list { display: flex; flex-direction: column; min-height: 0; overflow: auto; padding-bottom: var(--space-3); }
+.wb-side-group { display: flex; flex-direction: column; }
+.wb-side-group + .wb-side-group { margin-top: var(--space-3); }
+/* 项目分组标题:可点击折叠,黑字,黑体,项目名 + 计数 + 最右折叠箭头 */
+.wb-side-label {
+  display: flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  font-size: var(--font-sub); color: #000000; font-weight: 700;
+  letter-spacing: 0; text-transform: none;
+  cursor: pointer;
+  user-select: none;
+}
+/* 折叠箭头:默认朝右(折叠态),展开态旋转 90° 向下;margin-left:auto 推到最右 */
+.wb-side-chevron { color: #000000; flex: none; transition: transform .15s; margin-left: auto; }
+.wb-side-chevron.down { transform: rotate(90deg); }
+/* 文件夹图标:纯黑,作为缩进占位符 */
+.wb-side-proj-head svg { color: #000000; flex: none; }
+/* 会话项:等线字体、等缩进、左缘对齐项目名、选中态浅灰背景 + 实心圆指示器 */
+.wb-side-item {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%;
+  /* 左缩进 = space-3(项目头的左内边距) + 14px(folder图标占位) + space-1(gap) */
+  padding: var(--space-2) var(--space-3) var(--space-2) calc(var(--space-3) + 14px + var(--space-1));
+  border: none; border-radius: var(--radius-s);
+  font-size: var(--font-h3); color: #000000; text-align: left;
+  font-family: DengXian, "等线", "Microsoft YaHei", sans-serif;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+.wb-side-item:hover { color: #000000; background: var(--bg-hover); }
+.wb-side-item.on { color: #000000; background: var(--bg-hover); }
+.wb-side-item.on::before {
+  /* 实心圆指示器,大小 = 1/3 行高(ctl-h ≈ 28px,所以 ~9px) */
+  content: ''; position: absolute; left: calc(var(--space-3) + 3px); top: 50%; transform: translateY(-50%);
+  width: calc(var(--ctl-h) / 3); height: calc(var(--ctl-h) / 3); border-radius: 50%;
+  background: var(--brand);
+}
+.wb-side-item.on .txt { font-weight: 600; color: #000000; }
+.wb-side-item .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #000000; }
+.wb-side-item .when { font-size: var(--font-mini); color: #000000; flex: none; opacity: .5; }
+.wb-side-item.flat {
+  padding-left: calc(var(--space-3) + 14px + var(--space-1));
+}
+.wb-side-item.flat.on::before { left: calc(var(--space-3) + 3px); }
+
+/* 计划摘要 + 步骤清单(ui-design b3) */
+.plan-sum { display: flex; flex-direction: column; gap: var(--space-1); flex: none; }
+.plan-sum-bar { height: 4px; border-radius: 2px; background: var(--bg-hover); overflow: hidden; }
+.plan-sum-bar i { display: block; height: 100%; background: var(--brand); border-radius: 2px; }
+.plan-sum-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: var(--font-mini); color: var(--text-3);
+}
+.plan-sum-row span { display: inline-flex; align-items: center; gap: var(--space-1); }
+.state-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  border: 2px solid var(--text-4);
+}
+.state-dot.done { border-color: var(--ok); background: var(--ok); }
+.state-dot.run { border-color: var(--brand); background: var(--brand); }
+.state-dot.wait { border-color: var(--text-4); background: transparent; }
+.plan-list { list-style: none; display: flex; flex-direction: column; gap: var(--space-1); }
+.plan-item { display: flex; align-items: flex-start; border-radius: var(--radius-s); }
+.plan-item:hover { background: var(--bg-hover); }
+.plan-item-main {
+  display: flex; align-items: flex-start; gap: var(--space-2); flex: 1; min-width: 0;
+  padding: var(--space-2); font-size: var(--font-caption); line-height: 1.5;
+  color: var(--text-2); text-align: left;
+}
+.plan-item.done .plan-item-main { color: var(--text-3); }
+.plan-item.done .txt { text-decoration: line-through; text-decoration-color: var(--text-4); }
+.plan-item .txt { flex: 1; min-width: 0; }
+.plan-item .meta { display: block; font-size: var(--font-mini); color: var(--text-4); margin-top: var(--space-1); }
+.plan-item-del {
+  flex: none; width: calc(20px * var(--ui-scale)); height: calc(20px * var(--ui-scale));
+  margin: var(--space-2) var(--space-1) 0 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-s); color: var(--text-4); opacity: 0;
+}
+.plan-item:hover .plan-item-del { opacity: 1; }
+.plan-item-del:hover { color: var(--err); background: var(--bg-surface); }
+
+/* 任务卡片(与 WorkbenchHome 的 .task-card 区分:plan-card 是面板内可编辑卡片) */
+.plan-card {
+  border: 1px solid var(--composer-border); border-radius: var(--radius-m); background: var(--bg-surface);
+  padding: var(--space-2); display: flex; flex-direction: column; gap: var(--space-1);
+  box-shadow: var(--shadow-card);
+}
+.plan-card.st-done, .plan-card.st-cancelled { opacity: .72; }
+.plan-card-head { display: flex; align-items: center; gap: var(--space-1); }
+.plan-card-title {
+  flex: 1; min-width: 0; font-size: var(--font-caption); font-weight: 600; color: var(--text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default;
+}
+.task-rename {
+  flex: 1; min-width: 0; font-size: var(--font-caption); color: var(--text-1);
+  border: 1px solid var(--brand); border-radius: var(--radius-s); padding: 0 var(--space-1);
+  background: var(--bg-surface);
+}
+.task-prio { font-size: var(--font-mini); padding: 0 var(--space-1); border-radius: var(--radius-s); color: var(--text-3); background: var(--bg-side); }
+.task-prio.p-high { color: var(--err); background: color-mix(in srgb, var(--err) 10%, var(--bg-surface)); }
+.task-prio.p-low { color: var(--text-4); }
+.plan-progress { display: flex; align-items: center; gap: var(--space-2); }
+.plan-progress-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--bg-hover); overflow: hidden; }
+.plan-progress-bar i { display: block; height: 100%; background: var(--brand); border-radius: 2px; }
+.plan-progress-text { font-size: var(--font-mini); color: var(--text-4); }
+.plan-card-body { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-1); border-top: 1px dashed var(--border); }
+.task-row { display: flex; align-items: center; gap: var(--space-1); font-size: var(--font-micro); color: var(--text-3); }
+.task-row select {
+  font-size: var(--font-micro); color: var(--text-1); border: 1px solid var(--border);
+  border-radius: var(--radius-s); background: var(--bg-surface); padding: 0 var(--space-1);
+}
+.task-steps { list-style: none; display: flex; flex-direction: column; gap: var(--space-1); }
+.task-step { display: flex; align-items: center; gap: var(--space-1); font-size: var(--font-micro); color: var(--text-2); }
+.task-step-toggle {
+  width: calc(16px * var(--ui-scale)); height: calc(16px * var(--ui-scale));
+  flex: none; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-strong); border-radius: 50%; color: #fff; background: var(--bg-surface);
+}
+.task-step.is-completed .task-step-toggle { background: var(--ok); border-color: var(--ok); }
+.task-step.is-completed .task-step-title { text-decoration: line-through; color: var(--text-4); }
+.step-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-4); }
+.task-step.is-in_progress .step-dot { background: var(--brand); }
+.task-step-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-step-new { display: flex; gap: var(--space-1); }
+.task-step-new input {
+  flex: 1; min-width: 0; font-size: var(--font-micro); color: var(--text-1);
+  border: 1px dashed var(--composer-border); border-radius: var(--radius-s); padding: 0 var(--space-2);
+  background: transparent;
+}
+.task-step-new input:focus { border-color: var(--brand); outline: none; }
+.plan-foot { display: flex; justify-content: flex-end; }
+.task-del { color: var(--text-3); }
+.task-del:hover { color: var(--err); }
+
+/* 权限档 chip(D11) */
+.perm-chip-wrap { position: relative; }
+.perm-chip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  height: var(--ctl-h);
+  padding: 0 var(--ctl-pad); border-radius: var(--radius-s);
+  border: 1px solid var(--border); background: var(--bg-surface);
+  line-height: 1; white-space: nowrap; flex: 0 0 auto;
+  font-family: var(--font);
+  font-size: var(--font-caption); color: var(--text-2); transition: .15s;
+}
+.perm-chip:hover { border-color: var(--border-strong); color: var(--text-1); }
+.perm-chip.is-full { border-color: color-mix(in srgb, var(--err) 45%, var(--border)); color: var(--err); }
+.perm-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--brand); }
+/* 权限/预设下拉:右对齐 chip 但限制宽度,避免长说明把浮层推出窗口左缘 */
+.perm-menu {
+  position: absolute; top: calc(100% + var(--space-1)); right: 0; z-index: var(--z-menu);
+  width: calc(260px * var(--ui-scale)); max-width: calc(100vw - var(--space-4));
+  border: 1px solid var(--border); border-radius: var(--radius-m); background: var(--bg-surface);
+  box-shadow: var(--shadow-card-h); padding: var(--space-1); display: flex; flex-direction: column;
+}
+/* 左对齐锚定:chip 位于窗口左缘附近时由组件按实际位置加此类(JS 检测,见 PresetChip) */
+.perm-menu.align-left { left: 0; right: auto; }
+/* 窄窗改为左对齐,避免右锚点导致浮层越过左缘 */
+@media (max-width: 520px) {
+  .perm-menu { left: 0; right: auto; width: min(calc(260px * var(--ui-scale)), calc(100vw - var(--space-6))); }
+}
+.perm-menu-note {
+  padding: var(--space-1) var(--space-2) var(--space-2); font-size: var(--font-mini);
+  color: var(--text-4); line-height: 1.5; margin-bottom: var(--space-1);
+}
+/* 预设列表加载中/空态提示(避免菜单只剩说明文字、看起来「点击没反应」) */
+.perm-menu-hint {
+  padding: var(--space-1) var(--space-2); font-size: var(--font-micro); color: var(--text-3);
+}
+.perm-menu button {
+  text-align: left; padding: var(--space-1) var(--space-2); border-radius: var(--radius-s);
+  font-size: var(--font-micro); color: var(--text-2);
+}
+.perm-menu button:hover { background: var(--bg-hover); color: var(--text-1); }
+.perm-menu button.on { color: var(--brand-deep); background: var(--brand-soft); font-weight: 600; }
+.perm-menu button.danger { color: var(--err); }
+

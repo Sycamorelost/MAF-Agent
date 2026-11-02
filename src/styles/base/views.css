@@ -1,0 +1,214 @@
+/* ====== 项目分组 ====== */
+.side-proj-group {
+  display: flex;
+  flex-direction: column;
+}
+/* 项目头:folder 图标 + 项目名 + 最右 chevron */
+.side-proj-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-sub);
+  font-weight: 600;
+  color: var(--text-1);
+  cursor: pointer;
+  border-radius: var(--radius-s);
+  user-select: none;
+  transition: background .12s;
+}
+.side-proj-head:hover { background: var(--bg-hover); }
+.side-proj-head svg { color: var(--text-2); flex: none; }
+.side-proj-head .proj-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 折叠箭头:默认朝右(折叠态),展开态向下 */
+.side-proj-head .chevron {
+  margin-left: auto;
+  flex: none;
+  color: var(--text-4);
+  transition: transform .15s;
+}
+.side-proj-head .chevron.down { transform: rotate(90deg); }
+
+/* 会话项基础 */
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-s);
+  font-size: var(--font-sub);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: .12s;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.side-item:hover { background: var(--bg-hover); color: var(--text-1); }
+.side-item.on {
+  background: var(--text-4);
+  color: #000000;
+  font-weight: 700;
+}
+.side-item.on .md-dot {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+.side-item.on .when {
+  color: #000000;
+  opacity: 0.7;
+}
+.side-item .txt { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.side-item .when { font-size: var(--font-mini); color: var(--text-4); flex: none; }
+.side-item .md-dot {
+  width: calc(18px * var(--ui-scale));
+  height: calc(18px * var(--ui-scale));
+  flex-shrink: 0;
+  border: 1px solid var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-mini);
+  font-weight: 700;
+  border-radius: var(--radius-xs, 4px);
+}
+/* 内联重命名 */
+.side-item .side-rename {
+  flex: 1; min-width: 0;
+  font: inherit; color: var(--text-1);
+  background: var(--bg-main);
+  border: 1px solid var(--brand); border-radius: var(--radius-xs, 4px);
+  padding: 3px 6px; outline: none;
+}
+
+/* 缩进层级:项目头和无项目会话同级(padding-left = space-2 ≈ 12px)
+   项目内会话多一级缩进(space-2 + 14px folder + 4px gap) */
+.side-uncat-item {
+  padding-left: var(--space-2);
+}
+.side-proj-item {
+  padding-left: calc(var(--space-2) + 14px + var(--space-1));
+}
+
+/* 未分类分隔线 */
+.side-uncat-divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-2) var(--space-2);
+}
+
+/* 空状态 */
+.side-empty {
+  padding: var(--space-2) var(--space-2);
+  color: var(--text-4);
+  font-size: var(--font-caption);
+  line-height: 1.6;
+  text-align: center;
+}
+.side-empty-note {
+  padding: var(--space-1) calc(var(--space-2) + 14px + var(--space-1) + var(--space-2));
+  font-size: var(--font-mini);
+  color: var(--text-4);
+  text-align: center;
+}
+.link-btn {
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.link-btn:hover { color: var(--brand-deep); }
+
+/* ====== 按时间扁平视图 ====== */
+.side-flat-row {
+  display: flex;
+  flex-direction: column;
+}
+.side-flat-tag {
+  font-size: var(--font-micro);
+  color: var(--text-4);
+  padding: var(--space-1) var(--space-2) 0;
+  font-weight: 500;
+}
+.side-flat-item {
+  padding-left: var(--space-2);
+}
+/* Main(聊天主区):与 window 外框同半径圆角,白色画布四个角 */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-frame);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.main-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: var(--text-3);
+}
+/* 智能体开场白追问建议(v2 suggestions):点击填入输入框 */
+.main-empty-sugs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 520px; }
+.main-empty-sug {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--font-sub);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+}
+.main-empty-sug:hover { border-color: var(--brand); color: var(--brand); }
+
+/* 消息滚动容器 */
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  /* 恒为滚动条预留空间,内容高度变化(如 mermaid 渲染)时不再横向抖动 */
+  scrollbar-gutter: stable;
+  padding: var(--space-4) var(--pad-x);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4); min-height: 0; }
+.chat-inner {
+  max-width: var(--chat-max-w);
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  /* 轮间距 28px,与轮内块间距(8px)保持 ≥2:1,让「分组」可被感知 */
+  gap: calc(28px * var(--ui-scale));
+}
+/* 纲要/搜索定位到消息首行时,顶部留出呼吸间距 */
+.chat-inner [id^='msg-'] { scroll-margin-top: calc(12px * var(--ui-scale)); }
+/* 历史分页:加载更早(平铺,不绘制气泡卡片) */
+.load-older { display: flex; justify-content: center; padding: var(--space-1) 0; }
+.load-older-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.load-older-btn:hover { color: var(--text-1); border-color: var(--border-strong); }
+

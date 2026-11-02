@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import Titlebar from './components/Titlebar';
-import Sidebar from './components/Sidebar';
+import Sidebar from './components/sidebar/Sidebar';
 import DataDirSetupDialog from './components/DataDirSetupDialog';
 import OnboardingDialog from './components/OnboardingDialog';
 import * as ipc from './lib/ipc';
@@ -14,7 +14,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { useSessionsStore } from './stores/sessions';
 import { useProvidersStore } from './stores/providers';
 import { useThemeStore } from './stores/theme';
-import { resolveMode, sessionPath, useDefaultWorkbench } from './lib/workbench';
+import { sessionPath } from './lib/workbench';
 import './styles/base.css';
 import './styles/dialog.css';
 import './styles/home.css';
@@ -32,8 +32,6 @@ import 'katex/dist/katex.min.css';
 // PERF-4:页面按路由懒加载,首屏只加载布局与当前页,避免 8 MB+ 单包一次性解析。
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
-const WorkbenchHome = lazy(() => import('./pages/workbench/WorkbenchHome'));
-const WorkbenchPage = lazy(() => import('./pages/workbench/WorkbenchPage'));
 const StudyPage = lazy(() => import('./pages/StudyPage'));
 // 整卷测试独立页面(学习中心内跳转)
 const PaperPage = lazy(() =>
@@ -50,46 +48,27 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 /** 学习规划/绘画/翻译/记忆/设置页自带布局,隐藏会话侧栏(条件挂载,抽屉 body class 随卸载清理)。 */
 function MaybeSidebar() {
   const loc = useLocation();
-  const bare = ['/plan', '/draw', '/translate', '/memory', '/notes', '/attachments', '/aiflavor', '/settings', '/work'];
+  const bare = ['/plan', '/draw', '/translate', '/memory', '/notes', '/attachments', '/aiflavor', '/settings'];
   const hidden = bare.some((p) => loc.pathname.startsWith(p));
   if (hidden) return null;
   return <Sidebar />;
 }
 
-/** 首页门(D7):全局默认模式为 work 时落到专业首页 /work,否则普通首页。 */
+/** 首页门:工作台页已并入会话页,首页永远是 HomePage。 */
 function HomeGate() {
-  const def = useDefaultWorkbench();
-  if (def === null) return null;
-  return def === 'work' ? <Navigate to="/work" replace /> : <HomePage />;
+  return <HomePage />;
 }
 
-/** 会话模式门(D16):会话覆盖 > 全局默认;与目标路由不一致时重定向到对应形态。 */
-function SessionModeGate({ mode }: { mode: 'chat' | 'work' }) {
+/** 会话门(P3-1 路由收敛):仅做存在性校验;模式不再决定路由,单一会话页承载两种形态。 */
+function SessionGate() {
   const { id } = useParams<{ id: string }>();
-  const { search } = useLocation();
   const sessions = useSessionsStore((s) => s.sessions);
   const loaded = useSessionsStore((s) => s.loaded);
-  const def = useDefaultWorkbench();
   if (!id) return <Navigate to="/" replace />;
-  if (def === null) return null;
   const session = sessions.find((s) => s.id === id);
   // 会话不存在且列表已加载完成(如删除后从历史栈返回):回首页,避免落在空白会话页
   if (!session && loaded) return <Navigate to="/" replace />;
-  if (session) {
-    const eff = resolveMode(session.workbench_mode, def);
-    if (eff !== mode) {
-      // 保留 query(全局搜索/附件页的 ?msg=<id> 定位;模式重定向不能把它丢掉)
-      const path = eff === 'work' ? `/work/${id}` : `/chat/${id}`;
-      return <Navigate to={{ pathname: path, search }} replace />;
-    }
-  }
-  return mode === 'work' ? (
-    <WorkbenchPage>
-      <ChatPage />
-    </WorkbenchPage>
-  ) : (
-    <ChatPage />
-  );
+  return <ChatPage />;
 }
 
 /** 数据目录引导门:未配置数据目录且非开发构建时,强制先选目录才能使用。 */
@@ -118,11 +97,9 @@ function OnboardingGate() {
   return <OnboardingDialog onDone={() => setNeed(false)} />;
 }
 
-/** 主窗口内容:监听「跳转会话」/「打开设置页」/「划词提问」事件并导航。 */
+/** 主窗口内容:监听「跳转会话」/「打开设置页」事件并导航。 */
 function MainApp() {
   const nav = useNavigate();
-  // 全局常驻订阅默认模式:同步 lib/workbench 的模块级缓存,保证任意入口导航都能直达正确形态
-  useDefaultWorkbench();
   useEffect(() => {
     const unlistenSession = listen<{ sessionId: string }>('navigate-to-session', (e) => {
       // 先刷新会话列表:目标会话可能由其它窗口刚创建,否则模式门会因「本地不存在」而回首页
@@ -135,26 +112,6 @@ function MainApp() {
     const unlistenSettings = listen<{ tab?: string }>('navigate-to-settings', (e) => {
       nav(e.payload.tab ? `/settings?tab=${e.payload.tab}` : '/settings');
     });
-    // 划词提问:后端已唤起主窗口,这里新建会话并把选中文字预填进输入框
-    const unlistenSelection = listen<{ text: string }>('selection_ask', (e) => {
-      void (async () => {
-        const text = e.payload.text.trim();
-        if (!text) return;
-        const current = useProvidersStore.getState().current;
-        const title = `划词提问 ${new Date().toLocaleTimeString('zh-CN', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })}`;
-        const { id } = await ipc.createSession(
-          title,
-          current ? `${current.providerId}/${current.model}` : '',
-          null,
-        );
-        await useSessionsStore.getState().refresh();
-        useSessionsStore.getState().setPendingComposer({ sessionId: id, text });
-        nav(sessionPath(id));
-      })().catch((err) => console.error('selection_ask failed', err));
-    });
     // 外部编辑器改 memory.md frontmatter 的 conversation → 后端同步 sessions.title 后广播此事件
     const unlistenRenamed = listen('session_renamed', () => {
       void useSessionsStore.getState().refresh();
@@ -162,7 +119,6 @@ function MainApp() {
     return () => {
       unlistenSession.then((f) => f());
       unlistenSettings.then((f) => f());
-      unlistenSelection.then((f) => f());
       unlistenRenamed.then((f) => f());
     };
   }, [nav]);
@@ -192,9 +148,8 @@ function MainApp() {
           <Suspense fallback={null}>
             <Routes>
               <Route path="/" element={<HomeGate />} />
-              <Route path="/chat/:id" element={<SessionModeGate mode="chat" />} />
-              <Route path="/work" element={<WorkbenchHome />} />
-              <Route path="/work/:id" element={<SessionModeGate mode="work" />} />
+              <Route path="/chat/:id" element={<SessionGate />} />
+              {/* 工作台页已并入会话页,/work 路由不再注册;旧 /work/:id 链接直接由通配回首页 */}
               <Route path="/plan" element={<StudyPage />} />
               <Route path="/plan/paper/:id" element={<PaperPage />} />
               <Route path="/draw" element={<DrawPage />} />

@@ -219,6 +219,27 @@ export function useProviderAdmin() {
     }
   };
 
+  /**
+   * 设置某服务商的模型列表(单个增删 / 批量导入 / 批量删除共用)。
+   * 与 onEditTemplate 改 models 不同:对已拉取过厂家列表的服务商,
+   * 列表落点是 provider_models.json 缓存而非模板预置,删了不会被缓存「复活」。
+   */
+  const onSetModels = async (providerId: string, models: string[]) => {
+    setSavingTpl(providerId);
+    setTplMsg(null);
+    try {
+      await ipc.setProviderModels(providerId, models);
+      setTemplates(await ipc.listProviderTemplates());
+      // 模型列表变化影响厂家派生卡
+      await reloadCards();
+      setTplMsg('已保存');
+    } catch (e) {
+      setTplMsg(`保存失败:${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSavingTpl(null);
+    }
+  };
+
   /** 新增服务商(OpenAI 兼容协议,id 由后端生成)。 */
   const onAddTemplate = async () => {
     setSavingTpl('__new__');
@@ -312,6 +333,7 @@ export function useProviderAdmin() {
     onFetchModels,
     onPatchOverride,
     onEditTemplate,
+    onSetModels,
     onAddTemplate,
     onDeleteTemplate,
     onRestoreBuiltins,

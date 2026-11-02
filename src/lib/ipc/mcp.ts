@@ -88,6 +88,33 @@ export const mcpSaveConfig = (cfg: McpConfig) => invoke<void>("mcp_save_config",
 
 /** 清除「长期记忆」全局数据(data/mcp-memory.jsonl);先停 server 再删文件,返回删除的字节数。 */
 export const mcpClearMemory = () => invoke<number>("mcp_clear_memory");
+
+/** 长期记忆实体(知识图谱节点) */
+export interface MemoryEntityInfo {
+  name: string;
+  entity_type: string;
+  observations: string[];
+}
+
+/** 长期记忆关系(知识图谱边) */
+export interface MemoryRelationInfo {
+  from: string;
+  to: string;
+  relation_type: string;
+}
+
+/** 长期记忆快照(设置页 / 记忆页可视化用) */
+export interface MemoryGraphInfo {
+  path: string;
+  file_bytes: number;
+  entities: MemoryEntityInfo[];
+  relations: MemoryRelationInfo[];
+  observation_count: number;
+  type_count: number;
+}
+
+/** 读取并解析长期记忆数据;文件不存在时返回空图谱。 */
+export const mcpMemoryGraph = () => invoke<MemoryGraphInfo>("mcp_memory_graph");
 export const mcpAddServer = (server: McpServerConfig) => invoke<void>("mcp_add_server", { server });
 export const mcpRemoveServer = (name: string) => invoke<void>("mcp_remove_server", { name });
 
@@ -116,28 +143,6 @@ export const getBootstrapState = () => invoke<number>("get_bootstrap_state");
 export const mcpGetApprovalPolicy = () => invoke<ApprovalPolicy>("mcp_get_approval_policy");
 export const mcpSetApprovalPolicy = (policy: ApprovalPolicy) =>
   invoke<void>("mcp_set_approval_policy", { policy });
-
-/** P8:完全信任临时授权状态。 */
-export interface FullTrustStatus {
-  active: boolean;
-  remaining_secs: number;
-  session_id: string | null;
-}
-
-/** P8:签发完全信任临时授权(默认 60 分钟;传 sessionId 即仅该会话有效)。 */
-export const mcpGrantFullTrust = (sessionId?: string, minutes?: number) =>
-  invoke<number>("mcp_grant_full_trust", {
-    sessionId: sessionId ?? null,
-    minutes: minutes ?? null,
-  });
-
-/** P8:吊销临时授权 —— 传 sessionId 只清该会话授权,不传则全部清除。 */
-export const mcpRevokeFullTrust = (sessionId?: string) =>
-  invoke<void>("mcp_revoke_full_trust", { sessionId: sessionId ?? null });
-
-/** P8:查询授权状态(全局授权对任意会话都返回 active)。 */
-export const mcpFullTrustStatus = (sessionId?: string) =>
-  invoke<FullTrustStatus>("mcp_full_trust_status", { sessionId: sessionId ?? null });
 
 /** Phase 5e:汇总所有已启用 server 的工具定义(OpenAI function-calling)。
  *  P5/D18:传 sessionId 时后端按会话生效预设裁剪工具名单;不传则不过滤。 */

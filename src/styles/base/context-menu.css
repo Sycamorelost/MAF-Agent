@@ -1,0 +1,68 @@
+/* ============ ContextMenu(右键/上下文菜单) ============
+   严格匹配 .nav-pop 玻璃风格:backdrop-filter 模糊 + 低透明度背景 + border + shadow-card-h。
+   z-index:var(--z-menu)=40,与 .perm-menu 同层。 */
+.ctx-menu{
+  min-width:calc(168px * var(--ui-scale));padding:var(--space-1);
+  background:rgba(var(--bg-main-rgb),.94);
+  backdrop-filter:blur(50px) saturate(1.8);
+  -webkit-backdrop-filter:blur(50px) saturate(1.8);
+  border:1px solid var(--border);
+  border-radius:var(--radius-m);
+  box-shadow:var(--shadow-card-h);
+}
+/* 子菜单:inline 渲染,relative 容器内 absolute 定位在父项右侧 */
+.ctx-menu .ctx-sub{
+  position:absolute;top:-4px;left:100%;
+  margin-left:2px;
+}
+.ctx-menu .ctx-sub.flip-x,
+.ctx-menu.flip-x{left:auto;right:calc(100% + 2px);margin-left:0}
+.ctx-menu.flip-y{top:auto;bottom:calc(100% + 2px)}
+.ctx-item-wrap{position:relative}
+.ctx-item{
+  width:100%;display:flex;align-items:center;gap:var(--space-2);
+  height:var(--ctl-h);padding:0 var(--ctl-pad);border:none;background:transparent;
+  border-radius:var(--radius-s);cursor:pointer;
+  font-size:var(--font-sub);color:var(--text-2);font-family:var(--font);text-align:left;
+  line-height:1;white-space:nowrap;
+  transition:.12s;
+}
+.ctx-item:hover:not(.disabled){background:var(--bg-hover);color:var(--text-1)}
+.ctx-item.disabled{opacity:.4;cursor:not-allowed}
+.ctx-item.danger{color:var(--err)}
+.ctx-item.danger:hover:not(.disabled){background:var(--err-soft);color:var(--err)}
+.ctx-item.open{background:var(--bg-hover);color:var(--text-1)}
+.ctx-item.checked .ctx-check{
+  font-size:var(--font-mini);color:var(--brand);
+  width:calc(14px * var(--ui-scale));text-align:center;flex:none;
+}
+.ctx-item-ico{
+  width:calc(14px * var(--ui-scale));height:calc(14px * var(--ui-scale));flex:none;display:inline-flex;align-items:center;justify-content:center;
+  color:var(--text-3);
+}
+.ctx-item:hover:not(.disabled) .ctx-item-ico{color:var(--text-1)}
+.ctx-item.danger:hover:not(.disabled) .ctx-item-ico{color:var(--err)}
+.ctx-item-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctx-short{
+  font-size:var(--font-mini);color:var(--text-4);flex:none;
+  font-family:var(--font-mono);
+}
+.ctx-arr{font-size:var(--font-h3);color:var(--text-4);flex:none;line-height:1}
+.ctx-sep{height:1px;margin:var(--space-1) var(--space-2);background:var(--border)}
+
+/* ---------- 首启预热提示(后端自启组件期间右下角浮层,完成即消失) ---------- */
+.boot-hint{
+  position:fixed;right:var(--space-4);bottom:var(--space-4);z-index:var(--z-toast);
+  display:flex;align-items:center;gap:var(--space-2);
+  padding:var(--space-2) var(--space-4);
+  background:var(--bg-surface);border:1px solid var(--composer-border);border-radius:var(--radius-m);
+  box-shadow:var(--shadow-card-h);
+  font-size:var(--font-caption);color:var(--text-2);
+}
+.boot-spinner{
+  width:calc(12px * var(--ui-scale));height:calc(12px * var(--ui-scale));flex:none;
+  border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;
+  animation:boot-spin 0.8s linear infinite;
+}
+@keyframes boot-spin{to{transform:rotate(360deg)}}
+

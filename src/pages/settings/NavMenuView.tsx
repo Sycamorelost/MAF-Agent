@@ -12,16 +12,21 @@ export interface NavMenuViewProps {
   hiddenNav: string[];
   /** 已保存的显示顺序(功能项 key) */
   navOrder: string[];
+  /** 关闭主窗口时是否隐藏到托盘 */
+  minimizeToTray: boolean;
   onToggleNavItem: (key: string) => void;
   /** 把 fromKey 拖到 toKey 的位置(两个方向都支持) */
   onReorderNavItem: (fromKey: string, toKey: string) => void;
+  onToggleMinimizeToTray: () => void;
 }
 
 export function NavMenuView({
   hiddenNav,
   navOrder,
+  minimizeToTray,
   onToggleNavItem,
   onReorderNavItem,
+  onToggleMinimizeToTray,
 }: NavMenuViewProps) {
   /** 有效顺序:已保存顺序在前,未列出的按内置顺序补在末尾(稳定排序)。 */
   const items = useMemo(() => {
@@ -107,6 +112,27 @@ export function NavMenuView({
           })}
           <div className="set-hint" style={{ marginTop: 'var(--space-2)' }}>
             对话与设置始终显示;显示与顺序改动即时生效,无需保存。
+          </div>
+        </div>
+      </div>
+
+      <div className="set-card">
+        <div className="set-card-h">主窗口 / 托盘</div>
+        <div className="set-card-b">
+          <div className="set-row">
+            <label className="lbl">关闭时最小化到托盘</label>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={minimizeToTray}
+              className={`set-switch${minimizeToTray ? ' on' : ''}`}
+              onClick={onToggleMinimizeToTray}
+            >
+              <span className="knob" />
+            </button>
+            <span className="set-hint">
+              默认关:点 × 退出应用;开启后点 × 只是隐藏窗口,应用留在托盘。最小化始终是普通最小化,窗口留在任务栏
+            </span>
           </div>
         </div>
       </div>

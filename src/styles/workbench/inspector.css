@@ -1,0 +1,278 @@
+/* 设置页(工作台模式 / 运行时预设)的卡片与说明样式见 settings.css:
+   .choice-* / .matrix / .set-note / .preset-grid / .preset-card
+   对齐 ui-design board 08/09 的「设置页对齐 settings.css」约束。 */
+
+/* ---------- P6:右栏检查器(产物 / 变更 / 上下文 / 流水) ---------- */
+.wb-inspector {
+  width: var(--wb-inspector-w, 352px); flex: none; display: flex; flex-direction: column; min-height: 0;
+  background: var(--bg-frame);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.wb-inspector-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  background: transparent; flex: none;
+}
+.wb-inspector-title { font-size: var(--font-h3); font-weight: 600; color: var(--text-1); }
+.wb-inspector-count {
+  font-size: var(--font-mini); color: var(--text-3); background: var(--bg-hover);
+  border-radius: var(--radius-s); padding: 0 var(--space-1);
+  font-family: var(--font-mono);
+}
+.wb-inspector-head .sp { flex: 1; }
+/* 标签页:改为圆角胶囊选中态,不用整条下划分隔线 */
+.wb-inspector-tabs {
+  display: flex; align-items: stretch; flex: none;
+  gap: var(--space-1); padding: 0 var(--space-3) var(--space-2); background: transparent;
+}
+.wb-inspector-tab {
+  flex: 1; min-width: 0; padding: var(--space-2) var(--space-1); border: none;
+  border-radius: var(--radius-s); background: transparent;
+  font-size: var(--font-micro); color: var(--text-3); text-align: center; white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.wb-inspector-tab:hover { background: color-mix(in srgb, var(--bg-hover) 72%, transparent); color: var(--text-1); }
+.wb-inspector-tab.on { background: var(--bg-surface); color: var(--brand-deep); font-weight: 600; box-shadow: var(--shadow-card); }
+.wb-inspector-body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-3) var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+
+.insp-list { display: flex; flex-direction: column; gap: var(--space-3); padding: 0; }
+.insp-empty { padding: var(--space-4) var(--space-2); font-size: var(--font-micro); color: var(--text-4); line-height: 1.7; }
+.insp-err { padding: var(--space-1) var(--space-2); font-size: var(--font-micro); color: var(--err); }
+
+/* 分区小标题:名称 + 计数 + 右侧标注 */
+.ins-label {
+  display: flex; align-items: center; gap: var(--space-1);
+  font-size: var(--font-micro); color: var(--text-3); font-weight: 500;
+  padding: 0 var(--space-1);
+  /* 允许长路径/path 在 label 内换行,同时中文不逐字断行 */
+  flex-wrap: wrap;
+}
+.ins-label .sp { flex: 1; }
+/* label 右侧的长文件名:允许在任意字符处换行,不撑破 flex 布局 */
+.ins-label .n {
+  font-family: var(--font-mono); font-size: var(--font-mini); color: var(--text-4);
+  overflow-wrap: anywhere; word-break: break-word; min-width: 0; max-width: 100%;
+}
+.insp-ro { font-size: var(--font-mini); color: var(--text-4); }
+
+/* 底部说明条(信息图标 + 灰字) */
+.insp-note {
+  display: flex; align-items: flex-start; gap: var(--space-1);
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--bg-hover) 60%, var(--bg-main));
+  font-size: var(--font-mini); color: var(--text-3); line-height: 1.6;
+}
+.insp-note svg { flex: none; margin-top: 2px; color: var(--text-4); }
+
+/* 检查器底部状态行 */
+.insp-statusbar {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) 0;
+  font-size: var(--font-mini); color: var(--text-4); font-variant-numeric: tabular-nums;
+}
+.insp-statusbar .sp { flex: 1; }
+
+/* 产物:文件卡(居中名称+元信息+右侧扩展名 tag) */
+.insp-filecard {
+  border: none; border-radius: var(--radius-m); background: var(--bg-surface);
+  padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-1);
+  box-shadow: var(--shadow-card);
+}
+.insp-filecard-main { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); text-align: center; }
+.insp-filecard-ico {
+  width: calc(34px * var(--ui-scale)); height: calc(34px * var(--ui-scale));
+  border-radius: var(--radius-s); flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--brand-soft); color: var(--brand-deep); border: 1px solid var(--brand-line);
+}
+.insp-filecard-name {
+  font-size: var(--font-sub); font-weight: 600; color: var(--text-1);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.insp-filecard-name:hover { color: var(--brand); }
+.insp-filecard-meta { font-size: var(--font-mini); color: var(--text-3); }
+.insp-filecard-ext {
+  position: absolute; top: var(--space-2); right: var(--space-2);
+  font-size: var(--font-mini); font-weight: 600; color: var(--text-4);
+  font-family: var(--font-mono); letter-spacing: .3px;
+}
+.insp-filecard { position: relative; }
+.insp-filecard-previewwrap { padding: 0; }
+.insp-artifact-preview { max-width: 100%; border-radius: var(--radius-s); border: 1px solid var(--border); }
+.insp-artifact-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-1); }
+
+/* 产物预览卡 */
+.insp-preview-card {
+  border: none; border-radius: var(--radius-m); background: var(--bg-surface);
+  padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2);
+  box-shadow: var(--shadow-card);
+}
+.insp-preview-head { display: flex; align-items: center; gap: var(--space-2); position: relative; }
+.insp-preview-head .sp { flex: 1; }
+.insp-preview-name { font-size: var(--font-caption); font-weight: 600; color: var(--text-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.insp-preview-meta { font-size: var(--font-mini); color: var(--text-3); }
+.insp-preview-actions { display: flex; align-items: center; gap: var(--space-2); }
+.insp-preview-actions .sp { flex: 1; }
+
+/* 变更与回滚:当前快照卡 */
+.insp-snap {
+  border: none; border-radius: var(--radius-m); background: var(--bg-surface);
+  padding: var(--space-3); box-shadow: var(--shadow-card);
+}
+.insp-snap-head { display: flex; align-items: center; gap: var(--space-2); }
+.insp-snap-ico {
+  width: calc(34px * var(--ui-scale)); height: calc(34px * var(--ui-scale));
+  border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-side); color: var(--text-2); border: 1px solid var(--border);
+}
+.insp-snap-title { min-width: 0; flex: 1; }
+.insp-snap-name { font-size: var(--font-caption); font-weight: 600; color: var(--text-1); }
+.insp-snap-meta { font-size: var(--font-mini); color: var(--text-3); margin-top: 2px; }
+.insp-snap-tag {
+  flex: none; font-size: var(--font-mini); padding: 2px var(--space-2); border-radius: var(--radius-s);
+  background: var(--brand-soft); color: var(--brand-deep); border: 1px solid var(--brand-line);
+}
+
+/* 文件变更行 */
+.insp-change-row {
+  display: flex; align-items: center; gap: var(--space-2);
+  border: none; border-radius: var(--radius-m); background: var(--bg-surface);
+  padding: var(--space-2) var(--space-3);
+}
+.insp-change-name {
+  flex: 1; min-width: 0; text-align: left;
+  font-size: var(--font-micro); font-weight: 600; color: var(--text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.insp-change-name:hover { color: var(--brand); }
+.insp-change-meta { flex: none; font-size: var(--font-mini); color: var(--text-4); }
+
+/* Diff 卡 */
+.insp-diff {
+  border: none; border-radius: var(--radius-m); background: var(--bg-surface);
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-card);
+}
+.insp-diff-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+.insp-diff-head .sp { flex: 1; }
+.insp-diff-title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--font-micro); font-weight: 600; color: var(--text-1);
+}
+.insp-diff-legend { font-size: var(--font-mini); color: var(--text-4); display: inline-flex; align-items: center; gap: var(--space-1); }
+.insp-diff-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.insp-diff-legend i.del { background: color-mix(in srgb, var(--err) 45%, transparent); }
+.insp-diff-legend i.add { background: color-mix(in srgb, var(--ok) 55%, transparent); }
+.insp-diff-body { max-height: calc(300px * var(--ui-scale)); overflow: auto; font-family: var(--font-mono, monospace); font-size: var(--font-mini); }
+.insp-diff-line { padding: 0 var(--space-2); white-space: pre-wrap; word-break: break-all; color: var(--text-3); line-height: 1.6; }
+.insp-diff-line.del { background: color-mix(in srgb, var(--err) 10%, transparent); color: var(--err); }
+.insp-diff-line.add { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--text-1); }
+
+/* 回滚粒度双卡 */
+.insp-rollback {
+  border: none; border-radius: var(--radius-m); background: var(--bg-surface);
+  padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2);
+  box-shadow: var(--shadow-card);
+}
+.insp-rollback-title {
+  font-size: var(--font-caption); font-weight: 600; color: var(--text-1);
+  /* 中文标题不逐字断行;极窄容器下仍可换行 */
+  word-break: keep-all; overflow-wrap: normal;
+}
+/* 描述里常含长路径,允许在任意字符处换行,防止溢出面板 */
+.insp-rollback-desc {
+  font-size: var(--font-mini); color: var(--text-3); line-height: 1.6;
+  overflow-wrap: anywhere; word-break: break-word;
+}
+.insp-rollback-ops { display: flex; justify-content: center; }
+.insp-rollback-ops .btn-brand { width: 100%; justify-content: center; }
+.insp-rollback-ops .btn-ghost { border-color: var(--border); }
+
+/* 上下文与记忆:用量卡 */
+.insp-ctx, .insp-mem {
+  border: none; border-radius: var(--radius-m); background: var(--bg-surface);
+  padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2);
+  box-shadow: var(--shadow-card);
+}
+.insp-ctx-big { display: flex; align-items: baseline; gap: var(--space-2); }
+.insp-ctx-pct { font-size: var(--font-display); font-weight: 700; color: var(--text-1); letter-spacing: calc(-.3px * var(--ui-scale)); }
+.insp-ctx-pct.over { color: var(--err); }
+.insp-ctx-used { font-size: var(--font-mini); color: var(--text-3); }
+.insp-ctx-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--font-micro); font-weight: 600; color: var(--text-2);
+}
+.insp-ctx-head .sp { flex: 1; }
+.insp-ctx-num { font-size: var(--font-mini); color: var(--text-4); font-variant-numeric: tabular-nums; font-weight: 400; }
+.insp-ctx-bar { height: 6px; border-radius: 3px; background: var(--bg-hover); overflow: hidden; }
+.insp-ctx-bar i { display: block; height: 100%; background: var(--brand); border-radius: 3px; }
+.insp-ctx-bar.over i { background: var(--err); }
+.insp-ctx-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); font-size: var(--font-mini); color: var(--text-3); }
+.insp-ctx-legend span { display: inline-flex; align-items: center; gap: var(--space-1); }
+.insp-ctx-legend .lg { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.insp-ctx-legend .lg-chat { background: var(--brand); }
+.insp-ctx-legend .lg-tool { background: var(--brand-line); }
+.insp-ctx-legend .lg-mem { background: var(--text-4); }
+.insp-ctx-legend .lg-left { background: var(--bg-hover); border: 1px solid var(--border); }
+.insp-ctx-stats { font-size: var(--font-mini); color: var(--text-3); }
+.insp-ctx-actions { display: flex; align-items: center; gap: var(--space-2); }
+.insp-ctx-actions .btn-brand { flex: 1; justify-content: center; }
+.insp-ctx-actions.spread .btn-brand { flex: none; }
+.insp-ctx-actions .sp { flex: 1; }
+.insp-ctx-warn { font-size: var(--font-mini); color: var(--err); }
+.insp-ctx-note { font-size: var(--font-mini); color: var(--text-4); line-height: 1.6; }
+.insp-ctx-dirty { margin-left: var(--space-1); font-size: var(--font-mini); color: var(--warn); }
+.insp-mem-editor {
+  width: 100%; min-height: calc(180px * var(--ui-scale)); resize: vertical;
+  font-family: var(--font-mono, monospace); font-size: var(--font-mini); line-height: 1.6;
+  color: var(--text-1); background: var(--bg-side);
+  border: 1px solid var(--border); border-radius: var(--radius-s); padding: var(--space-2);
+}
+.insp-mem-editor:focus { border-color: var(--brand); outline: none; }
+
+/* 工具流水:统计卡 + 时间线 */
+.insp-stream { gap: var(--space-2); }
+.insp-sumcard {
+  border: none; border-radius: var(--radius-m); background: var(--bg-surface);
+  padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-1);
+  box-shadow: var(--shadow-card);
+}
+.insp-sumcard-head { display: flex; align-items: center; gap: var(--space-2); }
+.insp-sumcard-ico {
+  width: calc(26px * var(--ui-scale)); height: calc(26px * var(--ui-scale));
+  border-radius: var(--radius-s); flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-side); color: var(--text-2);
+}
+.insp-sumcard-title { font-size: var(--font-caption); font-weight: 600; color: var(--text-1); }
+.insp-sumcard-sub { font-size: var(--font-mini); color: var(--text-3); }
+.insp-stream-filters { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+.insp-stream-filters .chip.on { border-color: var(--brand-line); background: var(--brand-soft); color: var(--brand-deep); font-weight: 600; }
+.insp-stream-item { display: flex; flex-direction: column; }
+.insp-stream-line { display: flex; align-items: flex-start; gap: var(--space-2); }
+.insp-stream-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--ok); margin-top: 6px; }
+.insp-stream-dot.err { background: var(--err); }
+.insp-stream-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+  padding: var(--space-1) var(--space-2); border-radius: var(--radius-s); text-align: left;
+}
+.insp-stream-main:hover:not(:disabled) { background: var(--bg-hover); }
+.insp-stream-main:disabled { cursor: default; }
+.insp-stream-tool { font-size: var(--font-micro); font-weight: 600; color: var(--text-1); font-family: var(--font-mono); }
+.insp-stream-args {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--font-mini); color: var(--text-3);
+}
+.insp-stream-stat { font-size: var(--font-mini); color: var(--ok); }
+.insp-stream-stat.err { color: var(--err); }
+.insp-stream-time {
+  flex: none; font-size: var(--font-mini); color: var(--text-4);
+  font-variant-numeric: tabular-nums; margin-top: 4px;
+}
+.insp-stream-ops { display: flex; justify-content: flex-end; gap: var(--space-1); padding-left: var(--space-5); }
+
+/* 子任务卡片与工具行样式统一在 chat.css(.subagent / .tool-trace),此处不再覆盖。 */

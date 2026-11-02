@@ -12,9 +12,9 @@ import MemoryHandoffDialog from '../../components/MemoryHandoffDialog';
 import ModelSwitchDialog from '../../components/ModelSwitchDialog';
 import AgentPickerDialog from '../../components/AgentPickerDialog';
 import OutlinePanel from '../../components/OutlinePanel';
-import { IconChat, IconX, agentIconComponent } from '../../components/icons';
-import { PermissionChip } from '../../components/PermissionChip';
-import { resolveMode, useDefaultWorkbench } from '../../lib/workbench';
+import { agentIconComponent } from '../../components/icons';
+import { Inspector } from '../../components/inspector/Inspector';
+import { WorkbenchChromeContext } from '../../lib/workbenchChrome';
 
 import { useMessagesStore } from '../../stores/messages';
 import { useSessionsStore } from '../../stores/sessions';
@@ -30,6 +30,9 @@ import { useModelHandoff } from './useModelHandoff';
 import { ChatTodos } from './ChatTodos';
 import { useChatSend } from './useChatSend';
 import { useDraftHandoff } from './useDraftHandoff';
+import { useChatInspector } from './useChatInspector';
+import { ChatBanners } from './ChatBanners';
+import { ChatEmptyState } from './ChatEmptyState';
 import { buildQuote, type QuoteRef } from '../../lib/quote';
 
 /** 稳定空数组:避免 `?? []` 每次渲染生成新引用导致 MessageList memo 失效。 */
@@ -74,7 +77,6 @@ export default function ChatPage() {
   );
   const [modelSwitchOpen, setModelSwitchOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
-  const [outlineOpen, setOutlineOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<VirtualizerHandle | null>(null);
   const listWrapRef = useRef<HTMLDivElement>(null);
@@ -84,9 +86,13 @@ export default function ChatPage() {
   const session = sessions.find((s) => s.id === sessionId);
   const messages = sessionId ? (bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
 
-  // ---------- D16 / val.md §5.8:工作台模式下,预设/权限 chip 落在 Composer 工具条内 ----------
-  const defaultWb = useDefaultWorkbench();
-  const isWork = resolveMode(session?.workbench_mode, defaultWb ?? 'chat') === 'work';
+  // ---------- D16 / val.md §5.8:工作台能力永久开启(工作台页已并入会话页) ----------
+  // isWork 已删除,PresetChip / Inspector / MemPanel 永远按工作台能力呈现
+
+  // ---------- 检查器(P3-1:工作台能力永久开启,检查器默认开;与记忆面板互斥,右栏同时只开一个) ----------
+  const { chatInspectorOpen, toggleChatInspector, onToggleMemPanel, chromeValue } =
+    useChatInspector(memPanel.collapsed, memPanel.toggleCollapse);
+
   /** 前插历史标记:加载更早一页时抑制「自动滚到底部」,避免把视口甩走 */
   const prependingRef = useRef(false);
 
@@ -212,6 +218,28 @@ export default function ChatPage() {
     setSearchParams({}, { replace: true });
   }, [searchParams, messages, setSearchParams, hasMore, sessionId, loadOlder]);
 
+  /** 纲要跳转:定位到消息首行;虚拟列表只挂载视口附近消息,先按 index 滚动,待条目挂载后再 flash。 */
+  const onOutlineJump = useCallback(
+    (msgId: number) => {
+      const idx = messages.findIndex((m) => m.id === msgId);
+      if (idx < 0) return;
+      listRef.current?.scrollToIndex(idx, { align: 'start' });
+      let attempts = 0;
+      const highlight = () => {
+        const el = document.getElementById(`msg-${msgId}`);
+        if (!el) {
+          if (++attempts < 12) requestAnimationFrame(highlight);
+          return;
+        }
+        el.scrollIntoView({ block: 'start' });
+        el.classList.add('msg-flash');
+        window.setTimeout(() => el.classList.remove('msg-flash'), 1800);
+      };
+      requestAnimationFrame(highlight);
+    },
+    [messages],
+  );
+
   // 进入会话时加载消息和 memory
   useEffect(() => {
     if (!sessionId) return;
@@ -255,7 +283,7 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, current?.providerId, current?.model, modelConfig, agent?.thinking_level, agentTemplates.length, session?.agent_id]);
 
-  // F7 附件插入队列 / 划词预填 / 首页草稿接续 / 附件增删
+  // F7 附件插入队列 / 预填文本 / 首页草稿接续 / 附件增删
   const { handlePickFiles, handleRemoveAttachment } = useDraftHandoff({
     sessionId,
     setComposerText,
@@ -323,88 +351,46 @@ export default function ChatPage() {
   if (!sessionId) return null;
 
   return (
-    <>
+    <WorkbenchChromeContext.Provider value={chromeValue}>
       {/* 作为 .wb-main / .main 的 flex 项:必须 minWidth:0,否则长代码行等内容的最小内容宽度会撑破中栏 */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, minWidth: 0 }}>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+            position: 'relative',
+            // 纲要横线轨的容器查询上下文:列宽不足时由 CSS 隐藏,避免污染正文
+            containerType: 'inline-size',
+          }}
+        >
           {/* 会话头部:标题 + 右侧本会话模型选择(每个对话可自定义模型) */}
           <ChatHeader
             title={session?.title ?? '对话'}
             sessionId={sessionId}
-            mode={isWork ? 'work' : 'chat'}
             activeBranch={activeBranch}
             branchRefresh={branchRefresh}
             memCollapsed={memPanel.collapsed}
-            outlineOpen={outlineOpen}
-            onToggleMemPanel={memPanel.toggleCollapse}
-            onToggleOutline={() => setOutlineOpen((v) => !v)}
+            onToggleMemPanel={onToggleMemPanel}
             onError={chat.setError}
           />
           <div className="chat-scroll" ref={scrollRef} onScroll={onScrollFollow}>
             <div className="chat-inner">
-              {switchBanner && (
-                <div className="switch-banner">
-                  <span className="switch-banner-text">
-                    已从 {switchBanner.from} 切换到 {switchBanner.to} · 记忆已注入约{' '}
-                    {switchBanner.tokens} tokens
-                  </span>
-                  <button
-                    type="button"
-                    className="switch-banner-btn"
-                    onClick={() => setShowInjected(true)}
-                  >
-                    查看注入内容
-                  </button>
-                  <button
-                    type="button"
-                    className="switch-banner-close"
-                    title="关闭"
-                    onClick={() => setSwitchBanner(null)}
-                  >
-                    <IconX size={14} />
-                  </button>
-                </div>
-              )}
-              {chat.compressNotice && (
-                <div className="switch-banner compress">
-                  <span className="switch-banner-text">{chat.compressNotice}</span>
-                  <button
-                    type="button"
-                    className="switch-banner-close"
-                    title="关闭"
-                    onClick={() => chat.setCompressNotice(null)}
-                  >
-                    <IconX size={14} />
-                  </button>
-                </div>
-              )}
-              {/* 工作台模式下任务清单已由左栏任务计划展示,列表隐藏但仍转发后端通知 */}
+              <ChatBanners
+                switchBanner={switchBanner}
+                compressNotice={chat.compressNotice}
+                onShowInjected={() => setShowInjected(true)}
+                onCloseSwitch={() => setSwitchBanner(null)}
+                onCloseCompress={() => chat.setCompressNotice(null)}
+              />
+              {/* 对话任务清单:工作台模式也仍显示在消息区 */}
               <ChatTodos
                 sessionId={sessionId}
                 onNotice={chat.setCompressNotice}
-                hidden={isWork}
               />
               {messages.length === 0 && !hasStreaming && (
-                <div className="main-empty">
-                  <div style={{ color: 'var(--text-4)' }}>
-                    <IconChat size={48} strokeWidth={1} />
-                  </div>
-                  <div>{agent?.opening_message?.trim() || '开始你的第一段对话吧'}</div>
-                  {!!agent?.suggestions?.length && (
-                    <div className="main-empty-sugs">
-                      {agent.suggestions.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          className="main-empty-sug"
-                          onClick={() => setComposerText(s)}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <ChatEmptyState agent={agent} onPickSuggestion={setComposerText} />
               )}
               {hasMore && messages.length > 0 && (
                 <div className="load-older">
@@ -488,9 +474,6 @@ export default function ChatPage() {
               onOpen: () => setModelSwitchOpen(true),
             }}
           >
-            {/* D16 / §5.8:工作台模式下权限 chip 落在 composer-bar 内(靠近输入区);
-                预设 chip 已在会话头(ui-design b3),此处不重复 */}
-            {isWork && <PermissionChip sessionId={sessionId} onError={chat.setError} />}
             {/* B2:当前 Agent 指示,点击切换/解绑 */}
             <button
               type="button"
@@ -505,8 +488,10 @@ export default function ChatPage() {
               <span className="agent-chip-text">{agent?.name ?? '智能体'}</span>
             </button>
           </Composer>
+          {/* 会话纲要:右缘贴边短横线(每条 = 一次回答),hover 展开完整浮层;两种模式都保留(P1) */}
+          <OutlinePanel messages={messages} onJump={onOutlineJump} />
         </div>
-        {!isWork && !memPanel.collapsed && !outlineOpen && (
+        {!memPanel.collapsed && (
           <>
             <ResizeHandle panel={memPanel} />
             <MemPanel
@@ -517,9 +502,12 @@ export default function ChatPage() {
             />
           </>
         )}
-        {!isWork && outlineOpen && (
-          <OutlinePanel messages={messages} onClose={() => setOutlineOpen(false)} />
-        )}
+        {/* 检查器(P3-1:两态通用,与记忆面板互斥) */}
+        <Inspector
+          sessionId={sessionId}
+          collapsed={!chatInspectorOpen}
+          onToggleCollapse={toggleChatInspector}
+        />
       </div>
 
       {modelSwitchOpen && (
@@ -571,6 +559,6 @@ export default function ChatPage() {
       )}
 
       {chat.toast && <Toast text={chat.toast} onClose={chat.hideToast} />}
-    </>
+    </WorkbenchChromeContext.Provider>
   );
 }

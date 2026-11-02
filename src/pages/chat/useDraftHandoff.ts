@@ -18,7 +18,7 @@ interface DraftHandoffParams {
   /** 轻提示(拖入文件夹时的逐个文件拒绝原因),不占用错误栏 */
   onNotice: (msg: string) => void;
 }
-/** 输入框(草稿)交接与附件操作:附件中心插入队列 / 划词预填 / 首页草稿直发 / 附件增删。 */
+/** 输入框(草稿)交接与附件操作:附件中心插入队列 / 预填文本 / 首页草稿直发 / 附件增删。 */
 export function useDraftHandoff({
   sessionId, setComposerText, pendingAttachments, pendingImages,
   setPendingAttachments, setPendingImages, onSend, onError, onNotice,
@@ -29,7 +29,7 @@ export function useDraftHandoff({
     const items = useAttachmentInsertStore.getState().consume(sessionId);
     if (items?.length) setPendingAttachments((prev) => [...prev, ...items]);
   }, [sessionId]);
-  // 划词提问:消费预填文本(主窗口被唤起后新建会话跳转至此)
+  // 预填文本:消费待填内容(如深入研究新建的会话跳转至此)
   useEffect(() => {
     if (!sessionId) return;
     const p = useSessionsStore.getState().pendingComposer;

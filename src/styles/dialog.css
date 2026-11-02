@@ -54,6 +54,66 @@
   white-space: nowrap;
 }
 
+/* ============ MemoryDiffDialog 版本对比(左右双栏,左旧右新) ============ */
+.diff-dialog {
+  width: min(calc(1120px * var(--ui-scale)), 94vw);
+  height: 80vh;
+}
+.diff-labels {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: var(--space-3);
+  font-size: var(--font-caption);
+  font-weight: 500;
+}
+.diff-label.old { color: var(--err); }
+.diff-label.new { color: var(--ok); }
+.diff-label-sep { color: var(--text-4); }
+.diff-body { padding: 0; overflow: auto; }
+.diff-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-family: var(--font-mono);
+  font-size: var(--font-mini);
+  line-height: 1.55;
+}
+.diff-col-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-side);
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.diff-col-head.old { border-right: 1px solid var(--border); }
+.diff-cell {
+  display: flex;
+  min-width: 0;
+  padding-right: var(--space-2);
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-bottom: 1px solid var(--border);
+}
+.diff-cell.side-l { border-right: 1px solid var(--border); }
+.diff-cell.same { color: var(--text-2); }
+.diff-cell.del { background: rgba(231, 76, 60, 0.1); }
+.diff-cell.add { background: rgba(39, 174, 96, 0.12); }
+.diff-cell.empty { background: var(--bg-side); }
+.diff-ln {
+  flex-shrink: 0;
+  width: calc(38px * var(--ui-scale));
+  padding-right: var(--space-2);
+  text-align: right;
+  color: var(--text-4);
+  user-select: none;
+}
+.diff-text { flex: 1; min-width: 0; }
+
 /* ============ ModelSwitchDialog 模型切换卡片 ============ */
 
 /* 每个服务商一个区块 */

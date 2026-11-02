@@ -1,6 +1,6 @@
 //! Provider 模板 CRUD 与变更广播。
 
-use crate::provider::model_cards::{load_model_cache, save_model_cache};
+use crate::provider::model_cards::{load_model_cache, merge_image_models, save_model_cache};
 use crate::provider::{
     keychain, model_config,
     rotation::{self, RotationState},
@@ -29,6 +29,11 @@ pub async fn list_provider_templates() -> Vec<ProviderTemplate> {
         // models = 已启用(供所有模型选择器使用);all_models = 全量(仅设置页展示/开关)
         t.models = model_config::filter_enabled(all.clone(), &model_cfg, &t.id);
         t.all_models = all;
+        // 图像模型候选:模板预置 ∪ 拉取缓存中声明 image 输出模态的模型
+        // (豆包/中转站把 seedream 类模型挂在 /models 下,仅靠预置会让绘图页无可选项)
+        if let Some(f) = cache.get(&t.id) {
+            t.image_models = merge_image_models(&t.image_models, f);
+        }
     }
     tpls
 }
@@ -68,6 +73,65 @@ pub async fn save_provider_template(
     templates::save_all(&list)?;
     notify_providers_changed(&app);
     Ok(template)
+}
+
+/// 手动设置某 Provider 的模型列表(单个增删 / 批量导入 / 批量删除共用入口)。
+///
+/// 落点与 `list_provider_templates` 的来源规则一致:
+/// - 已拉取过厂家列表(缓存非空)→ 改写缓存,保留既有条目的元数据,新 id 补最小条目;
+/// - 未拉取过 → 改写模板预置列表(provider_templates.json);
+/// - 传空列表 = 清空该 Provider 的模型(缓存条目与预置一并清掉,避免回落复活旧列表)。
+///
+/// 返回生效后的模型 id 列表(已 trim + 去重,保持入参顺序)。
+#[tauri::command]
+pub async fn set_provider_models(
+    app: tauri::AppHandle,
+    provider_id: String,
+    models: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let mut seen = std::collections::HashSet::new();
+    let ids: Vec<String> = models
+        .iter()
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty() && seen.insert(m.clone()))
+        .collect();
+
+    let mut cache = load_model_cache();
+    let has_cache = cache.get(&provider_id).is_some_and(|l| !l.is_empty());
+    if has_cache {
+        let existing = cache.get(&provider_id).cloned().unwrap_or_default();
+        if ids.is_empty() {
+            cache.remove(&provider_id);
+        } else {
+            cache.insert(
+                provider_id.clone(),
+                crate::provider::model_cards::merge_fetched_models(&existing, &ids),
+            );
+        }
+        save_model_cache(&cache)?;
+        if ids.is_empty() {
+            // 同步清空模板预置,避免缓存清空后回落把旧预置列表带回来
+            let mut list = templates::load_all();
+            if let Some(t) = list.iter_mut().find(|t| t.id == provider_id) {
+                t.models = vec![];
+                templates::save_all(&list)?;
+            }
+        }
+    } else {
+        let mut list = templates::load_all();
+        let slot = list
+            .iter_mut()
+            .find(|t| t.id == provider_id)
+            .ok_or_else(|| format!("未知 provider: {}", provider_id))?;
+        slot.models = ids.clone();
+        templates::save_all(&list)?;
+        // 清掉可能存在的空缓存条目,保持「列表来源单一」
+        if cache.remove(&provider_id).is_some() {
+            save_model_cache(&cache)?;
+        }
+    }
+    notify_providers_changed(&app);
+    Ok(ids)
 }
 
 /// 删除一个 Provider 模板(内置/用户新增一视同仁),并清理其 Key、单模型配置与厂家模型缓存。

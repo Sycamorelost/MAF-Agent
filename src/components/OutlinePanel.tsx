@@ -1,13 +1,12 @@
-import { useMemo } from 'react';
-import { IconX } from './icons';
-import { jumpToMessage } from '../lib/jumpToMessage';
+import { useMemo, useState } from 'react';
 import { useActiveMessageId } from '../lib/useActiveMessageId';
 import { estimateReasoningTokens } from './ReasoningBlock';
 import type { MessageRow } from '../lib/ipc';
 
 interface Props {
   messages: MessageRow[];
-  onClose: () => void;
+  /** 跳转定位(由 ChatPage 处理虚拟列表离屏渲染) */
+  onJump: (msgId: number) => void;
 }
 
 /** 从消息提取纲要标题(用户:前 30 字;助手:优先首个标题,否则前 30 字)。 */
@@ -33,8 +32,15 @@ function stripMd(md: string): string {
     .trim();
 }
 
-/** 会话纲要面板:按消息展示标题,点击平滑跳转并 flash,滚动时高亮活跃项。 */
-export default function OutlinePanel({ messages, onClose }: Props) {
+/** 固定 6 条灰色线,不再跟随消息数动态生成 */
+const FIXED_RAILS = 6;
+
+/**
+ * 会话纲要:右缘贴边短横线(每条 = 一次回答),hover 展开完整纲要浮层。
+ * 浮层无边框、可滚动;点击条目平滑跳转并 flash。
+ */
+export default function OutlinePanel({ messages, onJump }: Props) {
+  const [open, setOpen] = useState(false);
   const ids = useMemo(() => messages.map((m) => m.id), [messages]);
   const activeId = useActiveMessageId(ids);
 
@@ -49,7 +55,7 @@ export default function OutlinePanel({ messages, onClose }: Props) {
     [messages],
   );
 
-  // 会话统计(原消息 meta 行的 token 信息聚合上移到这里,精简气泡下方排版)
+  // 会话统计(原消息 meta 行的 token 信息聚合展示,精简气泡下方排版)
   const stats = useMemo(() => {
     const assistants = messages.filter((m) => m.role === 'assistant');
     const outTokens = assistants.reduce((s, m) => s + (m.tokens ?? 0), 0);
@@ -73,63 +79,72 @@ export default function OutlinePanel({ messages, onClose }: Props) {
     };
   }, [messages]);
 
+  /** 固定 6 条灰色线 */
+
+  if (messages.length === 0) return null;
+
   return (
-    <aside className="outline-panel">
-      <div className="outline-head">
-        <span>纲要</span>
-        <span className="outline-index" style={{ marginLeft: 'auto' }}>{messages.length} 条</span>
-        <button
-          type="button"
-          className="panel-close-btn"
-          onClick={onClose}
-          title="关闭纲要面板"
-        >
-          <IconX size={14} />
-        </button>
-      </div>
-      {messages.length > 0 && (
-        <div className="outline-stats">
-          <div className="outline-stats-row">
-            <span>提问 {stats.q} / 回答 {stats.a}</span>
-            {stats.range && <span>{stats.range}</span>}
-          </div>
-          {stats.outTokens > 0 && (
-            <div className="outline-stats-row">
-              <span>
-                输出 {stats.outTokens} tok
-                {stats.thinkTokens > 0 && `(含思考约 ${stats.thinkTokens})`}
-              </span>
-            </div>
-          )}
-          {stats.models.length > 0 && (
-            <div className="outline-stats-row outline-stats-models" title={stats.models.join('\n')}>
-              <span>{stats.models.join(' · ')}</span>
-            </div>
-          )}
-        </div>
-      )}
-      <div className="outline-list">
-        {items.length === 0 && (
-          <div style={{ padding: 16, color: 'var(--text-3)', fontSize: 'var(--font-caption)' }}>
-            暂无消息
-          </div>
-        )}
-        {items.map((it) => (
-          <button
-            key={it.id}
-            type="button"
-            className={`outline-item ${activeId === it.id ? 'active' : ''}`}
-            onClick={() => {
-              jumpToMessage(it.id);
-              onClose();
-            }}
-            title={it.title}
-          >
-            <span className={`outline-role ${it.role}`}>{it.role === 'user' ? 'Q' : 'A'}</span>
-            <span className="outline-title">{it.title}</span>
-          </button>
+    <div
+      className="outline-rail-wrap"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <div className="outline-rail" aria-label="会话纲要">
+        {Array.from({ length: FIXED_RAILS }).map((_, i) => (
+          <div key={i} className="outline-dash" />
         ))}
       </div>
-    </aside>
+      {open && (
+        <div className="outline-float">
+          <div className="outline-head">
+            <span>纲要</span>
+            <span className="outline-index" style={{ marginLeft: 'auto' }}>
+              {messages.length} 条
+            </span>
+          </div>
+          <div className="outline-stats">
+            <div className="outline-stats-row">
+              <span>
+                提问 {stats.q} / 回答 {stats.a}
+              </span>
+              {stats.range && <span>{stats.range}</span>}
+            </div>
+            {stats.outTokens > 0 && (
+              <div className="outline-stats-row">
+                <span>
+                  输出 {stats.outTokens} tok
+                  {stats.thinkTokens > 0 && `(含思考约 ${stats.thinkTokens})`}
+                </span>
+              </div>
+            )}
+            {stats.models.length > 0 && (
+              <div
+                className="outline-stats-row outline-stats-models"
+                title={stats.models.join('\n')}
+              >
+                <span>{stats.models.join(' · ')}</span>
+              </div>
+            )}
+          </div>
+          <div className="outline-list">
+            {items.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                className={`outline-item ${activeId === it.id ? 'active' : ''}`}
+                onClick={() => {
+                  onJump(it.id);
+                  setOpen(false);
+                }}
+                title={it.title}
+              >
+                <span className={`outline-role ${it.role}`}>{it.role === 'user' ? 'Q' : 'A'}</span>
+                <span className="outline-title">{it.title}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

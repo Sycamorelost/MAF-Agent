@@ -1,7 +1,8 @@
 //! 去 AI 味引擎:基础统计工具 + V3 动态统计 proxy。
 //!
 //! 职责拆分:
-//! - `engine/mod.rs` — 类型定义 + 主入口 `analyze()` + 总分加权
+//! - `engine/types.rs` — 报告/维度类型定义与免责声明
+//! - `engine/analyze.rs` — 主入口 `analyze()` + 总分加权
 //! - `engine/stats.rs` — 基础统计函数 + V3 动态统计(本文件)
 //!
 //! 所有函数纯函数,无状态,方便单测独立调用。

@@ -50,7 +50,7 @@ export function AttachmentsHeader({
             spellCheck={false}
           />
           {q && (
-            <button className="att-search-clear" title="清空搜索" onClick={() => onQuery('')}>
+            <button className="icon-btn" title="清空搜索" onClick={() => onQuery('')}>
               <IconX size={12} />
             </button>
           )}

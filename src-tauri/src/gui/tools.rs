@@ -105,7 +105,7 @@ fn tool(name: &str, desc: &str, params: Value) -> ToolDef {
 }
 
 /// 执行入口:返回 (给模型的内容, 是否成功)。
-/// `session_id` 用于校验会话级临时授权(全局授权时传 None 亦可生效)。
+/// `session_id` 仅用于读取会话级审批档覆盖(审批档本身是全局永久设置)。
 pub fn execute(name: &str, args: &Value, session_id: Option<&str>) -> (String, bool) {
     match run(name, args, session_id) {
         Ok(s) => (s, true),
@@ -114,7 +114,7 @@ pub fn execute(name: &str, args: &Value, session_id: Option<&str>) -> (String, b
 }
 
 fn run(name: &str, args: &Value, session_id: Option<&str>) -> Result<String, String> {
-    // 总开关:GUI 自动化已并入「完全信任」审批模式(P8:还需有效临时授权);否则一律拒绝,
+    // 总开关:GUI 自动化仅在「完全信任」审批档下可用(全局永久设置);否则一律拒绝,
     // 进程白名单 / 句柄 TTL / 字数上限等内容层约束在完全信任下仍然生效。
     let dir = crate::paths::data_dir();
     let approval = crate::mcp::approval::load_policy(&dir);

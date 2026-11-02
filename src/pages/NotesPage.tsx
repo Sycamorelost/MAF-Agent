@@ -4,9 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import * as ipc from '../lib/ipc';
-import AsideDrawer from '../components/AsideDrawer';
 import NotePresetBadge, { displayTags } from '../components/NotePresetBadge';
-import { useUiStore } from '../stores/ui';
 import { uiConfirm } from '../components/confirmService';
 import {
   IconNote,
@@ -250,16 +248,12 @@ export default function NotesPage() {
     return Number.isNaN(d.getTime()) ? s : d.toLocaleString('zh-CN');
   };
 
-  /** 落地页「查看全部」:释放左侧玻璃抽屉(全部笔记 + 筛选) */
-  const setAsideOpen = useUiStore((s) => s.setAsideOpen);
-
   /** 落地页展示的最新笔记(后端已按更新时间倒序)。 */
   const latest = useMemo(() => metas.slice(0, 5), [metas]);
 
   return (
     <div className="notes-page">
-      <AsideDrawer>
-      <div className="notes-list drawer">
+      <div className="notes-list">
         <div className="notes-list-head">
           <span className="t">知识库</span>
           <button
@@ -276,7 +270,6 @@ export default function NotesPage() {
             新建
           </button>
         </div>
-        <div className="drawer-hint">点标题栏「面板」可开合本栏</div>
         <div className="notes-search">
           <IconSearch size={14} />
           <input
@@ -320,7 +313,6 @@ export default function NotesPage() {
           ))}
         </div>
       </div>
-      </AsideDrawer>
 
       <div className="notes-detail">
         {selId ? (
@@ -357,7 +349,7 @@ export default function NotesPage() {
               <button className="act primary" onClick={save} disabled={busy || !dirty}>
                 保存
               </button>
-              <button className="act danger" onClick={del} disabled={busy} title="删除笔记">
+              <button className="icon-btn danger" onClick={del} disabled={busy} title="删除笔记">
                 <IconTrash size={13} />
               </button>
             </div>
@@ -427,11 +419,6 @@ export default function NotesPage() {
                     <IconPlus size={15} />
                     新建笔记
                   </button>
-                  {metas.length > 0 && (
-                    <button className="notes-cta" onClick={() => setAsideOpen(true)}>
-                      查看全部
-                    </button>
-                  )}
                 </div>
               </div>
 

@@ -1,0 +1,373 @@
+/* ================================================================
+ *  公共组件样式（所有页面复用）
+ *  按钮三档层级（v3 严格区分主次）：
+ *    .btn-primary  — 深色底 / 最强主行动（新建对话、开始研究）
+ *    .btn-brand    — 品牌蓝底 / 次强主行动（立即备份、切换记忆）
+ *    .btn-ghost    — 透明底 / 辅助动作（顶栏导出、记忆面板编辑）
+ *  三档不得混用，语义明确主次
+ * ================================================================ */
+
+/* 深色主按钮 · 最强层级 */
+.btn-primary{
+  display:inline-flex;align-items:center;gap:var(--space-2);
+  background:var(--ink);color:#fff;border:none;
+  border-radius:var(--radius-m);
+  font-size:var(--font-caption);font-weight:500;
+  padding:var(--space-2) var(--space-4);cursor:pointer;font-family:var(--font);
+  transition:background .15s;
+  box-shadow:var(--shadow-card);
+}
+.btn-primary:hover{background:var(--ink-hover);box-shadow:var(--shadow-soft)}
+
+/* 品牌蓝主按钮 · 次强层级（用于"立即备份/应用"等品牌关联动作） */
+.btn-brand{
+  display:inline-flex;align-items:center;gap:var(--space-2);
+  background:var(--brand);color:#fff;border:none;
+  border-radius:var(--radius-m);
+  font-size:var(--font-caption);font-weight:500;
+  padding:var(--space-2) var(--space-4);cursor:pointer;font-family:var(--font);
+  transition:background .15s;
+  box-shadow:var(--shadow-card);
+}
+.btn-brand:hover{background:var(--brand-deep);box-shadow:var(--shadow-soft)}
+
+/* Ghost 次按钮 · 辅助层级（顶栏导出、记忆面板编辑等） */
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:var(--space-2);
+  background:transparent;color:var(--text-2);border:1px solid transparent;
+  border-radius:var(--radius-m);
+  font-size:var(--font-caption);
+  padding:var(--space-2) var(--space-3);cursor:pointer;font-family:var(--font);
+  transition:.15s;
+}
+.btn-ghost:hover{background:var(--bg-hover);color:var(--text-1)}
+.btn-ghost.on{background:var(--brand-soft);color:var(--brand-deep);border-color:var(--brand-line)}
+.btn-ghost:disabled{opacity:.45;cursor:default}
+.btn-xs{padding:var(--space-1) var(--space-2);font-size:var(--font-micro);border-radius:var(--radius-s)}
+.btn-primary:disabled{opacity:.45;cursor:default;box-shadow:none}
+
+/* 图标按钮(圆形、无字):会话头/面板头/计划头复用 */
+.icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:calc(26px * var(--ui-scale));height:calc(26px * var(--ui-scale));border-radius:50%;
+  color:var(--text-3);background:transparent;transition:.15s;
+}
+.icon-btn:hover{background:var(--bg-hover);color:var(--text-1)}
+.icon-btn.on{background:var(--brand-soft);color:var(--brand-deep)}
+.icon-btn:disabled{opacity:.4;cursor:default}
+
+/* 轻量 chip:档位 / 权限 / 筛选项(与输入条 chip 同一度量,禁止各自定高) */
+.chip{
+  display:inline-flex;align-items:center;gap:var(--space-1);flex:none;
+  height:var(--ctl-h);padding:0 var(--ctl-pad);border-radius:var(--radius-s);
+  border:1px solid var(--border);background:var(--bg-surface);
+  font-size:var(--font-caption);line-height:1;white-space:nowrap;
+  color:var(--text-2);transition:.15s;
+}
+button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
+
+/* 胶囊（快捷入口） */
+.pill{
+  display:inline-flex;align-items:center;gap:var(--space-2);
+  border:1px solid var(--border);background:var(--bg-surface);
+  border-radius:22px;
+  font-size:var(--font-caption);color:var(--text-2);
+  padding:var(--space-2) var(--space-4);cursor:pointer;font-family:var(--font);
+  transition:.15s;
+}
+.pill:hover{border-color:var(--border-strong);color:var(--text-1);box-shadow:var(--shadow-card-h)}
+
+/* 深色卡片按钮 */
+.card-dark{
+  background:var(--ink);color:#fff;border:none;
+  border-radius:var(--radius-xl);
+}
+
+/* 弹窗通用 */
+.dialog{
+  background:var(--bg-surface);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-l);
+  box-shadow:var(--shadow-frame);
+}
+
+/* 遮罩 */
+.mask{position:absolute;inset:0;background:rgba(20,24,30,.35);z-index:var(--z-modal)}
+
+/* 窗口外框（唯一直角！· 固定铺满视口,不随内容漂移） */
+.window{
+  position:fixed;inset:0;
+  background:var(--bg-main);
+  border:none;box-shadow:none;border-radius:0;  /* ★ 唯一直角约束;原生窗口已提供外框 */
+  display:flex;flex-direction:column;overflow:hidden;
+}
+
+/* 标题栏:浅灰底,与下方白色主内容靠颜色差异分层;无描边 */
+.titlebar{
+  height:var(--titlebar-h);flex-shrink:0;
+  position:relative;z-index:var(--z-top);
+  display:flex;align-items:center;gap:var(--space-2);
+  padding:0 var(--space-4);
+  border-bottom:none;
+  background:var(--bg-main);
+  user-select:none;
+}
+.titlebar .logo{width:calc(20px * var(--ui-scale));height:calc(20px * var(--ui-scale));flex-shrink:0}
+.titlebar .cname{font-size:var(--font-micro);color:var(--text-3)}
+.titlebar .spacer{flex:1}
+/* 窗口控制按钮紧凑排布:贴右侧、无多余留白;左侧导航区整体左移 */
+.titlebar{padding-right:0;padding-left:var(--space-2)}
+.win-btn{
+  width:calc(30px * var(--ui-scale));height:var(--titlebar-h);
+  border:none;background:transparent;color:var(--text-3);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:.1s;
+}
+.win-btn:hover{background:var(--bg-hover);color:var(--text-1)}
+.win-btn.close:hover{background:#C93B3B;color:#fff}
+.win-btn.pinned{color:var(--brand)}
+
+/* 图标轨(Rail)已移除:主导航收进标题栏 ⋮ 下拉菜单(NavMenu) */
+.nav-menu{position:relative;flex-shrink:0}
+.menu-btn{
+  width:calc(30px * var(--ui-scale));height:calc(30px * var(--ui-scale));padding:0;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--text-2);
+  border-radius:var(--radius-s);cursor:pointer;transition:.15s;
+}
+.menu-btn:hover,.menu-btn.on{background:var(--bg-hover);color:var(--text-1)}
+.nav-pop{
+  position:absolute;top:calc(100% + 6px);left:0;z-index:var(--z-pop-card);
+  min-width:calc(168px * var(--ui-scale));padding:var(--space-2);
+  display:flex;flex-direction:column;gap:var(--space-1);
+  background:#FFFFFF;
+  border:1px solid var(--border);
+  border-radius:var(--radius-l);
+  box-shadow:var(--shadow-card-h);
+}
+.nav-item{
+  display:flex;align-items:center;gap:var(--space-2);
+  min-height:var(--ctl-h);padding:0 var(--space-3);border:none;background:transparent;
+  border-radius:var(--radius-s);cursor:pointer;
+  font-size:var(--font-sub);color:#000000;line-height:1.2;
+  font-family:var(--font);text-align:left;transition:.15s;
+}
+.nav-item:hover{background:var(--bg-hover);color:#000000}
+.nav-item.active{background:var(--bg-hover);color:#000000;font-weight:600}
+.nav-item.active svg{color:#000000}
+.nav-sep{height:1px;margin:var(--space-1) var(--space-2);background:var(--border)}
+
+/* 玻璃组件组(标题栏内):会话抽屉 / 全局搜索 / 新建对话 — 纯扁平无描边 */
+.tb-pill{
+  display:flex;align-items:center;gap:var(--space-1);
+  /* 负外边距抵消标题栏 8px gap,紧靠左侧 ⋮ 菜单 */
+  margin-left:calc(-6px * var(--ui-scale));padding:var(--space-1);
+  background:transparent;
+  border:none;
+  border-radius:var(--radius-m);
+  box-shadow:none;
+}
+.tb-pill-btn{
+  width:calc(26px * var(--ui-scale));height:calc(24px * var(--ui-scale));padding:0;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--text-3);
+  border-radius:var(--radius-s);cursor:pointer;transition:.15s;
+}
+.tb-pill-btn:hover{background:var(--bg-hover);color:var(--text-1)}
+
+/* 会话历史抽屉(玻璃浮层,固定在标题栏下方左侧,不再占据布局列) */
+/* 会话历史抽屉:与 .main 同位置同高度,不破坏圆角外框 */
+.sidebar{
+  position:fixed;top:var(--titlebar-h);left:10px;bottom:10px;z-index:var(--z-drawer);
+  width:var(--sidebar-w);flex-shrink:0;
+  background:var(--bg-surface);
+  border-radius:12px;
+  border:1px solid var(--border);
+  box-shadow:0 0 0 transparent;
+  display:flex;flex-direction:column;
+  padding:var(--space-4) var(--pad-x-narrow);
+  transform:translateX(-105%);
+  visibility:hidden;
+  pointer-events:none;
+  opacity:0;
+  transition:transform .28s cubic-bezier(.4,.0,.2,1), opacity .18s ease, visibility 0s linear .28s;
+}
+.sidebar.open{
+  transform:translateX(0);
+  visibility:visible;
+  pointer-events:auto;
+  opacity:1;
+  box-shadow:var(--shadow-card-h);
+  transition:transform .28s cubic-bezier(.4,.0,.2,1), opacity .18s ease, visibility 0s, box-shadow .2s ease;
+}
+.side-head{display:flex;align-items:center;justify-content:space-between;padding:0 0 var(--space-2)}
+.side-head-title{font-size:var(--font-h3);font-weight:600;color:var(--text-1)}
+.side-head-actions{display:flex;align-items:center;gap:var(--space-1);flex:none}
+/* 面板折叠:统一的收起/展开小按钮与折叠后的窄条入口 */
+.panel-toggle{
+  width:calc(22px * var(--ui-scale));height:calc(22px * var(--ui-scale));padding:0;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--text-3);
+  border-radius:var(--radius-s);cursor:pointer;transition:.15s;
+}
+.panel-toggle:hover{background:var(--bg-hover);color:var(--text-1)}
+.side-section{margin-top:var(--space-5)}
+.side-label{font-size:var(--font-micro);color:var(--text-3);font-weight:500;padding:0 0 var(--space-2);display:flex;align-items:center;gap:var(--space-1)}
+.side-item{
+  display:flex;align-items:center;gap:var(--space-2);
+  padding:var(--space-2) var(--pad-x-narrow);border-radius:var(--radius-s);
+  font-size:var(--font-sub);color:var(--text-2);
+  cursor:pointer;transition:.15s;
+  white-space:nowrap;overflow:hidden;
+}
+.side-item:hover{background:var(--bg-hover);color:var(--text-1)}
+.side-item.on{background:var(--bg-active);color:var(--text-1)}
+.side-item .txt{overflow:hidden;text-overflow:ellipsis;flex:1}
+/* 侧栏内联重命名输入框(双击标题触发) */
+.side-item .side-rename{
+  flex:1;min-width:0;
+  font:inherit;color:var(--text-1);
+  background:var(--bg-main);
+  border:1px solid var(--brand);border-radius:var(--radius-xs, 4px);
+  padding: 4px 8px;outline:none;
+}
+
+/* 顶部栏已移除:搜索/新建对话收进标题栏玻璃 pill(Topbar 组件已删除);
+   模型选择器已从会话头迁移到输入条右端(样式见 chat.css .composer-model) */
+
+/* 主区 stage */
+.stage{flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:var(--space-10) var(--pad-x) var(--space-4);display:flex;flex-direction:column;align-items:center}
+.stage::-webkit-scrollbar{width:8px}
+.stage::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.stage::-webkit-scrollbar-thumb:hover{background:var(--text-3)}
+
+/* 欢迎语 */
+.hex-orb{
+  width:44px;height:44px;background:var(--brand);
+  clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:calc(var(--font-h2) * 1.125);font-weight:700;
+  box-shadow:0 10px 26px rgba(27,108,168,.35);
+  animation:float 4.5s ease-in-out infinite;
+}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.greeting{margin-top:var(--space-6);font-size:calc(var(--font-hero) * 1.2);font-weight:650;letter-spacing:-.3px;color:var(--text-1);text-align:center;animation:float 4.5s ease-in-out infinite}
+
+/* 空状态卡片组 */
+.cards{
+  margin-top:var(--space-8);display:flex;gap:var(--space-3);
+  max-width:820px;width:100%;align-items:stretch;
+}
+.card{
+  border:1px solid var(--border);background:var(--bg-surface);
+  border-radius:var(--radius-xl);
+  padding:var(--space-4);cursor:pointer;
+  box-shadow:var(--shadow-card);
+  transition:transform .15s,box-shadow .15s,border-color .15s;
+}
+.card:hover{box-shadow:var(--shadow-card-h);transform:translateY(-2px);border-color:var(--border-strong)}
+.card-dark{background:var(--ink);color:#fff;border-color:var(--ink)}
+.card-dark:hover{background:var(--ink-hover)}
+
+/* 输入框（Composer）:宽度与阅读列同轴(720px),由 1px 线 + 双层阴影形成浮起感 */
+.composer{width:100%;max-width:var(--composer-max-w);margin-top:auto;margin-left:auto;margin-right:auto;padding-top:var(--space-6)}
+/* 输入卡:统一 1px 浅灰线 + 双层小阴影(会话页/首页/工作台同一 token) */
+.composer-box{
+  border:1px solid var(--composer-border);background:var(--bg-surface);
+  border-radius:var(--radius-xl);
+  box-shadow:var(--shadow-composer);
+  transition:border-color .15s, box-shadow .15s;
+}
+/* 聚焦只改线色,不再叠 2px ring + 1px border 的双重描边 */
+.composer-box:focus-within{border-color:var(--brand-line);box-shadow:var(--shadow-composer)}
+.composer-box textarea{
+  width:100%;border:none;outline:none;resize:none;background:transparent;
+  font-family:var(--font);font-size:var(--font-body);
+  color:var(--text-1);padding:var(--space-3) var(--pad-x) var(--space-2);line-height:1.55;max-height:420px;
+}
+.composer-box textarea::placeholder{color:var(--text-4)}
+/* 输入框高度拖拽把手:置于外框顶部,上下拖动调整 textarea 高度 */
+.composer-resize{
+  height:calc(8px * var(--ui-scale));flex-shrink:0;cursor:ns-resize;
+  display:flex;align-items:center;justify-content:center;
+  touch-action:none;
+}
+.composer-resize::after{
+  content:"";width:calc(40px * var(--ui-scale));height:calc(3px * var(--ui-scale));border-radius:2px;
+  background:var(--border-strong);opacity:.35;
+  transition:opacity .15s,background .15s;
+}
+.composer-resize:hover::after,.composer-resize.dragging::after{opacity:1;background:var(--brand)}
+.composer-bar{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-2) var(--space-3);flex-wrap:wrap;row-gap:var(--space-1)}
+
+/* 状态标签(设计稿 04 · 通用组件):会话头 / 分支 / 子任务共用 */
+.tag{
+  display:inline-flex;align-items:center;gap:var(--space-1);
+  padding:var(--space-1) var(--space-2);border-radius:var(--radius-s);
+  background:var(--bg-side);border:1px solid var(--border);
+  font-size:var(--font-micro);color:var(--text-2);white-space:nowrap;
+}
+.tag.brand{background:var(--brand-soft);border-color:var(--brand-line);color:var(--brand-deep)}
+.tag.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
+.tag.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+.tag.err{background:var(--err-soft);border-color:transparent;color:var(--err)}
+
+/* 工具胶囊小按钮:高度/内边距统一走 chip 度量 */
+.tool-chip{
+  display:inline-flex;align-items:center;gap:var(--space-1);flex:0 0 auto;
+  height:var(--ctl-h);padding:0 var(--ctl-pad);
+  border:1px solid var(--border);background:var(--bg-surface);
+  border-radius:var(--radius-s);
+  font-size:var(--font-caption);color:var(--text-2);line-height:1;white-space:nowrap;
+  cursor:pointer;font-family:var(--font);
+  transition:.15s;
+}
+.tool-chip:hover{background:var(--bg-hover)}
+.tool-chip.on{border-color:var(--brand-line);background:var(--brand-soft);color:var(--brand-deep)}
+
+/* 教程卡 */
+.tutorial{
+  border:1px solid var(--brand-line);border-left:4px solid var(--brand);
+  background:var(--brand-soft);
+  border-radius:var(--radius-s);
+  margin-top:var(--space-3);
+}
+.tut-head{
+  display:flex;align-items:center;gap:var(--space-2);
+  padding:var(--space-2) var(--space-3);
+  cursor:pointer;user-select:none;
+  border-radius:var(--radius-s);
+}
+.tut-head .ti{
+  width:calc(18px * var(--ui-scale));height:calc(18px * var(--ui-scale));background:var(--brand);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:var(--font-mini);font-weight:700;flex-shrink:0;
+  border-radius:var(--radius-s);
+}
+.tut-head .tt{font-size:var(--font-caption);font-weight:600;color:var(--brand-deep)}
+.tut-head .ts{font-size:var(--font-micro);color:var(--text-3);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tut-head .arr{color:var(--text-3);transition:.15s;font-size:var(--font-caption)}
+.tutorial.open .tut-head .arr{transform:rotate(180deg)}
+.tut-body{display:none;padding:0 var(--space-3) var(--space-3);border-top:1px dashed var(--brand-line)}
+.tutorial.open .tut-body{display:block}
+.tut-body .step{margin-top:var(--space-3)}
+.tut-body .st{font-size:var(--font-caption);color:var(--text-2);margin-bottom:var(--space-2)}
+.copyline{
+  display:flex;align-items:center;background:var(--bg-surface);
+  border:1px solid var(--border);border-radius:var(--radius-s);
+  font-family:var(--font-mono);font-size:var(--font-micro);color:var(--text-2);
+  margin-top:var(--space-2);
+}
+.copyline code{flex:1;padding:var(--space-2);overflow-x:auto;white-space:nowrap}
+.copyline button{
+  border:none;border-left:1px solid var(--border);
+  background:var(--bg-side);
+  font-size:var(--font-micro);color:var(--brand-deep);
+  padding:var(--space-2);cursor:pointer;flex-shrink:0;font-family:var(--font);
+  border-radius:0 var(--radius-s) var(--radius-s) 0;
+}
+.copyline button:hover{background:var(--brand-soft)}
+/* 教程卡列表(md 驱动,迭代 D7.2) */
+.tutorial-list{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)}
+.tutorial-list .tutorial{margin-top:0}
+.tut-head .arr svg{display:block}

@@ -34,8 +34,7 @@
   margin-right: auto;
 }
 
-/* ---------- 快捷开始:只填词不发请求 ---------- */
-.home-quick { margin-top: var(--space-6); }
+/* ---------- 区块标题(输入框前) ---------- */
 .home-sec-head {
   display: flex; align-items: center; gap: var(--space-1);
   margin-bottom: var(--space-2);
@@ -43,49 +42,6 @@
   color: var(--text-3); letter-spacing: .3px;
 }
 .home-sec-head svg { color: var(--text-3); flex-shrink: 0; }
-.home-quick-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-.home-quick-card {
-  display: flex; flex-direction: column; align-items: flex-start;
-  gap: calc(3px * var(--ui-scale));
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-l);
-  background: var(--bg-surface);
-  color: var(--text-2);
-  font-family: var(--font);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color .15s, background .15s, transform .15s;
-}
-.home-quick-card:hover {
-  border-color: var(--brand-line);
-  background: var(--brand-soft);
-  transform: translateY(-1px);
-}
-.home-quick-card:active { transform: translateY(0); }
-.home-quick-card .qi {
-  width: calc(26px * var(--ui-scale)); height: calc(26px * var(--ui-scale));
-  display: inline-flex; align-items: center; justify-content: center;
-  margin-bottom: calc(2px * var(--ui-scale));
-  border-radius: var(--radius-s);
-  background: var(--brand-soft); color: var(--brand-deep);
-}
-.home-quick-card .qi svg { width: 14px; height: 14px; }
-.home-quick-card .qt {
-  max-width: 100%;
-  font-size: var(--font-sub); font-weight: 600; color: var(--text-1);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.home-quick-card .qd {
-  max-width: 100%;
-  font-size: var(--font-micro); color: var(--text-3);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
 
 /* ---------- 最近对话:轻量列表,无卡片描边 ---------- */
 .home-recent { margin-top: var(--space-5); }
@@ -125,7 +81,7 @@
   .usage-bar-row .nm { width: calc(108px * var(--ui-scale)); }
 }
 
-/* 会话头部:标题 + 右侧模型选择 */
+/* 会话头部:独立工具栏,视觉隔离 */
 .chat-head {
   flex-shrink: 0;
   display: flex;
@@ -134,6 +90,7 @@
   padding: 0 var(--pad-x);
   height: calc(46px * var(--ui-scale));
   background: var(--bg-surface);
+  border-bottom: none;
 }
 .chat-title {
   flex: 0 1 auto;
@@ -147,22 +104,46 @@
   text-overflow: ellipsis;
 }
 .chat-head .sp { flex: 1; }
-/* 会话标题改名入口(幽灵按钮,贴标题右侧) */
-.chat-title-btn {
+/* 会话标题左侧圆形图标:悬停显示项目/存储地址(5.4) */
+.chat-head-locus {
   flex-shrink: 0;
-  width: calc(24px * var(--ui-scale));
-  height: calc(24px * var(--ui-scale));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: var(--radius-s);
-  background: transparent;
-  color: var(--text-4);
-  cursor: pointer;
-  transition: .15s;
+  color: var(--text-3);
 }
-.chat-title-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+.chat-head-locus.clickable:hover { color: var(--brand-deep); }
+/* P2-2:头部状态信息(plan 5.2,替代已删除的底部 StatusBar) */
+.chat-head .hs-item {
+  flex: none;
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.chat-head .hs-model {
+  max-width: calc(140px * var(--ui-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-head .hs-stop { color: var(--err); }
+.hs-more-wrap { position: relative; display: none; flex: none; }
+.hs-more-row {
+  padding: 6px 12px;
+  font-size: var(--font-sub);
+  color: var(--text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* 空间自适应(plan 5.2):会话列变窄时按 工具→Token→模型 依次藏入 ··· 菜单;
+   容器即 ChatPage 中栏(containerType: inline-size),与纲要横线轨同一机制 */
+@container (max-width: 900px) {
+  .chat-head .hs-tools { display: none; }
+  .chat-head .hs-more-wrap { display: block; }
+}
+@container (max-width: 800px) {
+  .chat-head .hs-tokens { display: none; }
+}
+@container (max-width: 700px) {
+  .chat-head .hs-model { display: none; }
+}
 /* 标题内联编辑行 */
 .chat-title-edit {
   flex: 1;
@@ -178,27 +159,13 @@
   padding: 0 var(--space-2);
   border: 1px solid var(--brand-line);
   border-radius: var(--radius-s);
-  background: var(--bg-main);
+  background: var(--bg-surface);
   color: var(--text-1);
   font-size: var(--font-h3);
   font-weight: 600;
   font-family: var(--font);
   outline: none;
 }
-.chat-title-edit button {
-  flex-shrink: 0;
-  width: calc(26px * var(--ui-scale));
-  height: calc(26px * var(--ui-scale));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  background: var(--bg-main);
-  color: var(--text-3);
-  cursor: pointer;
-}
-.chat-title-edit button:hover { background: var(--bg-hover); color: var(--text-1); }
 /* 会话头部:记忆面板展开/收起开关(样式统一在 chat.css) */
 
 /* 极窄窗:会话头部让位,避免标题+按钮溢出 */
@@ -219,14 +186,6 @@
     height: calc(42px * var(--ui-scale));
     padding: 0 var(--space-2);
     gap: var(--space-1);
-  }
-  .chat-panel-toggle {
-    width: calc(26px * var(--ui-scale));
-    height: calc(26px * var(--ui-scale));
-  }
-  .chat-title-btn {
-    width: calc(22px * var(--ui-scale));
-    height: calc(22px * var(--ui-scale));
   }
   .pg-hint { display: none; }
 }

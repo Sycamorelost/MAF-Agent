@@ -14,8 +14,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex as StdMutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
@@ -47,16 +46,15 @@ pub enum ApprovalRisk {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApprovalMode {
-    /// 逐次审批:每个工具调用都弹窗(最保守)
+    /// 逐次审批(默认):每个工具调用都弹窗(最保守)
+    #[default]
     #[serde(alias = "manual")]
     Ask,
-    /// 工作区(默认,D11):只读与工作区内写自动放行;
+    /// 工作区:只读与工作区内写自动放行;
     /// shell / GUI / 删除 / 越界写入仍审批。旧自定义白名单作为本档附加放行继续生效。
-    #[default]
     #[serde(alias = "auto", alias = "custom")]
     Workspace,
-    /// 完全不弹窗,直接执行。此模式下:shell 走 run_unrestricted(无白名单/路径/元字符校验),
-    /// 写前备份仍生效;GUI 自动化与能力令牌等高级功能仅在此模式下可用(总开关)。
+    /// 完全信任:不再弹窗,shell 直接执行(写前备份仍生效);GUI 自动化仅在此模式下可用。
     Full,
 }
 
@@ -146,7 +144,7 @@ pub fn policy_path(data_dir: &Path) -> PathBuf {
     data_dir.join("mcp-approval.json")
 }
 
-/// 读策略(文件缺失/损坏 → 工作区档,D11 默认)。
+/// 读策略(文件缺失/损坏 → 逐次审批档,默认)。
 pub fn load_policy(data_dir: &Path) -> ApprovalPolicy {
     std::fs::read_to_string(policy_path(data_dir))
         .ok()
@@ -160,152 +158,19 @@ pub fn load_policy(data_dir: &Path) -> ApprovalPolicy {
 pub fn save_policy(data_dir: &Path, policy: &ApprovalPolicy) -> Result<(), String> {
     let json = serde_json::to_string_pretty(policy).map_err(|e| format!("序列化失败: {e}"))?;
     std::fs::write(policy_path(data_dir), json).map_err(|e| format!("写入失败: {e}"))?;
-    // P8:切回任何非「完全信任」档立即吊销临时授权,避免残留授权在下一档生效
-    if policy.mode != ApprovalMode::Full {
-        revoke_full_trust();
-    }
     Ok(())
 }
 
-// ---------- P8:完全信任的会话级临时授权 ----------
-//
-// 目标:「完全信任」不再是永久全局开关,而是用户在设置页/会话内显式开启的一段
-// 临时授权(默认 60 分钟,可绑定单个会话)。以下任一条件成立即视为失效:
-//   1. 超过授权时长;
-//   2. 授权会话与实际调用会话不一致(会话级授权);
-//   3. mcp-approval.json 被改动(内容指纹变化)—— 手工改文件也必须重新确认;
-//   4. 策略切回非 full 档 / 手动撤销 / 应用重启(内存态自然清空)。
-// 失效时按「工作区」档执行,不会静默降级为完全不询问。
 
-/// 默认临时授权时长(分钟)。
-pub const DEFAULT_FULL_TRUST_MINUTES: u64 = 60;
 
-struct FullGrant {
-    expires_at: Instant,
-    /// None = 全局临时授权(所有会话);Some = 仅该会话。
-    session_id: Option<String>,
-    /// 授权时的策略文件内容指纹,文件被改动即失效。
-    stamp: u64,
-}
-
-static FULL_GRANT: OnceLock<StdMutex<Option<FullGrant>>> = OnceLock::new();
-
-fn grant_slot() -> &'static StdMutex<Option<FullGrant>> {
-    FULL_GRANT.get_or_init(|| StdMutex::new(None))
-}
-
-/// 测试专用:把当前授权置为已到期,避免单测等待真实分钟级时长。
-#[cfg(test)]
-fn expire_grant_for_test() {
-    if let Ok(mut slot) = grant_slot().lock()
-        && let Some(g) = slot.as_mut()
-    {
-        g.expires_at = Instant::now();
-    }
-}
-
-/// 策略文件内容指纹(FNV-1a)。文件缺失记为 0。
-fn policy_stamp(data_dir: &Path) -> u64 {
-    let Ok(bytes) = std::fs::read(policy_path(data_dir)) else {
-        return 0;
-    };
-    let mut h: u64 = 0xcbf29ce484222325;
-    for b in bytes {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
-    }
-    h
-}
-
-/// 开启临时授权。minutes 会被收敛到 1..=240 分钟,防止「永久开启」。
-pub fn grant_full_trust(
-    data_dir: &Path,
-    session_id: Option<&str>,
-    minutes: u64,
-) -> Result<u64, String> {
-    // 允许两种入口:全局档为完全信任;或本会话的权限覆盖为完全信任(PermissionChip)。
-    // DB 未初始化时(单测 / 启动早段)只认全局档,避免查询会话覆盖时 panic。
-    let session_full = session_id
-        .filter(|_| crate::db::is_initialized())
-        .and_then(crate::db::sessions::permission_mode_override)
-        .as_deref()
-        == Some("full");
-    if load_policy(data_dir).mode != ApprovalMode::Full && !session_full {
-        return Err("当前审批档不是「完全信任」,不能签发临时授权".into());
-    }
-    let minutes = minutes.clamp(1, 240);
-    let mut slot = grant_slot()
-        .lock()
-        .map_err(|_| "授权状态锁失败".to_string())?;
-    *slot = Some(FullGrant {
-        expires_at: Instant::now() + Duration::from_secs(minutes * 60),
-        session_id: session_id.map(|s| s.to_string()),
-        stamp: policy_stamp(data_dir),
-    });
-    Ok(minutes)
-}
-
-/// 立即吊销临时授权。
-pub fn revoke_full_trust() {
-    if let Ok(mut slot) = grant_slot().lock() {
-        *slot = None;
-    }
-}
-
-/// 按会话吊销:仅当当前授权恰好绑定该会话时清除;全局授权与其它会话不受影响。
-pub fn revoke_full_trust_for(session_id: Option<&str>) {
-    let Some(sid) = session_id else {
-        revoke_full_trust();
-        return;
-    };
-    if let Ok(mut slot) = grant_slot().lock()
-        && slot.as_ref().is_some_and(|g| g.session_id.as_deref() == Some(sid))
-    {
-        *slot = None;
-    }
-}
-
-/// 查询某会话当前是否持有有效的完全信任授权;返回剩余秒数。
-pub fn full_trust_remaining(data_dir: &Path, session_id: Option<&str>) -> Option<u64> {
-    let mut slot = grant_slot().lock().ok()?;
-    let g = slot.as_ref()?;
-    if g.expires_at <= Instant::now() {
-        *slot = None;
-        return None;
-    }
-    // 会话级授权:调用方必须来自同一会话;全局授权(None)对所有会话有效
-    let session_ok = match (&g.session_id, session_id) {
-        (None, _) => true,
-        (Some(bound), Some(cur)) => bound == cur,
-        (Some(_), None) => false,
-    };
-    if !session_ok {
-        return None;
-    }
-    // 策略文件被改动 → 必须重新确认
-    if g.stamp != policy_stamp(data_dir) {
-        *slot = None;
-        return None;
-    }
-    Some(g.expires_at.saturating_duration_since(Instant::now()).as_secs())
-}
-
-/// 该会话是否有生效的完全信任授权。
-pub fn full_trust_active(data_dir: &Path, session_id: Option<&str>) -> bool {
-    full_trust_remaining(data_dir, session_id).is_some()
-}
-
-/// 计算本次调用实际生效的审批档:声明为 Full 但授权已失效 → 回落工作区档。
+/// 实际生效的审批档:审批档是全局永久设置(写入 mcp-approval.json,所有会话与环境一致,
+/// 重启后仍保持)。会话级覆盖由调用方在传入前替换 `policy.mode`,此处直接返回该档位。
 pub fn effective_mode(
     policy: &ApprovalPolicy,
-    data_dir: &Path,
-    session_id: Option<&str>,
+    _data_dir: &Path,
+    _session_id: Option<&str>,
 ) -> ApprovalMode {
-    match policy.mode {
-        ApprovalMode::Full if full_trust_active(data_dir, session_id) => ApprovalMode::Full,
-        ApprovalMode::Full => ApprovalMode::Workspace,
-        other => other,
-    }
+    policy.mode
 }
 
 /// 审批结果(前端回传给后端的决策)。
@@ -659,67 +524,22 @@ mod tests {
         ));
     }
 
-    /// P8:完全信任临时授权 —— 未授权回落工作区、会话绑定、到期/策略改动/切档失效、时长收敛。
+    /// 审批档是全局永久设置:保存后重新读取(模拟重启)仍保持同一档位,且不受会话影响。
     #[test]
-    fn full_trust_grant_is_temporary_and_scoped() {
-        let dir = std::env::temp_dir().join(format!("maf-ft-{}", uuid::Uuid::new_v4()));
+    fn approval_mode_is_permanent_and_global() {
+        let dir = std::env::temp_dir().join(format!("maf-mode-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let full = ApprovalPolicy {
             mode: ApprovalMode::Full,
             allow: vec![],
         };
-        let ws = ApprovalPolicy {
-            mode: ApprovalMode::Workspace,
-            allow: vec![],
-        };
-
-        // 1) 仅声明 full 而无授权 → 实际回落工作区档
         save_policy(&dir, &full).unwrap();
-        assert_eq!(effective_mode(&full, &dir, None), ApprovalMode::Workspace);
-        assert!(!full_trust_active(&dir, None));
-
-        // 2) 非 full 档拒绝签发
-        save_policy(&dir, &ws).unwrap();
-        assert!(grant_full_trust(&dir, Some("s1"), 60).is_err());
-
-        // 3) full 档签发:会话绑定,其他会话 / 无会话上下文不生效
-        save_policy(&dir, &full).unwrap();
-        grant_full_trust(&dir, Some("s1"), 1).unwrap();
-        assert!(full_trust_remaining(&dir, Some("s1")).is_some());
-        assert!(!full_trust_active(&dir, Some("s2")));
-        assert!(!full_trust_active(&dir, None));
-        assert_eq!(effective_mode(&full, &dir, Some("s1")), ApprovalMode::Full);
-        assert_eq!(
-            effective_mode(&full, &dir, Some("s2")),
-            ApprovalMode::Workspace
-        );
-
-        // 4) 到期 → 失效,且不再返回剩余秒数
-        expire_grant_for_test();
-        assert!(!full_trust_active(&dir, Some("s1")));
-        assert_eq!(full_trust_remaining(&dir, Some("s1")), None);
-
-        // 5) 策略文件被改动(指纹变化)→ 授权失效
-        save_policy(&dir, &full).unwrap();
-        grant_full_trust(&dir, None, 60).unwrap();
-        assert!(full_trust_active(&dir, Some("any")));
-        let mut changed = full.clone();
-        changed.allow = vec!["x".into()];
-        std::fs::write(policy_path(&dir), serde_json::to_string(&changed).unwrap()).unwrap();
-        assert!(!full_trust_active(&dir, Some("any")));
-
-        // 6) 全局授权后切回非 full → save_policy 立即吊销
-        save_policy(&dir, &full).unwrap();
-        grant_full_trust(&dir, None, 60).unwrap();
-        save_policy(&dir, &ws).unwrap();
-        assert!(!full_trust_active(&dir, None));
-
-        // 7) 时长收敛到 1..=240 分钟
-        save_policy(&dir, &full).unwrap();
-        assert_eq!(grant_full_trust(&dir, None, 0).unwrap(), 1);
-        assert_eq!(grant_full_trust(&dir, None, 9_999).unwrap(), 240);
-        revoke_full_trust();
-        assert!(!full_trust_active(&dir, None));
+        let reloaded = load_policy(&dir);
+        assert_eq!(reloaded.mode, ApprovalMode::Full);
+        // 任意会话上下文生效档位一致,不存在临时授权回落
+        assert_eq!(effective_mode(&reloaded, &dir, None), ApprovalMode::Full);
+        assert_eq!(effective_mode(&reloaded, &dir, Some("s1")), ApprovalMode::Full);
+        assert_eq!(effective_mode(&reloaded, &dir, Some("s2")), ApprovalMode::Full);
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -738,8 +558,8 @@ mod tests {
         let c: ApprovalPolicy = serde_json::from_str(r#"{"mode":"custom","allow":["x"]}"#).unwrap();
         assert_eq!(c.mode, ApprovalMode::Workspace);
         assert_eq!(c.allow, vec!["x".to_string()]);
-        // 缺失/损坏 → 工作区档(D11 默认),不缺省直放也不全弹窗
+        // 缺失/损坏 → 逐次审批档(默认),不缺省直放也不全弹窗
         let d: ApprovalPolicy = serde_json::from_str("{}").unwrap();
-        assert_eq!(d.mode, ApprovalMode::Workspace);
+        assert_eq!(d.mode, ApprovalMode::Ask);
     }
 }

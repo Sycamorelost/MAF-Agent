@@ -1,52 +1,38 @@
 import { IconCheck } from '../../components/icons';
-import type { ApprovalMode, ApprovalPolicy, FullTrustStatus } from '../../lib/ipc/mcp';
+import type { ApprovalMode, ApprovalPolicy } from '../../lib/ipc/mcp';
 
-/** 审批档选项(D11 三档收敛:逐次 / 工作区 / 完全信任)。 */
+/** 审批档选项(逐次 / 工作区 / 完全信任),默认「逐次审批」。 */
 export const APPROVAL_MODES: { id: ApprovalMode; title: string; desc: string }[] = [
-  { id: "ask", title: "逐次审批", desc: "每个工具调用都弹窗确认,最保守" },
+  { id: "ask", title: "逐次审批", desc: "每个工具调用都弹窗确认,最安全(默认)" },
   {
     id: "workspace",
     title: "工作区",
-    desc: "只读与工作区内写入自动放行,shell / 删除 / 越界写入仍询问(默认)",
+    desc: "只读与工作区内写入自动放行,shell / 删除 / 越界写入仍询问",
   },
-  { id: "full", title: "完全信任", desc: "需临时授权:有效期内不弹窗,任意命令直接运行(写删仍备份并审计)" },
+  { id: "full", title: "完全信任", desc: "不再弹窗,shell 可执行任意命令(含系统环境操作),GUI 自动化可用" },
 ];
 
-/** 剩余秒数 → 「59 分 30 秒」。 */
-const fmtRemaining = (secs: number) => {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
-};
-
-/** 审批档卡片:三档选择、完全信任警示与工作区附加白名单(D11)。 */
+/** 审批档卡片:全局永久设置,三档选择 + 工作区附加白名单。 */
 export function ApprovalPolicyCard({
   policy,
   allowText,
-  ftStatus,
   onAllowTextChange,
   onPickMode,
-  onGrantFullTrust,
-  onRevokeFullTrust,
   onSaveAllowList,
 }: {
   policy: ApprovalPolicy;
   allowText: string;
-  ftStatus: FullTrustStatus;
   onAllowTextChange: (v: string) => void;
   onPickMode: (mode: ApprovalMode) => void;
-  onGrantFullTrust: () => void;
-  onRevokeFullTrust: () => void;
   onSaveAllowList: () => void;
 }) {
   return (
     <div className="mcp-policy-card">
-      <div className="mcp-time-label">如何批准 Agent 的操作?</div>
+      <div className="mcp-time-label">工具权限(全局永久生效)</div>
       <div className="mcp-policy-desc">
-        「逐次审批」每次工具调用都确认;「工作区」只读与工作区内写入免弹窗,shell /
-        删除 / 越界写入仍询问;「完全信任」不再弹窗,shell 可执行任意命令(含环境变量 / 服务 /
-        注册表等系统环境操作),并解锁 GUI 自动化与临时授权。
-        旧版「手动 / 自动 / 自定义」已并入三档:手动→逐次,自动 / 自定义→工作区(白名单保留为下方附加放行)。
+        此设置对所有会话、所有环境统一生效,保存后重启应用仍然有效。
+        默认「逐次审批」:每次工具调用都要你确认;「工作区」:只读与工作区内写入免确认;
+        「完全信任」:不再确认,shell 可执行任意命令并解锁 GUI 自动化。
       </div>
       <div className="mcp-modes">
         {APPROVAL_MODES.map((m) => (
@@ -68,28 +54,10 @@ export function ApprovalPolicyCard({
           </button>
         ))}
       </div>
-      {policy.mode === "full" && ftStatus.active && (
-        <div className="mcp-warn">
-          完全信任临时授权生效中:剩余 {fmtRemaining(ftStatus.remaining_secs)}。
-          工具调用不再询问,shell 可执行任意命令(含任意路径与系统环境操作),GUI 自动化已解锁。
-          到期后自动回落「工作区」档;请仅在同时信任模型与全部工具输出(网页 / 文件内容)时使用。
-        </div>
-      )}
       {policy.mode === "full" && (
-        <div className="mcp-server-actions">
-          <button className="btn btn-xs" onClick={onGrantFullTrust}>
-            {ftStatus.active ? "延长 60 分钟" : "授权 60 分钟"}
-          </button>
-          {ftStatus.active && (
-            <button className="btn btn-xs btn-ghost" onClick={onRevokeFullTrust}>
-              立即失效
-            </button>
-          )}
-          {!ftStatus.active && (
-            <span className="mcp-warn" style={{ margin: 0 }}>
-              临时授权未生效或已到期,当前实际按「工作区」档执行。
-            </span>
-          )}
+        <div className="mcp-warn">
+          完全信任已开启:工具调用不再询问,模型可执行任意命令与系统环境操作。
+          请仅在同时信任所用模型与全部工具输出内容时使用。
         </div>
       )}
       {policy.mode === "workspace" && (

@@ -64,18 +64,6 @@ pub fn safe_emit<T: Serialize + Clone>(app: &tauri::AppHandle, event: &str, payl
     }
 }
 
-/// 向指定窗口发送事件;失败处理同 [`safe_emit`]。
-pub fn safe_emit_to<T: Serialize + Clone>(
-    app: &tauri::AppHandle,
-    target: &str,
-    event: &str,
-    payload: T,
-) {
-    if let Err(e) = app.emit_to(target, event, payload) {
-        record_failure(KIND_EMIT, &format!("{event} -> {target}: {e}"));
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

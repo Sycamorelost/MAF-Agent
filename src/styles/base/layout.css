@@ -1,0 +1,126 @@
+/* ============ 全局布局 ============ */
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+body {
+  font-family: var(--font);
+  font-size: var(--font-body);
+  color: var(--text-1);
+  background: var(--bg-frame);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}
+
+input, textarea {
+  font-family: inherit;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+}
+
+a { color: var(--brand); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ============ Window 框架 ============ */
+
+.window {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  background: var(--bg-main);
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+/* Topbar 已删除:搜索/新建对话收进 Titlebar 玻璃 pill(样式见 _tokens.css .tb-pill) */
+
+/* 主体:左右下内缩,露出浅灰外框边;顶部让 titlebar 贴顶 */
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  margin-top: 0;
+  margin-left: 10px;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+/* 抽屉挤出式(会话抽屉/页面左栏):打开时主区整体让位,内容不被遮挡;
+   关闭途径 = 标题栏 pill 再点 / 抽屉 ✕ / Esc(无遮罩,点击主区不关闭) */
+.main { transition: padding-left .2s ease; }
+body.sidebar-open .main { padding-left: var(--sidebar-w); }
+body.aside-open .main { padding-left: var(--aside-w); }
+
+/* 页面左栏抽屉 ✕(AsideDrawer 渲染,定位于抽屉右上角) */
+.aside-close {
+  position: fixed;
+  top: calc(var(--titlebar-h) + 8px);
+  left: calc(var(--aside-w) - 32px);
+  z-index: var(--z-base);
+}
+
+/* 抽屉内通用开合提示行(记忆/知识库/设置等无描述段的抽屉头部) */
+.drawer-hint {
+  padding: 0 var(--pad-x-narrow) var(--space-2);
+  font-size: var(--font-micro);
+  color: var(--text-4);
+}
+
+/* 标题栏搜索/菜单浮层的透明遮罩 */
+.tb-pop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-pop);
+}
+/* 全局搜索玻璃卡片:挂在 pill 下方 */
+.tb-search-pop {
+  position: absolute;
+  top: calc(var(--titlebar-h) + 4px);
+  left: var(--space-2);
+  z-index: var(--z-pop-card);
+  width: calc(340px * var(--ui-scale));
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  background: rgba(var(--bg-main-rgb), var(--bg-glass-alpha));
+  backdrop-filter: blur(50px) saturate(1.8);
+  -webkit-backdrop-filter: blur(50px) saturate(1.8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-card-h);
+}
+.tb-search-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-1);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--text-3);
+}
+.tb-search-pop .global-search {
+  width: 100%;
+}
+/* 窄窗:搜索卡片收窄 */
+@media (max-width: 620px) {
+  .tb-search-pop { width: min(calc(340px * var(--ui-scale)), calc(100vw - var(--space-6))); }
+}
+
+/* Sidebar(会话历史抽屉):基础由 _tokens.css 提供,此处追加项目分组视图样式 */
+.side-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}

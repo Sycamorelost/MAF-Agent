@@ -14,12 +14,9 @@ import { SearchView } from './settings/SearchView';
 import { TranslateView } from './settings/TranslateView';
 import { StorageView } from './settings/StorageView';
 import { AboutView } from './settings/AboutView';
-import { SelectionView } from './settings/SelectionView';
 import { NavMenuView } from './settings/NavMenuView';
 import { AppearanceView } from './settings/AppearanceView';
-import { WorkbenchView } from './settings/WorkbenchView';
 import { PresetsView } from './settings/PresetsView';
-import { GenerationView } from './settings/GenerationView';
 import { McpView } from './settings/McpView';
 
 export default function SettingsPage() {
@@ -69,6 +66,7 @@ export default function SettingsPage() {
     onFetchModels,
     onPatchOverride,
     onEditTemplate,
+    onSetModels,
     onAddTemplate,
     onDeleteTemplate,
     onRestoreBuiltins,
@@ -109,10 +107,9 @@ export default function SettingsPage() {
     onImportPresetGlossary,
     patchSettings,
     saveSettingsPatch,
-    onSaveSelection,
     toggleNavItem,
     reorderNavItem,
-    setDefaultWorkbench,
+    toggleMinimizeToTray,
     setDefaultPreset,
   } = useGeneralSettings();
 
@@ -141,6 +138,7 @@ export default function SettingsPage() {
       onPatchOverride={onPatchOverride}
       onFetchModels={onFetchModels}
       onEditTemplate={onEditTemplate}
+      onSetModels={onSetModels}
       onDeleteTemplate={onDeleteTemplate}
       onSaveKey={onSaveKey}
       onPatchSlot={onPatchSlot}
@@ -207,22 +205,14 @@ export default function SettingsPage() {
 
   const aboutView = <AboutView appVersion={appVersion} />;
 
-  const selectionView = (
-    <SelectionView
-      settings={settings}
-      settingsSaved={settingsSaved}
-      savingSettings={savingSettings}
-      onPatchSettings={patchSettings}
-      onSaveSelection={onSaveSelection}
-    />
-  );
-
   const navmenuView = (
     <NavMenuView
       hiddenNav={hiddenNav}
       navOrder={navOrder}
+      minimizeToTray={settings?.minimize_to_tray ?? false}
       onToggleNavItem={toggleNavItem}
       onReorderNavItem={reorderNavItem}
+      onToggleMinimizeToTray={toggleMinimizeToTray}
     />
   );
 
@@ -235,22 +225,16 @@ export default function SettingsPage() {
     memory: memoryView,
     search: searchView,
     translate: translateView,
-    selection: selectionView,
     appearance: <AppearanceView />,
     navmenu: navmenuView,
-    workbench: (
-      <WorkbenchView
-        current={settings ? (settings.default_workbench === 'work' ? 'work' : 'chat') : null}
-        onSelect={setDefaultWorkbench}
-      />
-    ),
     presets: (
       <PresetsView
         current={settings?.default_preset ?? null}
         onSelect={setDefaultPreset}
+        settings={settings}
+        onSave={saveSettingsPatch}
       />
     ),
-    generation: <GenerationView settings={settings} onSave={saveSettingsPatch} />,
     usage: usageView,
     storage: storageView,
     mcp: <McpView />,

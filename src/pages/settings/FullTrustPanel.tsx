@@ -1,16 +1,6 @@
-//! 授权面板(完全信任 · 高级功能) —— 临时授权(能力令牌)与 GUI 自动化合并为一张卡片。
-//! 两项均仅在审批模式为「完全信任」时可用,切回其他模式即整体关闭;
-//! 进程白名单、句柄 TTL、令牌时限等内容层约束仍然生效。
+//! GUI 自动化面板(仅「完全信任」模式可用) —— 枚举窗口、查找元素、白名单与句柄约束。
 
 import { useEffect, useState } from "react";
-import {
-  mcpClearCapabilities,
-  mcpIssueCapability,
-  mcpListCapabilities,
-  mcpRevokeCapability,
-  scopeLabel,
-  type Capability,
-} from "../../lib/ipc/capability";
 import {
   guiFindElements,
   guiGetPolicy,
@@ -20,9 +10,6 @@ import {
   type GuiPolicy,
   type WindowInfo,
 } from "../../lib/ipc/gui";
-
-/** 一键授权时长:30 分钟(秒)。 */
-const ONE_CLICK_TTL_SECS = 30 * 60;
 
 /** 常用进程预置(exe 名 → 中文说明),供白名单下拉快选。 */
 const PRESET_APPS: { exe: string; label: string }[] = [
@@ -40,52 +27,6 @@ const PRESET_APPS: { exe: string; label: string }[] = [
 ];
 
 export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
-  // ---- 临时授权 ----
-  const [caps, setCaps] = useState<Capability[]>([]);
-  const [capMsg, setCapMsg] = useState("");
-  const [capBusy, setCapBusy] = useState(false);
-
-  const refreshCaps = () =>
-    mcpListCapabilities()
-      .then(setCaps)
-      .catch((e) => setCapMsg(`读取令牌失败: ${e}`));
-
-  useEffect(() => {
-    refreshCaps();
-    // 令牌会自然过期,定时刷新让剩余时间保持准确
-    const timer = setInterval(refreshCaps, 30_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  /** 一键签发:覆盖全部作用域,30 分钟有效,不限次数。 */
-  const onOneClick = async () => {
-    setCapBusy(true);
-    try {
-      const cap = await mcpIssueCapability(
-        "一键临时授权",
-        ["fs_read", "fs_write", "exec", "net", "ui"],
-        ONE_CLICK_TTL_SECS,
-        undefined,
-      );
-      setCapMsg(`已授权全部能力,${fmtTime(cap.expires_at)} 前工具调用不再弹窗`);
-      await refreshCaps();
-    } catch (e: any) {
-      setCapMsg(`授权失败: ${e}`);
-    } finally {
-      setCapBusy(false);
-    }
-  };
-
-  const onRevoke = async (id: string) => {
-    try {
-      await mcpRevokeCapability(id);
-      await refreshCaps();
-      setCapMsg("已撤销该授权");
-    } catch (e: any) {
-      setCapMsg(`撤销失败: ${e}`);
-    }
-  };
-
   // ---- GUI 自动化 ----
   const [policy, setPolicy] = useState<GuiPolicy | null>(null);
   const [apps, setApps] = useState<string[]>([]);
@@ -153,73 +94,14 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
 
   return (
     <div className="mcp-policy-card">
-      <div className="mcp-time-label">授权 · 高级功能(完全信任)</div>
+      <div className="mcp-time-label">高级功能 · GUI 自动化(仅「完全信任」可用)</div>
       <div className="mcp-policy-desc">
-        临时授权与 GUI 自动化已并入「完全信任」总开关:仅当审批模式为「完全信任」时可用,
-        切回手动 / 自动 / 自定义即整体关闭;进程白名单、句柄 TTL、令牌时限等内容层约束仍然生效。
+        仅当上面的工具权限选为「完全信任」时,下面的 GUI 自动化功能才可用;
+        改成「逐次审批」或「工作区」后自动关闭。可操作的进程由白名单限定,句柄有存活时间,输入有字数上限。
       </div>
-      {!fullTrust && <div className="mcp-warn">当前非完全信任模式,以下功能处于关闭状态。</div>}
-
-      {/* 临时授权(能力令牌) */}
-      <div className="mcp-time-label" style={{ marginTop: 14 }}>
-        临时授权
-      </div>
-      <div className="mcp-policy-desc">
-        把全部能力收缩为一张 30 分钟时限的凭据:期间工具调用按作用域放行并逐次落审计,
-        到期或重启后自动失效。适合交给子任务 / 委派等需要凭据边界的场景。
-      </div>
-      <div className="mcp-server-actions">
-        <button
-          className="btn btn-xs btn-primary"
-          disabled={capBusy || !fullTrust}
-          onClick={onOneClick}
-        >
-          一键授权 30 分钟
-        </button>
-        {caps.length > 0 && (
-          <button
-            className="btn btn-xs"
-            onClick={async () => {
-              await mcpClearCapabilities();
-              await refreshCaps();
-              setCapMsg("已撤销全部授权");
-            }}
-          >
-            撤销全部
-          </button>
-        )}
-      </div>
-      {capMsg && <div className={`mcp-msg${capMsg.startsWith("错误") || capMsg.includes("失败") ? " err" : ""}`}>{capMsg}</div>}
-      {caps.length > 0 && (
-        <div className="cap-list">
-          {caps.map((c) => (
-            <div key={c.id} className="cap-row">
-              <div className="cap-row-main">
-                <strong>{c.label}</strong>
-                <span className="cap-meta">
-                  {fmtTime(c.expires_at)} 前有效 · 已用 {c.uses}
-                  {c.max_uses == null ? " 次" : ` / ${c.max_uses} 次`}
-                </span>
-              </div>
-              <span className="cap-scope-tags">
-                {c.scopes.map((s) => (
-                  <span key={s} className="mcp-chip">
-                    {scopeLabel(s)}
-                  </span>
-                ))}
-              </span>
-              <button className="btn btn-xs btn-ghost" onClick={() => onRevoke(c.id)}>
-                撤销
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      {!fullTrust && <div className="mcp-warn">当前不是「完全信任」,以下功能处于关闭状态。</div>}
 
       {/* GUI 自动化(Windows UI Automation) */}
-      <div className="mcp-time-label" style={{ marginTop: 14 }}>
-        GUI 自动化(Windows UI Automation)
-      </div>
       <div className="mcp-policy-desc">
         模型可枚举窗口、查找元素并执行点击 / 写值 / 输入;可操作的进程由下方白名单限定,
         句柄有存活时间,输入有字数上限。
@@ -349,12 +231,4 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
       )}
     </div>
   );
-}
-
-function fmtTime(sec: number): string {
-  return new Date(sec * 1000).toLocaleTimeString("zh-CN", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }

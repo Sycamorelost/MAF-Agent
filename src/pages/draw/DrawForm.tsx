@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import * as ipc from '../../lib/ipc';
 import { TutorialList } from '../../components/TutorialCard';
 import AsideDrawer from '../../components/AsideDrawer';
@@ -8,6 +9,9 @@ const SIZES = [
   { value: '1792x1024', label: '1792×1024' },
   { value: '1024x1792', label: '1024×1792' },
 ];
+
+/** 模型下拉里「自定义模型 id…」的占位值(不可能是真实模型名)。 */
+const CUSTOM_MODEL = '__custom__';
 
 /** 风格 chip:标签 + 合并进 prompt 的英文关键词。
  * 关键词只描述「视觉风格」,不堆 8k / masterpiece / octane 这类无增益的质量词:
@@ -74,6 +78,17 @@ export default function DrawForm({
   canRun,
   onRun,
 }: Props) {
+  // 图像模型候选:模板预置 ∪ 厂家拉取时声明 image 输出模态的模型(后端合并)
+  const imageModels = activeTemplate?.image_models ?? [];
+  /** 用户点了「自定义…」后强制显示文本输入(即使当前值恰好在候选中) */
+  const [customMode, setCustomMode] = useState(false);
+  // 切换 Provider 后回到下拉模式(pickProvider 会自动选中第一个候选)
+  useEffect(() => {
+    setCustomMode(false);
+  }, [providerId]);
+  const inList = imageModels.includes(model);
+  const showInput = imageModels.length === 0 || customMode || (model !== '' && !inList);
+
   return (
     <AsideDrawer>
       <aside className="pg-aside dw-params drawer">
@@ -100,18 +115,44 @@ export default function DrawForm({
               </option>
             ))}
           </select>
-          <input
-            className="pg-field"
-            list="draw-image-models"
-            value={model}
-            onChange={(e) => onModelChange(e.target.value)}
-            placeholder="如 dall-e-3 / cogview-3-plus"
-          />
-          <datalist id="draw-image-models">
-            {(activeTemplate?.image_models ?? []).map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
+          {imageModels.length > 0 && (
+            <select
+              className="pg-field"
+              value={showInput ? CUSTOM_MODEL : model}
+              style={showInput ? { marginBottom: 'var(--space-2)' } : undefined}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === CUSTOM_MODEL) {
+                  // 保留当前值,便于在其基础上修改
+                  setCustomMode(true);
+                } else {
+                  setCustomMode(false);
+                  onModelChange(v);
+                }
+              }}
+            >
+              {model === '' && !showInput && (
+                <option value="" disabled>
+                  请选择图像模型
+                </option>
+              )}
+              {imageModels.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+              <option value={CUSTOM_MODEL}>自定义模型 id…</option>
+            </select>
+          )}
+          {showInput && (
+            <input
+              className="pg-field"
+              value={model}
+              spellCheck={false}
+              onChange={(e) => onModelChange(e.target.value)}
+              placeholder="如 dall-e-3 / cogview-3-plus"
+            />
+          )}
         </div>
 
         <div className="pg-sec">

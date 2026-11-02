@@ -88,6 +88,10 @@ export const listImages = () => invoke<ImageListItem[]>('list_images');
 
 export const readImage = (path: string) => invoke<string>('read_image', { path });
 
+/** 「下载」:原生另存为对话框 + 复制到选定路径;返回保存路径(取消为 null)。 */
+export const saveImageAs = (srcPath: string) =>
+  invoke<string | null>('save_image_as', { srcPath });
+
 export const imageToSession = (imagePath: string, sessionId: string) =>
   invoke<AttachmentMeta>('image_to_session', { imagePath, sessionId });
 

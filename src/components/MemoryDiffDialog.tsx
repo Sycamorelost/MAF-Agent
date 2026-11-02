@@ -1,6 +1,6 @@
-//! 记忆版本 diff 并排视图(迭代 D3.3):行级 LCS diff,左旧右新。
+//! 记忆版本 diff 并排视图(迭代 D3.3):行级 LCS diff,左旧右新双栏,可滚动。
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import * as ipc from '../lib/ipc';
 import { diffLines } from '../lib/diffLines';
 
@@ -40,10 +40,17 @@ export default function MemoryDiffDialog({ sessionId, left, right, currentText, 
     };
   }, [sessionId, left, right, currentText]);
 
-  const rows = useMemo(
-    () => (leftText !== null && rightText !== null ? diffLines(leftText, rightText) : []),
-    [leftText, rightText],
-  );
+  /** 行级对齐结果 + 双侧行号(空侧不占号)。 */
+  const viewRows = useMemo(() => {
+    if (leftText === null || rightText === null) return [];
+    let l = 0;
+    let r = 0;
+    return diffLines(leftText, rightText).map((row) => ({
+      ...row,
+      leftNo: row.left ? ++l : null,
+      rightNo: row.right ? ++r : null,
+    }));
+  }, [leftText, rightText]);
 
   return (
     <div className="dialog-mask" onClick={onClose}>
@@ -58,20 +65,24 @@ export default function MemoryDiffDialog({ sessionId, left, right, currentText, 
         </div>
         <div className="dialog-body diff-body">
           {error && <div style={{ color: 'var(--err)', padding: 'var(--space-3)' }}>{error}</div>}
-          {!error && rows.length === 0 && (
+          {!error && viewRows.length === 0 && (
             <div style={{ color: 'var(--text-4)', padding: 'var(--space-3)' }}>加载中…</div>
           )}
-          {rows.length > 0 && (
+          {viewRows.length > 0 && (
             <div className="diff-grid">
-              {rows.map((r, i) => (
-                <div className="diff-row" key={i}>
-                  <div className={`diff-cell ${r.left?.type ?? 'empty'} ${r.left?.type === 'del' ? 'del' : ''}`}>
-                    {r.left?.text ?? ''}
+              <div className="diff-col-head old">{left.label}(旧)</div>
+              <div className="diff-col-head new">{right.label}(新)</div>
+              {viewRows.map((r, i) => (
+                <Fragment key={i}>
+                  <div className={`diff-cell side-l ${r.left?.type ?? 'empty'}`}>
+                    <span className="diff-ln">{r.leftNo ?? ''}</span>
+                    <span className="diff-text">{r.left?.text ?? ''}</span>
                   </div>
-                  <div className={`diff-cell ${r.right?.type ?? 'empty'} ${r.right?.type === 'add' ? 'add' : ''}`}>
-                    {r.right?.text ?? ''}
+                  <div className={`diff-cell side-r ${r.right?.type ?? 'empty'}`}>
+                    <span className="diff-ln">{r.rightNo ?? ''}</span>
+                    <span className="diff-text">{r.right?.text ?? ''}</span>
                   </div>
-                </div>
+                </Fragment>
               ))}
             </div>
           )}

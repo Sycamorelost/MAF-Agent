@@ -1,14 +1,8 @@
-/* ============ 去 AI 味 · AI 生成概率分析(R3 B3) ============ */
+/* ============ 去 AI 味 · AI 生成概率分析(R3 B3) ============
+   走正常 flex 流,继承 .main 的白底 + 12px 圆角,不再 fixed 绕开外框。 */
 .aif-page {
-  /* 相对视口 fixed 定位,绕开所有父容器宽度对齐问题,强制铺满 */
-  position: fixed;
-  top: var(--titlebar-h);
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-  /* 收窄内边距,消除"留白过多" */
-  padding: var(--space-3) var(--space-3) var(--space-2);
+  flex: 1; min-height: 0;
+  padding: var(--space-4) var(--space-4) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -40,9 +34,8 @@
   flex-wrap: wrap;
   padding: var(--space-1);
   border: 1px solid var(--border);
-  /* 药丸容器:允许换行,圆角用常规档位(999px 在换行后会变成夸张的胶囊) */
   border-radius: var(--radius-m);
-  background: var(--bg-side);
+  background: var(--bg-surface);
 }
 .aif-pill {
   border: 1px solid transparent;
@@ -84,9 +77,9 @@
   font-size: var(--font-caption);
   line-height: 1.6;
   color: var(--text-2);
-  background: var(--bg-side);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--brand);
+  border-left: 3px solid var(--brand);
   border-radius: var(--radius-s);
   padding: var(--space-2) var(--space-3);
 }
@@ -214,10 +207,10 @@
   overflow-y: auto;
   overflow-x: hidden;
 }
-/* 结果区卡片:与输入卡统一 1px 边界 + 静息阴影,层级靠间距/底色区分 */
+/* 结果区卡片:统一白底 + 细描边 + 小阴影 */
 .aif-card {
-  background: var(--bg-side);
-  border: 1px solid var(--composer-border);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-l);
   box-shadow: var(--shadow-card);
   padding: var(--space-4);
@@ -275,7 +268,7 @@
   border-radius: var(--radius-s);
   overflow: hidden;
   border: 1px solid var(--border);
-  background: var(--bg-main);
+  background: var(--bg-surface);
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -365,7 +358,7 @@
   gap: var(--space-5);
   flex-wrap: wrap;
   padding: var(--space-5);
-  background: linear-gradient(180deg, var(--bg-side), var(--bg-main));
+  background: var(--bg-surface);
 }
 .aif-score-side { flex: 1 1 230px; min-width: 200px; display: flex; flex-direction: column; gap: 8px; }
 .aif-score-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -527,7 +520,7 @@
   width: fit-content;
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--bg-side);
+  background: var(--bg-surface);
 }
 .aif-tabs button {
   border: none;
@@ -554,7 +547,7 @@
   font-size: var(--font-caption);
   line-height: 1.8;
   color: var(--text-2);
-  background: var(--bg-main);
+  background: var(--bg-surface);
   border: 1px dashed var(--border);
   border-radius: var(--radius-s);
   padding: var(--space-3);
@@ -562,15 +555,15 @@
 }
 
 /* C4:逐句对照 diff(改写前 → 改写后) */
-.aif-tabs.sub { width: 100%; margin-bottom: 4px; background: var(--bg-main); }
+.aif-tabs.sub { width: 100%; margin-bottom: 4px; background: var(--bg-surface); }
 .aif-tabs.sub button { flex: 1; text-align: center; font-size: var(--font-caption); padding: 4px 12px; }
 .aif-diff {
   max-height: 52vh;
   overflow: auto;
-  border: 1px solid var(--composer-border);
+  border: 1px solid var(--border);
   border-radius: var(--radius-m);
   box-shadow: var(--shadow-card);
-  background: var(--bg-main);
+  background: var(--bg-surface);
 }
 .aif-diff-row {
   display: flex;

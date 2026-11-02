@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { ReasoningCapability } from '../../lib/ipc';
 import { THINKING_LEVEL_LABEL, effortHint } from '../../lib/thinkingHint';
 import type { ThinkingLevel, ThinkingSelection } from '../../stores/thinking';
@@ -62,6 +62,15 @@ export default function ToolBar({
    */
   const thinkBtnRef = useRef<HTMLButtonElement>(null);
   const [thinkPos, setThinkPos] = useState({ bottom: 8, maxH: 240, left: 8 });
+  /**
+   * 工具条紧凑态:工作台态 chip 变多(联网/思考/权限/智能体/模式),再加上右侧
+   * 「模型 + 发送」,输入条可用宽度不足时会把 mode chip 挤到第二行。
+   * 这里按 chip 实测宽度(而非视口宽度)切换 compact:CSS 里收掉模型名,
+   * 保证「模型 + 发送」与 chip 始终同一行(plan 5.2 回归修复)。
+   */
+  const barRef = useRef<HTMLDivElement>(null);
+  const chipsRef = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
 
   const syncThinkPos = () => {
     const r = thinkBtnRef.current?.getBoundingClientRect();
@@ -82,8 +91,37 @@ export default function ToolBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thinkMenu]);
 
+  /**
+   * 紧凑态判定:按 chip 实测总宽 + 右侧「模型(带名) + 发送」预留 200px 与工具条宽比较。
+   * chip 总宽不受紧凑态影响(只收模型名),所以判定是稳定的,不会反复切换。
+   * ★ 不能用视口媒体查询:composer 自身有 720px 上限,窄视口下窗口宽度与输入条宽度无关。
+   */
+  const measureCompact = () => {
+    const bar = barRef.current;
+    const chips = chipsRef.current;
+    if (!bar || !chips) return;
+    const scale =
+      Number.parseFloat(
+        getComputedStyle(bar).getPropertyValue('--ui-scale').trim() || '1',
+      ) || 1;
+    const gap = Number.parseFloat(getComputedStyle(chips).columnGap) || 0;
+    let need = gap * Math.max(0, chips.children.length - 1);
+    for (const el of Array.from(chips.children)) need += (el as HTMLElement).offsetWidth;
+    const on = need + 230 * scale > bar.clientWidth;
+    setCompact(on);
+  };
+  useLayoutEffect(() => measureCompact);
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const ro = new ResizeObserver(() => measureCompact());
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <div className="composer-bar">
+    <div ref={barRef} className={`composer-bar${compact ? ' compact' : ''}`}>
+      <div className="toolbar-chips" ref={chipsRef}>
       {onPickFiles && (
         <>
           <button
@@ -203,7 +241,8 @@ export default function ToolBar({
         );
       })()}
       {children}
-      <span className="spacer" />
+      </div>
+      <div className="toolbar-actions">
       {model && (
         <button
           type="button"
@@ -226,6 +265,7 @@ export default function ToolBar({
           <IconSend size={18} />
         </button>
       )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,5 @@
-//! 工作台外壳与对话内核之间的只读组合槽(ui-design b3)。
-//! 工作台负责提供检查器开关状态;对话内核消费它渲染会话头的高亮态,
-//! 避免 chat 反向 import workbench。
+//! 对话页头部 chrome 组合槽:检查器开关状态经 context 传给会话头渲染高亮态,
+//! 避免头部与面板状态各自为政(P3-1 起由 ChatPage 本地提供,原工作台外壳已拆)。
 
 import { createContext, useContext } from 'react';
 
@@ -9,10 +8,6 @@ export interface WorkbenchChrome {
   inspectorOpen: boolean;
   /** 切换检查器展开/收起。 */
   onToggleInspector: () => void;
-  /** 左栏会话列表是否展开。 */
-  sidebarOpen: boolean;
-  /** 切换左栏会话列表展开/收起。 */
-  onToggleSidebar: () => void;
 }
 
 export const WorkbenchChromeContext = createContext<WorkbenchChrome | null>(null);

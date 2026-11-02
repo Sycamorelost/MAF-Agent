@@ -1,0 +1,55 @@
+
+/* ---------- 响应式:窄窗口收窄中栏间距(ui-design 1280 / 1100 断点) ---------- */
+@media (max-width: 1100px) {
+  :root { --wb-inspector-w: calc(300px * var(--ui-scale)); }
+  .task-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 中栏变窄:会话头次级信息让位,防按钮溢出 */
+  .chat-head .chat-title { max-width: calc(160px * var(--ui-scale)); }
+  /* 模型名在会话头部已有(P2-2),中栏输入条只留状态点+展开箭头,防挤压换行 */
+  .composer-model .model-name { display: none; }
+}
+/* 窄窗(≤760):检查器展开时改为右侧浮层(复用抽屉图层/阴影),不再挤压中栏;
+   收起态不渲染(由会话头按钮开合)。
+   ★ 断点保持在中屏以下:760–1280 的「中等屏幕」两栏仍在流内,可收起、可拖宽。 */
+@media (max-width: 760px) {
+  .wb-inspector {
+    position: fixed;
+    top: var(--titlebar-h);
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-drawer);
+    box-shadow: var(--shadow-card-h);
+  }
+}
+@media (max-width: 560px) {
+  .task-grid { grid-template-columns: minmax(0, 1fr); }
+  /* 极窄窗:中栏头部预设 chip 让位(模型/Token 等状态信息在头部 ··· 菜单兜底,P2-2) */
+  .chat-head .preset-chip { display: none; }
+}
+
+/* ---------- 工具流水按任务分组(§5.4) ---------- */
+.insp-stream-group {
+  padding: var(--space-2) var(--space-1) var(--space-1);
+  font-size: var(--font-mini); font-weight: 600; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ---------- chip 迁入 composer 后:权限菜单向上展开,避免被窗口下缘裁切 ---------- */
+.composer .perm-menu { top: auto; bottom: calc(100% + 4px); }
+
+/* ---------- Composer 工具条:工作台态 chip 数量增多(联网/思考/权限/智能体/模式),
+   chip 区独立换行,右侧「模型 + 发送/停止」始终留在同一行(plan 5.2 回归修复)
+   ★ _tokens.css 在 dev 里最后注入,同选择器会覆盖本文件,故提高一级特异性 ---------- */
+.composer .composer-bar { flex-wrap: nowrap; }
+.composer-bar .toolbar-chips {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--space-2); row-gap: var(--space-1);
+}
+.composer-bar .toolbar-actions {
+  flex: none; margin-left: auto;
+  display: flex; align-items: center; gap: var(--space-2);
+}
+/* 紧凑态(chip 总宽不够时由 ToolBar 实测切换):模型只留状态点与箭头。
+   ★ 不能用视口宽度媒体查询:composer 自身有 720px 上限,窄视口下窗口宽度与输入条宽度无关。 */
+.composer-bar.compact .composer-model .model-name { display: none; }

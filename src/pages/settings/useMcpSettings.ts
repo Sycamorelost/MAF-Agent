@@ -2,16 +2,11 @@
 import {
   mcpLoadConfig,
   mcpSaveConfig,
-  mcpClearMemory,
   mcpAddServer,
   mcpGetApprovalPolicy,
   mcpSetApprovalPolicy,
-  mcpGrantFullTrust,
-  mcpRevokeFullTrust,
-  mcpFullTrustStatus,
   type ApprovalMode,
   type ApprovalPolicy,
-  type FullTrustStatus,
   type McpConfig,
   type McpServerConfig,
 } from '../../lib/ipc/mcp';
@@ -26,7 +21,6 @@ import {
 import { APPROVAL_MODES } from './ApprovalPolicyCard';
 import type { McpServerStatus } from './McpServerCard';
 import { useMcpServerActions } from './useMcpServerActions';
-import { uiConfirm } from '../../components/confirmService';
 
 /** MCP 设置页状态与保存动作(页面只负责展示与 props 组装)。 */
 export function useMcpSettings() {
@@ -35,14 +29,8 @@ export function useMcpSettings() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string>("");
   const [showAdd, setShowAdd] = useState(false);
-  const [policy, setPolicy] = useState<ApprovalPolicy>({ mode: "workspace", allow: [] });
+  const [policy, setPolicy] = useState<ApprovalPolicy>({ mode: "ask", allow: [] });
   const [allowText, setAllowText] = useState("");
-  /** P8:完全信任临时授权状态(无会话上下文 = 全局授权) */
-  const [ftStatus, setFtStatus] = useState<FullTrustStatus>({
-    active: false,
-    remaining_secs: 0,
-    session_id: null,
-  });
   /** 文件工作区根目录与备份数量(内置 fs 工具的输出位置) */
   const [wsRoot, setWsRoot] = useState("");
   const [backupCount, setBackupCount] = useState(0);
@@ -73,21 +61,7 @@ export function useMcpSettings() {
         setAllowText(p.allow.join("\n"));
       })
       .catch(() => {});
-    mcpFullTrustStatus()
-      .then(setFtStatus)
-      .catch(() => {});
   }, []);
-
-  // P8:完全信任档下定时刷新剩余授权时长;到期后自动回落工作区档
-  useEffect(() => {
-    if (policy.mode !== "full") return;
-    const timer = setInterval(() => {
-      mcpFullTrustStatus()
-        .then(setFtStatus)
-        .catch(() => {});
-    }, 30_000);
-    return () => clearInterval(timer);
-  }, [policy.mode]);
 
   /** 操作反馈消息 3 秒后自动消失。 */
   useEffect(() => {
@@ -158,45 +132,16 @@ export function useMcpSettings() {
     );
   };
 
-  /** 签发 / 延长全局完全信任临时授权(默认 60 分钟)。 */
-  const onGrantFullTrust = async (minutes = 60) => {
-    try {
-      const granted = await mcpGrantFullTrust(undefined, minutes);
-      setFtStatus(await mcpFullTrustStatus());
-      setMsg(`已授权 ${granted} 分钟:到期后自动回落「工作区」档,可随时立即失效`);
-    } catch (e: any) {
-      setMsg(`失败: 授权失败: ${e}`);
-    }
-  };
-
-  /** 立即吊销完全信任临时授权。 */
-  const onRevokeFullTrust = async () => {
-    try {
-      await mcpRevokeFullTrust();
-      setFtStatus(await mcpFullTrustStatus());
-      setMsg("已吊销临时授权:工具调用立即回到「工作区」档");
-    } catch (e: any) {
-      setMsg(`失败: 吊销授权失败: ${e}`);
-    }
-  };
-
-  /** 切换审批档(D11 三档:逐次 / 工作区 / 完全信任;P8:full 需临时授权)。 */
+  /** 切换审批档(全局永久设置,默认「逐次审批」)。 */
   const onPickMode = async (mode: ApprovalMode) => {
-    setPolicy((p) => ({ ...p, mode }));
+    const next = { ...policy, mode };
+    setPolicy(next);
     try {
-      await mcpSetApprovalPolicy({ ...policy, mode });
+      await mcpSetApprovalPolicy(next);
       const title = APPROVAL_MODES.find((m) => m.id === mode)?.title ?? mode;
-      if (mode === "full") {
-        // 保存档位后立即签发 60 分钟临时授权(免去用户再点一次)
-        await onGrantFullTrust();
-      } else {
-        // 离开完全信任 → 吊销残留授权,避免下一档意外沿用
-        await mcpRevokeFullTrust();
-        setFtStatus({ active: false, remaining_secs: 0, session_id: null });
-        setMsg(`审批档已切换为「${title}」`);
-      }
+      setMsg(`工具权限已设为「${title}」,对所有会话永久生效`);
     } catch (e: any) {
-      setMsg(`失败: 保存审批档失败: ${e}`);
+      setMsg(`失败: 保存权限设置失败: ${e}`);
     }
   };
 
@@ -218,29 +163,6 @@ export function useMcpSettings() {
     const c = await mcpLoadConfig();
     setCfg(c);
     setMsg("");
-  };
-
-  /** 清除「长期记忆」全局数据:先停 server 进程,再删 mcp-memory.jsonl。 */
-  const onClearMemory = async () => {
-    if (
-      !(await uiConfirm({
-        title: '清除长期记忆',
-        message: '确定清除全部长期记忆数据?\n该数据由「长期记忆」MCP 工具跨会话共享,删除后不可恢复。',
-        danger: true,
-        confirmText: '清除',
-      }))
-    )
-      return;
-    try {
-      const size = await mcpClearMemory();
-      setMsg(
-        size > 0
-          ? `成功: 已清除长期记忆数据(${(size / 1024).toFixed(1)} KB),相关 server 已停止`
-          : "长期记忆数据为空,无需清除",
-      );
-    } catch (e: any) {
-      setMsg(`失败: 清除失败: ${e}`);
-    }
   };
 
   const serverActions = useMcpServerActions({ cfg, setCfg, setStatus, setMsg, refresh });
@@ -291,9 +213,6 @@ export function useMcpSettings() {
     policy,
     allowText,
     setAllowText,
-    ftStatus,
-    onGrantFullTrust,
-    onRevokeFullTrust,
     wsRoot,
     backupCount,
     settings,
@@ -304,7 +223,6 @@ export function useMcpSettings() {
     onToggleBuiltin,
     onPickMode,
     onSaveAllowList,
-    onClearMemory,
     onAddServer,
     onPickWorkspace,
     onResetWorkspace,

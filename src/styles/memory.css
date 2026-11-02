@@ -1,21 +1,53 @@
 /* ============ 记忆管理页 /memory(迭代 D2) ============ */
 
+/* 原生记忆 / 长期记忆 双视图 */
+.memory-page-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.memory-tabs {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--pad-x);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+.memory-tab {
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-3);
+  font-size: var(--font-sub);
+  cursor: pointer;
+}
+.memory-tab:hover { background: var(--bg-hover); color: var(--text-1); }
+.memory-tab.on { background: var(--brand-soft); color: var(--brand-deep); font-weight: 600; }
+.memory-longterm {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--pad-x) var(--space-6);
+  background: var(--bg-surface);
+}
+.memory-longterm h2 { font-size: var(--font-h2); font-weight: 650; color: var(--text-1); }
+
 .memory-page {
   display: flex;
-  height: 100%;
+  flex: 1;
   min-height: 0;
 }
 .memory-list {
   width: var(--aside-w);
   flex-shrink: 0;
-  border-right: 1px solid var(--border);
-  background: var(--bg-side);
+  background: var(--bg-surface);
   display: flex;
   flex-direction: column;
 }
 .memory-list-head {
   padding: var(--space-3) var(--pad-x-narrow);
-  border-bottom: 1px solid var(--border);
   font-size: var(--font-h3);
   font-weight: 600;
   white-space: nowrap;
@@ -43,7 +75,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-main);
+  background: var(--bg-surface);
 }
 /* 记忆页内嵌 MemPanel:去掉固定宽与左边框,占满右侧 */
 .memory-detail .mempanel {
@@ -78,7 +110,6 @@
 }
 .memory-goto {
   padding: var(--space-3) var(--pad-x);
-  border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
 }
@@ -141,7 +172,7 @@
   overflow-y: auto;
   padding: var(--space-2) var(--pad-x);
   border-top: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg-hover) 32%, var(--bg-main));
+  background: var(--bg-surface);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -187,13 +218,11 @@
 
 .notes-list {
   width: var(--aside-w); flex-shrink: 0;
-  border-right: 1px solid var(--border);
-  background: var(--bg-side);
+  background: var(--bg-surface);
   display: flex; flex-direction: column;
 }
 .notes-list-head {
   padding: var(--space-3) var(--pad-x-narrow);
-  border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: var(--space-2);
 }
 .notes-list-head .t { flex: 1; font-size: var(--font-h3); font-weight: 600; color: var(--text-1); }
@@ -210,7 +239,6 @@
 
 .notes-search {
   padding: var(--space-2) var(--pad-x-narrow);
-  border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: var(--space-2);
   color: var(--text-4);
 }
@@ -267,11 +295,10 @@
   display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
-.notes-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-main); }
+.notes-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-surface); }
 .notes-head {
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-3) var(--pad-x);
-  border-bottom: 1px solid var(--border);
 }
 .notes-head .title {
   flex: 1; min-width: 0; border: none; outline: none; background: transparent;
@@ -301,13 +328,11 @@
 .notes-head .act:disabled { opacity: .45; cursor: not-allowed; }
 .notes-head .act.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
 .notes-head .act.primary:hover:not(:disabled) { background: var(--ink-hover); color: #fff; }
-.notes-head .act.danger { padding: 0 var(--space-2); width: var(--ctl-h); justify-content: center; }
-.notes-head .act.danger:hover:not(:disabled) { border-color: var(--err); color: var(--err); background: var(--bg-hover); }
+.notes-head .icon-btn.danger:hover:not(:disabled) { color: var(--err); background: var(--bg-hover); }
 
 .notes-tags {
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--pad-x);
-  border-bottom: 1px solid var(--border);
 }
 .notes-tags .lbl { font-size: var(--font-caption); font-weight: 600; color: var(--text-3); flex-shrink: 0; white-space: nowrap; }
 .notes-tags input {
@@ -323,7 +348,7 @@
   max-width: clamp(320px, 100%, calc(720px * var(--ui-scale)));
   margin-left: auto; margin-right: auto;
   padding: var(--space-4) var(--pad-x);
-  background: var(--bg-main); color: var(--text-1);
+  background: var(--bg-surface); color: var(--text-1);
   font-family: var(--font-mono); font-size: var(--font-sub); line-height: 1.75;
 }
 .notes-preview {
@@ -351,7 +376,7 @@
 
 /* ---------- 知识库落地页(侧栏默认收起时,中间直接展示最新 5 条 + 快速新建) ---------- */
 .notes-landing {
-  flex: 1; min-height: 0; overflow-y: auto; background: var(--bg-main);
+  flex: 1; min-height: 0; overflow-y: auto; background: var(--bg-surface);
   display: flex; justify-content: center;
 }
 .notes-landing-inner {

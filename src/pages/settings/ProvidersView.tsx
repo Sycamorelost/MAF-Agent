@@ -39,6 +39,8 @@ export interface ProvidersViewProps {
   onPatchOverride: (providerId: string, model: string, patch: Partial<ipc.ModelOverride>) => void;
   onFetchModels: (providerId: string) => void;
   onEditTemplate: (providerId: string, patch: Partial<ipc.ProviderTemplate>) => void;
+  /** 设置某服务商的模型列表(单个增删 / 批量导入 / 批量删除共用入口) */
+  onSetModels: (providerId: string, models: string[]) => void;
   onDeleteTemplate: (providerId: string, name: string) => void;
   onSaveKey: (providerId: string, label: string) => void;
   onPatchSlot: (providerId: string, slot: number, patch: SlotPatch) => void;
@@ -72,6 +74,7 @@ export function ProvidersView({
   onPatchOverride,
   onFetchModels,
   onEditTemplate,
+  onSetModels,
   onDeleteTemplate,
   onSaveKey,
   onPatchSlot,
@@ -128,6 +131,7 @@ export function ProvidersView({
               fetchMsg={fetchMsg[t.id] ?? ''}
               savingTpl={savingTpl === t.id}
               onEdit={(patch) => void onEditTemplate(t.id, patch)}
+              onSetModels={(ids) => void onSetModels(t.id, ids)}
               onDelete={() => void onDeleteTemplate(t.id, t.display_name)}
               rotation={rotation[t.id]}
               slots={slotKeys[t.id] ?? []}

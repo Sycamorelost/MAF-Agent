@@ -1,0 +1,186 @@
+/* ============ D3.2 模型切换横幅 / D3.5 压缩提示 ============ */
+
+.switch-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-line);
+  border-radius: var(--radius-m);
+  font-size: var(--font-caption);
+  color: var(--text-2);
+  margin-bottom: var(--space-3);
+}
+.switch-banner.compress {
+  background: rgba(201, 148, 42, .08);
+  border-color: rgba(201, 148, 42, .3);
+}
+.switch-banner-text { flex: 1; min-width: 0; }
+.switch-banner-btn {
+  font-size: var(--font-caption);
+  color: var(--brand);
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+}
+.switch-banner-btn:hover { background: var(--brand-line); }
+.switch-banner-close {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: var(--radius-s);
+  color: var(--text-3);
+}
+.switch-banner-close:hover { background: var(--bg-hover); color: var(--text-1); }
+
+.injected-view {
+  font-family: var(--font-mono);
+  font-size: var(--font-caption);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--text-2);
+  background: var(--bg-side);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: var(--space-3);
+  max-height: calc(320px * var(--ui-scale));
+  overflow-y: auto;
+  margin: 0;
+}
+
+/* ============ D3.1 切换模型交接弹窗 ============ */
+
+.handoff-route {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: center;
+  padding: var(--space-2) 0 var(--space-3);
+}
+.handoff-model {
+  font-size: var(--font-caption);
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  max-width: calc(200px * var(--ui-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.handoff-model.to {
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-line);
+  color: var(--brand-deep);
+}
+.handoff-arrow { color: var(--text-4); }
+.handoff-tip {
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  margin-bottom: var(--space-2);
+}
+.handoff-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.handoff-option {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-main);
+}
+.handoff-option:hover { border-color: var(--brand-line); }
+.handoff-option.active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.handoff-option-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.handoff-option-name { font-size: var(--font-sub); font-weight: 600; color: var(--text-1); }
+.handoff-option-tokens { font-size: var(--font-micro); color: var(--text-4); }
+.handoff-option.active .handoff-option-tokens { color: var(--brand); }
+.handoff-option-desc { font-size: var(--font-caption); color: var(--text-3); margin-top: 4px; }
+.handoff-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* ============ D3.4 记忆面板三态 + 状态点 ============ */
+
+.mem-title-row { display: flex; align-items: center; gap: var(--space-2); }
+.mem-dot {
+  width: calc(8px * var(--ui-scale));
+  height: calc(8px * var(--ui-scale));
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.mem-actions { display: flex; gap: var(--space-1); align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.mem-actions button {
+  height: var(--ctl-h);
+  padding: 0 var(--ctl-pad);
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  border-radius: var(--radius-s);
+  line-height: 1;
+  white-space: nowrap;
+}
+.mem-actions button:hover { background: var(--bg-hover); color: var(--text-1); }
+.mem-mode-group {
+  display: flex;
+  gap: var(--space-1);
+  background: var(--bg-hover);
+  border-radius: var(--radius-s);
+  padding: var(--space-1);
+}
+.mem-mode-group button {
+  height: var(--ctl-h);
+  padding: 0 var(--ctl-pad);
+  line-height: 1;
+  white-space: nowrap;
+}
+.mem-mode-group button.active {
+  background: var(--bg-main);
+  color: var(--text-1);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 20, 30, .06);
+}
+.mem-preview {
+  font-family: var(--font);
+}
+/* 记忆预览的 Markdown 排版统一走 _tokens.css 的 `.md` 模板 */
+.mem-split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+.mem-split .mem-view.edit { border-right: 1px solid var(--border); }
+
+/* ============ D3.6 编辑冲突提示 ============ */
+
+.mem-conflict-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--pad-x);
+  background: var(--brand-soft);
+  border-bottom: 1px solid var(--brand-line);
+  font-size: var(--font-caption);
+  color: var(--brand-deep);
+}
+.mem-conflict-actions { display: flex; gap: var(--space-2); }
+.mem-conflict-actions .btn {
+  height: var(--ctl-h); padding: 0 var(--space-3); font-size: var(--font-caption);
+  line-height: 1; white-space: nowrap;
+}
+

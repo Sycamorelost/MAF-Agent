@@ -3,7 +3,7 @@ import { AddServerDialog } from './AddServerDialog';
 import { ApprovalPolicyCard } from './ApprovalPolicyCard';
 import { McpServerCard } from './McpServerCard';
 import { ToolCapabilityCard } from './ToolCapabilityCard';
-import { MemoryDataCard, MirrorCard } from './McpUtilityCards';
+import { MirrorCard } from './McpUtilityCards';
 import { WorkspaceSettingsCard } from './WorkspaceSettingsCard';
 import { useMcpSettings } from './useMcpSettings';
 
@@ -19,9 +19,6 @@ export function McpView() {
     policy,
     allowText,
     setAllowText,
-    ftStatus,
-    onGrantFullTrust,
-    onRevokeFullTrust,
     startingAll,
     wsRoot,
     backupCount,
@@ -40,7 +37,6 @@ export function McpView() {
     onRemove,
     onStart,
     onToggleEnabled,
-    onClearMemory,
     onAddServer,
     onPickWorkspace,
     onResetWorkspace,
@@ -85,17 +81,12 @@ export function McpView() {
       <ApprovalPolicyCard
         policy={policy}
         allowText={allowText}
-        ftStatus={ftStatus}
         onAllowTextChange={setAllowText}
         onPickMode={onPickMode}
-        onGrantFullTrust={onGrantFullTrust}
-        onRevokeFullTrust={onRevokeFullTrust}
         onSaveAllowList={onSaveAllowList}
       />
 
       <FullTrustPanel fullTrust={policy.mode === "full"} />
-
-      <MemoryDataCard onClear={onClearMemory} />
 
       <MirrorCard chinaMirror={cfg?.china_mirror} onToggle={onToggleMirror} />
 

@@ -154,12 +154,14 @@ pub fn readonly_tool_defs() -> Vec<ToolDef> {
         // D1:网页正文抓取(免 API Key)。与联网搜索互补:搜索给候选链接,本工具读原文
         tool(
             "web_fetch",
-            "抓取指定网页的正文(免 API Key,只读)。只支持 http/https 公网链接,自动拦截本机/内网地址并遵守 robots.txt;正文转纯文本/Markdown,过长自动截断。用于阅读搜索结果里的具体页面;依赖登录或纯前端渲染的页面可能抓不到内容。",
+            "抓取指定网页的正文(免 API Key,只读)。只支持 http/https 公网链接,自动拦截本机/内网地址并遵守 robots.txt;会先去掉导航/侧栏/页脚等模板,再转 Markdown/纯文本。建议把当前要查的问题填入 query,工具只返回最相关段落并排在最前;长页面可用 start_index 续读。依赖登录或纯前端渲染的页面可能抓不到内容。",
             json!({
                 "type": "object",
                 "properties": {
                     "url": { "type": "string", "description": "网页地址(完整 http/https 链接)" },
-                    "max_chars": { "type": "number", "description": "返回正文最大字符数,默认 12000,上限 100000" }
+                    "query": { "type": "string", "description": "检索意图或关键词(建议填当前问题):命中时只返回最相关段落(最相关的在前);省略则按原文顺序返回" },
+                    "max_chars": { "type": "number", "description": "返回正文最大字符数,默认 12000,上限 100000" },
+                    "start_index": { "type": "number", "description": "从正文第几个字符开始返回(默认 0),用于续读;与 query 同时传时以 query 选段为准" }
                 },
                 "required": ["url"]
             }),

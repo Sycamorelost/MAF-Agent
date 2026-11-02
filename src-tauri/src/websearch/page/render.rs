@@ -10,10 +10,26 @@ pub fn render_for_model(p: &Page) -> String {
         p.title, p.url
     );
     out.push_str(&p.content);
-    if p.truncated {
+    if p.query_selected {
         out.push_str(&format!(
-            "\n\n[内容已截断:原文约 {0} 字符,本次返回前 {1} 字符;需要更多请加大 max_chars 或改用更具体的页面]",
+            "\n\n[已按检索意图选取最相关段落:原文约 {0} 字符,本次返回 {1} 字符。需要原文顺序时去掉 query 并传 start_index=0]",
             p.total_chars, returned
+        ));
+    } else if p.content.is_empty() && p.total_chars > 0 {
+        out.push_str(&format!(
+            "\n\n[start_index 超出正文长度(正文共 {} 字符),请改用更小的 start_index]",
+            p.total_chars
+        ));
+    } else if p.truncated {
+        let end = p.offset + returned;
+        out.push_str(&format!(
+            "\n\n[内容已截断:本次返回第 {0}–{1} 字符(原文约 {2} 字符);继续读取请传 start_index={1}]",
+            p.offset, end, p.total_chars
+        ));
+    } else if p.offset > 0 {
+        out.push_str(&format!(
+            "\n\n[已从第 {} 字符开始返回(原文约 {} 字符)]",
+            p.offset, p.total_chars
         ));
     }
     out
@@ -23,18 +39,36 @@ pub fn render_for_model(p: &Page) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn render_marks_untrusted_and_reports_truncation() {
-        let page = Page {
+    fn page(content: &str, truncated: bool, offset: usize, total: usize) -> Page {
+        Page {
             title: "示例".into(),
             url: "https://example.com".into(),
-            content: "正文".into(),
-            truncated: true,
-            total_chars: 20_000,
-        };
-        let text = render_for_model(&page);
+            content: content.into(),
+            truncated,
+            total_chars: total,
+            offset,
+            query_selected: false,
+        }
+    }
+
+    #[test]
+    fn render_marks_untrusted_and_reports_truncation() {
+        let p = page("正文", true, 0, 20_000);
+        let text = render_for_model(&p);
         assert!(text.contains("[安全提示]"));
         assert!(text.contains("内容已截断"));
+        assert!(text.contains("start_index=2"));
         assert!(text.contains("正文"));
+    }
+
+    #[test]
+    fn render_reports_query_selection_and_continuation() {
+        let mut p = page("相关段落", true, 0, 30_000);
+        p.query_selected = true;
+        let text = render_for_model(&p);
+        assert!(text.contains("已按检索意图选取最相关段落"));
+
+        let continued = render_for_model(&page("后半段", false, 12_000, 30_000));
+        assert!(continued.contains("已从第 12000 字符开始返回"));
     }
 }

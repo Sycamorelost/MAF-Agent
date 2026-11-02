@@ -5,7 +5,6 @@ use crate::mcp::{
     McpToolCall,
 };
 use crate::paths::data_dir as data_dir_fn;
-use serde::Serialize;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
@@ -65,41 +64,6 @@ pub async fn mcp_save_config(
     Ok(())
 }
 
-/// 清除「长期记忆」MCP server 的全局记忆数据(data/mcp-memory.jsonl)。
-/// 先停止所有 server-memory 实例释放文件句柄,再删除文件;返回被删除的字节数(0 = 本为空)。
-#[tauri::command]
-pub async fn mcp_clear_memory(
-    state: State<'_, McpState>,
-    runtime: State<'_, McpRuntime>,
-) -> Result<u64, String> {
-    let names: Vec<String> = state
-        .0
-        .lock()
-        .map_err(|e| format!("lock 失败: {e}"))?
-        .servers
-        .iter()
-        .filter(|s| s.args.iter().any(|a| a.contains("server-memory")))
-        .map(|s| s.name.clone())
-        .collect();
-    for n in &names {
-        runtime.stop_server(n).await;
-    }
-    let path = data_dir_fn().join("mcp-memory.jsonl");
-    if !path.exists() {
-        return Ok(0);
-    }
-    let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-    std::fs::remove_file(&path).map_err(|e| format!("删除记忆文件失败: {e}"))?;
-    mcp::audit(
-        &data_dir_fn(),
-        "memory_clear",
-        "长期记忆",
-        "-",
-        "user_clear",
-    );
-    Ok(size)
-}
-
 // ============ 审批模式(「解放双手」) ============
 
 /// 读取审批策略(手动 / 自动 / 完全访问 / 自定义)。文件缺失 → 手动审批。
@@ -112,60 +76,6 @@ pub async fn mcp_get_approval_policy() -> Result<ApprovalPolicy, String> {
 #[tauri::command]
 pub async fn mcp_set_approval_policy(policy: ApprovalPolicy) -> Result<(), String> {
     mcp::approval::save_policy(&data_dir_fn(), &policy)
-}
-
-/// P8:完全信任的临时授权状态(供设置页与会话权限 chip 展示)。
-#[derive(Debug, Clone, Serialize)]
-pub struct FullTrustStatus {
-    pub active: bool,
-    pub remaining_secs: u64,
-    pub session_id: Option<String>,
-}
-
-/// P8:签发临时授权 —— 默认 60 分钟,可绑定单个会话;要求当前档位为「完全信任」
-/// (或该会话的权限覆盖为 full)。到时/撤销/策略改动/重启后自动失效。
-#[tauri::command]
-pub async fn mcp_grant_full_trust(
-    session_id: Option<String>,
-    minutes: Option<u64>,
-) -> Result<u64, String> {
-    let dir = data_dir_fn();
-    let minutes = minutes.unwrap_or(mcp::approval::DEFAULT_FULL_TRUST_MINUTES);
-    let granted = mcp::approval::grant_full_trust(&dir, session_id.as_deref(), minutes)?;
-    mcp::audit(
-        &dir,
-        "full_trust_grant",
-        "-",
-        "-",
-        &format!("session={session_id:?} minutes={granted}"),
-    );
-    Ok(granted)
-}
-
-/// P8:立即吊销临时授权(切档 / 用户手动关闭时调用)。
-#[tauri::command]
-pub async fn mcp_revoke_full_trust(session_id: Option<String>) -> Result<(), String> {
-    mcp::approval::revoke_full_trust_for(session_id.as_deref());
-    mcp::audit(
-        &data_dir_fn(),
-        "full_trust_revoke",
-        "-",
-        "-",
-        &format!("session={session_id:?}"),
-    );
-    Ok(())
-}
-
-/// P8:查询某会话是否持有有效的完全信任授权及剩余秒数。
-#[tauri::command]
-pub async fn mcp_full_trust_status(session_id: Option<String>) -> Result<FullTrustStatus, String> {
-    let dir = data_dir_fn();
-    let remaining = mcp::approval::full_trust_remaining(&dir, session_id.as_deref());
-    Ok(FullTrustStatus {
-        active: remaining.is_some(),
-        remaining_secs: remaining.unwrap_or(0),
-        session_id,
-    })
 }
 
 /// P4:按 id 读取工具调用记录全文(前端「查看完整输出」按需加载,避免历史消息膨胀)。
@@ -307,9 +217,9 @@ pub async fn mcp_call_tool_with_approval(
         return Ok(runtime.call_tool(call, dir).await);
     }
 
-    // 完全信任(P8:档位 + 有效临时授权):跳过能力令牌和审批弹窗,直接调用(只保留审计)
+    // 完全信任:跳过能力令牌和审批弹窗,直接调用(只保留审计)
     let policy = mcp::approval::load_policy(&dir);
-    if mcp::approval::effective_mode(&policy, &dir, None) == mcp::ApprovalMode::Full {
+    if policy.mode == mcp::ApprovalMode::Full {
         mcp::audit(
             &dir,
             "full_trust_call",

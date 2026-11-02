@@ -289,15 +289,10 @@ export function useGeneralSettings() {
     }
   };
 
-  // ---- 划词提问(迭代 D9)----
+  // ---- 设置项局部编辑 + 即时写盘 ----
 
   const patchSettings = (patch: Partial<ipc.AppSettings>) =>
     setSettings((s) => (s ? { ...s, ...patch } : s));
-
-  /** 保存:划词开关等 settings。 */
-  const onSaveSelection = async () => {
-    await onSaveSettings();
-  };
 
   /** 局部设置即时写盘(附件等卡片的小保存按钮用);失败向上抛出以便展示。 */
   const saveSettingsPatch = async (patch: Partial<ipc.AppSettings>) => {
@@ -341,6 +336,12 @@ export function useGeneralSettings() {
       ? settings.hidden_nav_items.filter((k) => k !== key)
       : [...settings.hidden_nav_items, key];
     void persistSettings({ ...settings, hidden_nav_items: hidden });
+  };
+
+  /** 关闭主窗口时隐藏到托盘(即时保存并广播,与导航开关同一套机制)。 */
+  const toggleMinimizeToTray = () => {
+    if (!settings) return;
+    void persistSettings({ ...settings, minimize_to_tray: !settings.minimize_to_tray });
   };
 
   /** 设置全局默认工作台模式(D16),即时保存并广播 settings_changed。 */
@@ -402,9 +403,9 @@ export function useGeneralSettings() {
     onImportPresetGlossary,
     patchSettings,
     saveSettingsPatch,
-    onSaveSelection,
     toggleNavItem,
     reorderNavItem,
+    toggleMinimizeToTray,
     setDefaultWorkbench,
     setDefaultPreset,
   };

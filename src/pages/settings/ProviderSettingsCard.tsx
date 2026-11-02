@@ -1,6 +1,8 @@
 ﻿import { useState } from 'react';
 import * as ipc from '../../lib/ipc';
 import { IconChevronDown, IconPlus, IconRefresh, IconTrash } from '../../components/icons';
+import { uiConfirm } from '../../components/confirmService';
+import { parseModelIds } from '../../lib/modelList';
 import { ModelConfigCard } from './ModelConfigCard';
 
 export function ProviderSettingsCard({
@@ -18,6 +20,7 @@ export function ProviderSettingsCard({
   fetchMsg,
   savingTpl,
   onEdit,
+  onSetModels,
   onDelete,
   rotation,
   slots,
@@ -41,6 +44,8 @@ export function ProviderSettingsCard({
   fetchMsg: string;
   savingTpl: boolean;
   onEdit: (patch: Partial<ipc.ProviderTemplate>) => void;
+  /** 设置该服务商的模型列表(单个增删 / 批量导入 / 批量删除共用入口) */
+  onSetModels: (ids: string[]) => void;
   onDelete: () => void;
   /** 该 Provider 的轮换配置(未配置时为 undefined) */
   rotation?: ipc.RotationConfig;
@@ -63,6 +68,10 @@ export function ProviderSettingsCard({
   const [open, setOpen] = useState(false);
   const [newModel, setNewModel] = useState('');
   const [newLabel, setNewLabel] = useState('');
+  // 批量管理:勾选集合 + 批量导入草稿
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
+  const [importText, setImportText] = useState('');
   const models = tpl.all_models.length > 0 ? tpl.all_models : tpl.models;
   const rot = rotation ?? {
     enabled: false,
@@ -72,11 +81,64 @@ export function ProviderSettingsCard({
     keys: [],
   };
 
+  /** 勾选集合中仍存在于当前列表的 id(列表刷新后自动忽略失效项) */
+  const selectedInList = models.filter((m) => selected.has(m));
+
+  /** 添加(输入框兼容粘贴多个 id:逗号/空格/换行分隔)。 */
   const addModel = () => {
-    const m = newModel.trim();
-    if (!m) return;
-    if (!models.includes(m)) onEdit({ models: [...models, m] });
+    const ids = parseModelIds(newModel).filter((m) => !models.includes(m));
+    if (ids.length > 0) onSetModels([...models, ...ids]);
     setNewModel('');
+  };
+
+  /** 删除单个模型(缓存中的价格/思考修正等元数据一并移除,故先确认)。 */
+  const removeOne = async (m: string) => {
+    if (
+      !(await uiConfirm({
+        title: '删除模型',
+        message: `从「${tpl.display_name}」删除模型 ${m}?其价格 / 思考修正等元数据将一并移除。`,
+        danger: true,
+        confirmText: '删除',
+      }))
+    )
+      return;
+    onSetModels(models.filter((x) => x !== m));
+    setSelected((s) => {
+      if (!s.has(m)) return s;
+      const next = new Set(s);
+      next.delete(m);
+      return next;
+    });
+  };
+
+  /** 批量删除所选。 */
+  const removeSelected = async () => {
+    const n = selectedInList.length;
+    if (n === 0) return;
+    if (
+      !(await uiConfirm({
+        title: '批量删除模型',
+        message: `从「${tpl.display_name}」删除所选 ${n} 个模型?其价格 / 思考修正等元数据将一并移除。`,
+        danger: true,
+        confirmText: '删除',
+      }))
+    )
+      return;
+    const del = new Set(selectedInList);
+    onSetModels(models.filter((x) => !del.has(x)));
+    setSelected(new Set());
+  };
+
+  /** 批量导入:解析文本,追加到现有列表末尾(自动去重)。 */
+  const doImport = () => {
+    const ids = parseModelIds(importText).filter((m) => !models.includes(m));
+    if (ids.length > 0) onSetModels([...models, ...ids]);
+    setImportText('');
+    setImporting(false);
+  };
+
+  const toggleAll = (checked: boolean) => {
+    setSelected(checked ? new Set(models) : new Set());
   };
 
   return (
@@ -290,6 +352,71 @@ export function ProviderSettingsCard({
             {fetchMsg}
           </div>
         )}
+        <div className="mcard-toolbar">
+          {models.length > 0 && (
+            <label className="mcard-selall">
+              <input
+                type="checkbox"
+                checked={selectedInList.length > 0 && selectedInList.length === models.length}
+                onChange={(e) => toggleAll(e.target.checked)}
+              />
+              全选
+            </label>
+          )}
+          {selectedInList.length > 0 && (
+            <span className="set-hint">已选 {selectedInList.length} 个</span>
+          )}
+          <span className="sp" />
+          <button
+            className="btn-ghost"
+            disabled={selectedInList.length === 0 || savingTpl}
+            onClick={() => void removeSelected()}
+          >
+            <IconTrash size={13} />
+            删除所选
+          </button>
+          <button
+            className="btn-ghost"
+            disabled={savingTpl}
+            onClick={() => setImporting((v) => !v)}
+          >
+            <IconPlus size={13} />
+            批量导入
+          </button>
+        </div>
+        {importing && (
+          <div className="mcard-import">
+            <textarea
+              className="pg-field"
+              rows={4}
+              value={importText}
+              spellCheck={false}
+              placeholder={'粘贴模型 id 列表:每行一个,或用逗号 / 空格分隔\n如:\ndoubao-seedream-4-0-250828\ndoubao-seedance-1-0-pro-250528'}
+              style={{ resize: 'vertical' }}
+              onChange={(e) => setImportText(e.target.value)}
+            />
+            <div className="set-actions" style={{ marginTop: 'var(--space-2)' }}>
+              <span className="set-hint">追加到现有列表末尾,自动去重</span>
+              <span className="sp" />
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  setImporting(false);
+                  setImportText('');
+                }}
+              >
+                取消
+              </button>
+              <button
+                className="btn-primary"
+                disabled={!importText.trim() || savingTpl}
+                onClick={doImport}
+              >
+                导入
+              </button>
+            </div>
+          </div>
+        )}
         {models.length > 0 ? (
           <div className="mcard-list">
             {models.map((m) => (
@@ -301,12 +428,23 @@ export function ProviderSettingsCard({
                 card={cards.find((c) => c.provider === tpl.id && c.official_model_id === m)}
                 onPatch={onPatch}
                 onSaveCard={onSaveCard}
+                selected={selected.has(m)}
+                onSelect={(v) =>
+                  setSelected((s) => {
+                    const next = new Set(s);
+                    if (v) next.add(m);
+                    else next.delete(m);
+                    return next;
+                  })
+                }
+                onRemove={() => void removeOne(m)}
               />
             ))}
           </div>
         ) : (
           <div className="set-hint" style={{ marginTop: 'var(--space-3)' }}>
-            暂无模型{hasKey ? ',可「从厂家拉取」获取' : ';配置 Key 后可「从厂家拉取」'}。
+            暂无模型{hasKey ? ',可「从厂家拉取」获取' : ';配置 Key 后可「从厂家拉取」'}
+            ,或用上方「批量导入」/ 下方输入框手动添加。
           </div>
         )}
         <div className="set-prov-line">

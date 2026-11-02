@@ -231,6 +231,13 @@ export const usageRecalc = (days: number) =>
 export const fetchProviderModels = (providerId: string) =>
   invoke<string[]>('fetch_provider_models', { providerId });
 
+/**
+ * 手动设置某 Provider 的模型列表(单个增删 / 批量导入 / 批量删除共用入口)。
+ * 传空数组 = 清空该服务商模型;后端按「缓存优先、保留元数据」落盘,返回生效后的 id 列表。
+ */
+export const setProviderModels = (providerId: string, models: string[]) =>
+  invoke<string[]>('set_provider_models', { providerId, models });
+
 // ---- 单模型配置(迭代 D8,与后端 ModelOverride 对齐)----
 
 /** 单模型覆盖项;null = 不覆盖,走默认行为。 */

@@ -94,6 +94,6 @@ pub use user::{
 };
 #[allow(unused_imports)]
 pub use vendor::{
-    FetchedModel, derive_vendor_cards, load_model_cache, model_cache_path, parse_fetched_models,
-    save_model_cache, vendor_card_id,
+    FetchedModel, derive_vendor_cards, load_model_cache, merge_fetched_models, merge_image_models,
+    model_cache_path, parse_fetched_models, save_model_cache, vendor_card_id,
 };

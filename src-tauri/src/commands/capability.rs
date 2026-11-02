@@ -18,7 +18,7 @@ pub fn mcp_issue_capability(
 ) -> Result<Capability, String> {
     let dir = data_dir_fn();
     let policy = crate::mcp::approval::load_policy(&dir);
-    // P8:签发令牌无会话上下文,要求「完全信任」档且持有有效的全局临时授权
+    // 签发令牌无会话上下文,仅在「完全信任」档下允许
     if crate::mcp::approval::effective_mode(&policy, &dir, None) != crate::mcp::approval::ApprovalMode::Full {
 
         return Err("能力令牌已并入完全信任模式:请将审批模式切为「完全信任」后签发".into());

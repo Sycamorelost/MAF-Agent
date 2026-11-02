@@ -3,8 +3,10 @@ import { useMemoryStore } from '../stores/memory';
 import { onMemoryChanged } from '../lib/ipc';
 import * as ipc from '../lib/ipc';
 import MemoryDiffDialog, { type DiffSide } from './MemoryDiffDialog';
-import { MemoMarkdown } from './MemoMarkdown';
 import { VersionHistory } from './mem/VersionHistory';
+import { MemConflictBar } from './mem/MemConflictBar';
+import { MemConflictDialog } from './mem/MemConflictDialog';
+import { renderFull } from '../lib/memFile';
 
 interface Props {
   sessionId: string;
@@ -14,32 +16,6 @@ interface Props {
   narrow?: boolean;
   /** 收起本面板(折叠后由会话头部的按钮重新展开) */
   onCollapse?: () => void;
-}
-
-/** 从 frontmatter+body 拼出 memory.md 完整文件内容(P6 起检查器 ContextTab 复用) */
-export function renderFull(fm: ipc.Frontmatter, body: string): string {
-  const lines = ['---'];
-  lines.push(`conversation: "${fm.conversation}"`);
-  lines.push(`id: ${fm.id}`);
-  if (fm.created) lines.push(`created: ${fm.created}`);
-  if (fm.updated) lines.push(`updated: ${fm.updated}`);
-  if (fm.memory_version) lines.push(`memory_version: ${fm.memory_version}`);
-  if (fm.models_used?.length) lines.push(`models_used: [${fm.models_used.map((m) => `"${m}"`).join(', ')}]`);
-  for (const [k, v] of Object.entries(fm)) {
-    if (!['conversation', 'id', 'created', 'updated', 'memory_version', 'models_used'].includes(k)) {
-      lines.push(`${k}: ${JSON.stringify(v)}`);
-    }
-  }
-  lines.push('---');
-  return `${lines.join('\n')}\n\n${body}`;
-}
-
-/** 从完整内容解析出正文(去掉 frontmatter) */
-function bodyOf(full: string): string {
-  if (!full.startsWith('---')) return full;
-  const end = full.indexOf('\n---', 3);
-  if (end < 0) return full;
-  return full.slice(end + 4).replace(/^\s*\n/, '');
 }
 
 export default function MemPanel({ sessionId, width, narrow, onCollapse }: Props) {
@@ -217,17 +193,7 @@ export default function MemPanel({ sessionId, width, narrow, onCollapse }: Props
 
       {/* 冲突提示(D3.6) */}
       {conflict && !conflictOpen && (
-        <div className="mem-conflict-bar">
-          <span>检测到外部变更/新提炼结果</span>
-          <div className="mem-conflict-actions">
-            <button type="button" className="btn primary" onClick={onViewConflict}>
-              查看
-            </button>
-            <button type="button" className="btn ghost" onClick={() => setConflict(false)}>
-              丢弃
-            </button>
-          </div>
-        </div>
+        <MemConflictBar onView={onViewConflict} onDiscard={() => setConflict(false)} />
       )}
 
       {showVersions && (
@@ -261,30 +227,11 @@ export default function MemPanel({ sessionId, width, narrow, onCollapse }: Props
       )}
 
       {conflictOpen && (
-        <div className="dialog-mask" onClick={() => setConflictOpen(false)}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()} style={{ width: 'min(calc(520px * var(--ui-scale)), 92vw)' }}>
-            <div className="dialog-head">新版本内容</div>
-            <div className="dialog-body">
-              <p style={{ fontSize: 'var(--font-caption)', color: 'var(--text-3)', marginBottom: 'var(--space-3)' }}>
-                文件已被外部程序或自动提炼更新,以下为新内容(采用后将放弃你未保存的编辑):
-              </p>
-              <div className="mem-view mem-preview" style={{ maxHeight: 'calc(320px * var(--ui-scale))', overflowY: 'auto' }}>
-                {/* 统一排版:走全局 `.md` 模板,不再依赖 .mem-preview 的局部字号 */}
-                <div className="md">
-                  <MemoMarkdown content={incoming !== null ? bodyOf(incoming) : '加载中…'} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-4)' }}>
-                <button className="btn ghost" onClick={() => setConflictOpen(false)}>
-                  继续我的编辑
-                </button>
-                <button className="btn primary" onClick={onAdoptIncoming}>
-                  采用新版本
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <MemConflictDialog
+          incoming={incoming}
+          onClose={() => setConflictOpen(false)}
+          onAdopt={onAdoptIncoming}
+        />
       )}
     </div>
   );

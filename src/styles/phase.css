@@ -1,12 +1,51 @@
 /* ============ Phase 3: 纲要面板 ============ */
-.outline-panel {
-  width: calc(240px * var(--ui-scale));
-  flex-shrink: 0;
-  border-left: 1px solid var(--composer-border);
-  background: var(--bg-side);
+/* 会话纲要:右缘贴边短横线(每条 = 一次回答,最多外显 5 条),hover 展开完整浮层 */
+.outline-rail-wrap {
+  position: absolute;
+  right: calc(14px * var(--ui-scale));
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  /* 扩大 hover 热区,便于光标从横线移入浮层 */
+  padding: var(--space-4) var(--space-2);
+}
+.outline-rail {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  align-items: flex-end;
+  gap: calc(9px * var(--ui-scale));
+}
+.outline-dash {
+  width: calc(18px * var(--ui-scale));
+  height: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 1px;
+  background: var(--text-4);
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.15s, width 0.15s, background 0.15s;
+}
+.outline-rail-wrap:hover .outline-dash { opacity: 1; }
+.outline-dash:hover { width: calc(26px * var(--ui-scale)); background: var(--text-2); }
+/* 空间不足(聊天列窄于 840px)时隐藏横线轨,避免遮挡正文 */
+@container (max-width: 840px) {
+  .outline-rail-wrap { display: none; }
+}
+/* hover 浮层:无边框,柔和投影,列表可滚动 */
+.outline-float {
+  position: absolute;
+  right: calc(100% + 2px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: calc(264px * var(--ui-scale));
+  max-height: 62vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-frame);
+  overflow: hidden;
 }
 .outline-head {
   padding: var(--space-3) var(--pad-x-narrow);
@@ -18,14 +57,6 @@
   align-items: center;
   gap: var(--space-2);
 }
-.outline-head .panel-close-btn {
-  width: calc(24px * var(--ui-scale)); height: calc(24px * var(--ui-scale)); padding: 0;
-  display: flex; align-items: center; justify-content: center;
-  border: none; border-radius: var(--radius-s); background: transparent;
-  color: var(--text-3); cursor: pointer;
-  transition: background .15s, color .15s;
-}
-.outline-head .panel-close-btn:hover { background: var(--bg-hover); color: var(--text-1); }
 .outline-list {
   flex: 1;
   overflow-y: auto;
@@ -125,7 +156,7 @@
   width: min(calc(460px * var(--ui-scale)), 92vw);
   max-height: 86vh;
   overflow-y: auto;
-  background: var(--bg-main);
+  background: var(--bg-surface);
   border: 1px solid var(--composer-border);
   border-radius: var(--radius-l);
   padding: var(--space-5);

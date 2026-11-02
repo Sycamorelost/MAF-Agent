@@ -197,6 +197,53 @@ fn parse_vendor_pricing(v: Option<&serde_json::Value>) -> Option<ModelPricing> {
     None
 }
 
+/// 按目标 id 列表增删缓存条目:保留既有条目的元数据(上下文/价格/思考修正),
+/// 新 id 补仅含 id 的最小条目,顺序以目标列表为准(设置页手动增删/批量导入共用)。
+pub fn merge_fetched_models(existing: &[FetchedModel], ids: &[String]) -> Vec<FetchedModel> {
+    ids.iter()
+        .map(|id| {
+            existing
+                .iter()
+                .find(|m| &m.id == id)
+                .cloned()
+                .unwrap_or_else(|| FetchedModel::id_only(id.clone()))
+        })
+        .collect()
+}
+
+/// 按模型 id 关键词保守识别图像生成模型(厂家 /models 不返回模态时的兜底,
+/// 如火山方舟:seedream 文生图模型的 output_modalities 为空)。
+/// 只匹配明确是「生图」的型号关键词,避免把图像理解(vision)模型误列进来。
+fn looks_like_image_model(id: &str) -> bool {
+    let m = id.to_ascii_lowercase();
+    const KEYS: [&str; 9] = [
+        "seedream",
+        "dall-e",
+        "cogview",
+        "flux",
+        "stable-diffusion",
+        "sdxl",
+        "t2i",
+        "kolors",
+        "gpt-image",
+    ];
+    KEYS.iter().any(|k| m.contains(k))
+}
+
+/// 合并图像模型候选:模板预置在前,追加缓存中声明 image 输出模态的模型;
+/// 厂家不返回模态时(如火山方舟)按 id 关键词兜底识别 seedream 等生图型号。
+pub fn merge_image_models(preset: &[String], fetched: &[FetchedModel]) -> Vec<String> {
+    let mut out: Vec<String> = preset.to_vec();
+    for m in fetched {
+        let is_image =
+            m.output_modalities.iter().any(|x| x.contains("image")) || looks_like_image_model(&m.id);
+        if is_image && !out.contains(&m.id) {
+            out.push(m.id.clone());
+        }
+    }
+    out
+}
+
 /// 厂家卡 id:`vendor-{provider}-{official_id 安全化}`,稳定且与内置/用户卡命名空间隔离。
 pub fn vendor_card_id(provider: &str, official_model_id: &str) -> String {
     let safe: String = official_model_id
@@ -441,5 +488,88 @@ mod tests {
         // 厂家自报优先
         assert_eq!(c.context_window, Some(999_999));
         assert_eq!(c.pricing.as_ref().unwrap().input, Some(10.0));
+    }
+
+    #[test]
+    fn merge_fetched_models_preserves_metadata_and_adds_minimal_entries() {
+        let existing = vec![
+            FetchedModel {
+                id: "a".into(),
+                name: Some("模型 A".into()),
+                context_window: Some(128_000),
+                max_output: None,
+                input_modalities: vec!["text".into()],
+                output_modalities: vec!["text".into()],
+                pricing: Some(ModelPricing {
+                    input: Some(1.0),
+                    output: Some(2.0),
+                    ..Default::default()
+                }),
+                reasoning: Some(crate::provider::reasoning::ReasoningCapability {
+                    enabled: true,
+                    can_disable: true,
+                    levels: true,
+                }),
+            },
+            FetchedModel::id_only("b".into()),
+        ];
+        // 删除 b、新增 c、保留 a 的元数据;顺序按目标列表
+        let merged = merge_fetched_models(&existing, &["a".to_string(), "c".to_string()]);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].id, "a");
+        assert_eq!(merged[0].context_window, Some(128_000));
+        assert_eq!(merged[0].pricing.as_ref().unwrap().input, Some(1.0));
+        assert!(merged[0].reasoning.is_some());
+        assert_eq!(merged[1].id, "c");
+        assert!(merged[1].context_window.is_none());
+        assert!(merged[1].pricing.is_none());
+    }
+
+    #[test]
+    fn merge_image_models_appends_image_output_models() {
+        let preset = vec!["dall-e-3".to_string()];
+        let image_only = |id: &str, out: &[&str]| FetchedModel {
+            id: id.to_string(),
+            name: None,
+            context_window: None,
+            max_output: None,
+            input_modalities: vec!["text".into()],
+            output_modalities: out.iter().map(|s| s.to_string()).collect(),
+            pricing: None,
+            reasoning: None,
+        };
+        let fetched = vec![
+            image_only("doubao-seedream-4-0", &["image"]),
+            image_only("deepseek-flash", &["text"]),
+            // 与预置重复:不重复追加
+            image_only("dall-e-3", &["image"]),
+        ];
+        let merged = merge_image_models(&preset, &fetched);
+        assert_eq!(merged, vec!["dall-e-3", "doubao-seedream-4-0"]);
+    }
+
+    #[test]
+    fn merge_image_models_keyword_fallback_when_modality_missing() {
+        // 火山方舟等厂家 /models 不返回 output_modalities:按 id 关键词兜底识别
+        let no_modality = |id: &str| FetchedModel {
+            id: id.to_string(),
+            name: None,
+            context_window: None,
+            max_output: None,
+            input_modalities: Vec::new(),
+            output_modalities: Vec::new(),
+            pricing: None,
+            reasoning: None,
+        };
+        let fetched = vec![
+            no_modality("doubao-seedream-5-0-pro-260628"),
+            no_modality("flux-schnell"),
+            // 视频生成模型不匹配生图关键词,不应混入
+            no_modality("doubao-seedance-1-0-pro-250528"),
+            // 普通对话模型
+            no_modality("doubao-seed-2-1-lite-260915"),
+        ];
+        let merged = merge_image_models(&[], &fetched);
+        assert_eq!(merged, vec!["doubao-seedream-5-0-pro-260628", "flux-schnell"]);
     }
 }

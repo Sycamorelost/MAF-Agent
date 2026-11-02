@@ -128,7 +128,7 @@ export default function TranslateForm({
               ))}
             </select>
             <button
-              className="pg-swap"
+              className="icon-btn"
               title={srcLang ? '交换语言' : '自动检测时不可交换'}
               disabled={!srcLang}
               onClick={onSwap}
@@ -196,10 +196,10 @@ export default function TranslateForm({
               <span>原文</span>
               <span className="badge">{srcLang ? langLabel(srcLang) : '自动检测'}</span>
               <div className="tools">
-                <button className="t" title="复制" disabled={!text} onClick={onCopySource}>
+                <button className="icon-btn" title="复制" disabled={!text} onClick={onCopySource}>
                   <IconCopy size={13} />
                 </button>
-                <button className="t" title="清空" disabled={!text} onClick={() => onTextChange('')}>
+                <button className="icon-btn" title="清空" disabled={!text} onClick={() => onTextChange('')}>
                   <IconTrash size={13} />
                 </button>
               </div>
@@ -223,14 +223,14 @@ export default function TranslateForm({
               {running && <span className="badge on">生成中</span>}
               <div className="tools">
                 <button
-                  className="t"
+                  className="icon-btn"
                   title="发送到对话"
                   disabled={!result || running}
                   onClick={() => void onOpenPick()}
                 >
                   <IconSend size={13} />
                 </button>
-                <button className="t" title="复制译文" disabled={!result} onClick={onCopyResult}>
+                <button className="icon-btn" title="复制译文" disabled={!result} onClick={onCopyResult}>
                   {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
                 </button>
               </div>

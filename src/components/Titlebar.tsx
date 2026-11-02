@@ -1,8 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { listen } from '@tauri-apps/api/event';
-import * as ipc from '../lib/ipc';
 import { useProvidersStore } from '../stores/providers';
 import { useSessionsStore } from '../stores/sessions';
 import { useUiStore } from '../stores/ui';
@@ -13,9 +11,9 @@ import AgentPickerDialog from './AgentPickerDialog';
 import { IconEdit, IconSearch, IconX } from './icons';
 
 /** 会话历史抽屉可用的路由(其他页面无会话侧栏,隐藏历史开关);
- *  /work 宽窗为在流左栏不需要开关,仅在 ≤560 窄窗转抽屉时该按钮生效(workbench.css 控制显隐)。 */
+ *  P3-1 路由收敛后 /work 仅剩聚合首页(无会话侧栏),不再包含。 */
 function sidebarAllowed(pathname: string) {
-  return pathname === '/' || pathname.startsWith('/chat') || pathname.startsWith('/work');
+  return pathname === '/' || pathname.startsWith('/chat');
 }
 
 /** 页面左栏抽屉可用的路由(标题栏显示「面板」开关)。 */
@@ -33,8 +31,6 @@ function asideAllowed(pathname: string) {
 export default function Titlebar() {
   const win = getCurrentWindow();
   const [pinned, setPinned] = useState(false);
-  /** 最小化是否进托盘(随设置热更新,默认关) */
-  const minToTray = useRef(false);
 
   const nav = useNavigate();
   const loc = useLocation();
@@ -64,18 +60,12 @@ export default function Titlebar() {
 
   useEffect(() => {
     void win.isAlwaysOnTop().then(setPinned).catch(() => {});
-    void ipc.getSettings().then((s) => { minToTray.current = s.minimize_to_tray; }).catch(() => {});
-    const un = listen('settings_changed', () => {
-      void ipc.getSettings().then((s) => { minToTray.current = s.minimize_to_tray; }).catch(() => {});
-    });
-    return () => { void un.then((f) => f()); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onMinimize = () => {
-    // 进托盘:直接 hide;否则常规最小化(后端 Resized 监听兜底其他最小化路径)
-    if (minToTray.current) void win.hide();
-    else void win.minimize();
+    // 普通最小化:窗口留在任务栏;只有「关闭」才按设置隐藏到托盘
+    void win.minimize();
   };
 
   const onTogglePin = () => {
@@ -104,7 +94,7 @@ export default function Titlebar() {
       <div className="tb-pill">
         {sidebarAllowed(loc.pathname) && (
           <button
-            className={`tb-pill-btn${loc.pathname.startsWith('/work') ? ' wb-rail-btn' : ''}`}
+            className="tb-pill-btn"
             title="会话历史"
             aria-label="会话历史"
             onClick={() => useUiStore.getState().setSidebarOpen(!useUiStore.getState().sidebarOpen)}

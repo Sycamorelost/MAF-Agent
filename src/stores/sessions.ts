@@ -31,7 +31,7 @@ interface SessionsState {
   removeIfEmpty: (id: string) => Promise<boolean>;
   /** 批量清理空会话(0 条消息且超过 grace 秒未更新) */
   pruneEmpty: (graceSecs?: number) => Promise<void>;
-  /** 划词提问:待预填到指定会话输入框的文本(消费后清空) */
+  /** 待预填到指定会话输入框的文本(消费后清空) */
   pendingComposer: { sessionId: string; text: string } | null;
   setPendingComposer: (p: { sessionId: string; text: string } | null) => void;
 }

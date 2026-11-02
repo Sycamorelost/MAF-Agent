@@ -1,0 +1,221 @@
+/* ============ 通用按钮(三档:ink 主 / brand 次 / ghost 辅助) ============ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-m);
+  font-size: var(--font-caption);
+  font-weight: 500;
+  font-family: var(--font);
+  border: 1px solid var(--border);
+  background: var(--bg-main);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: .15s;
+}
+.btn:hover { background: var(--bg-hover); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary, .btn-primary {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.btn.primary:hover, .btn-primary:hover { background: var(--ink-hover); border-color: var(--ink-hover); }
+.btn.brand, .btn-brand {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+.btn.brand:hover, .btn-brand:hover { background: var(--brand-deep); border-color: var(--brand-deep); }
+.btn.ghost, .btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+}
+.btn.ghost:hover, .btn-ghost:hover { background: var(--bg-hover); color: var(--text-1); }
+.btn-ghost.on { background: var(--brand-soft); color: var(--brand-deep); border-color: var(--brand-line); }
+
+/* ============ D3.7 提炼模型设置区 ============ */
+
+.summarize-section {
+  border-top: 1px solid var(--border);
+  padding: var(--space-4) var(--pad-x);
+}
+.summarize-title {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: var(--space-3);
+}
+.summarize-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+.summarize-row select { flex: 1; min-width: 0; }
+.summarize-row .btn { flex-shrink: 0; min-width: 72px; }
+
+/* ============ B2 Agent 模板 ============ */
+
+.input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font);
+  font-size: var(--font-body);
+  background: var(--bg-main);
+  color: var(--text-1);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-line);
+}
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+select.input:hover { border-color: var(--border-strong); }
+select.input option { background: var(--bg-main); color: var(--text-1); }
+.lbl {
+  display: block;
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.agent-cat {
+  font-size: var(--font-h3);
+  font-weight: 600;
+  color: var(--text-2);
+  margin: var(--space-3) 0 var(--space-2);
+}
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(240px * var(--ui-scale)), 1fr));
+  gap: var(--space-2);
+}
+.agent-card {
+  border: 1px solid var(--composer-border);
+  border-radius: var(--radius-m);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.agent-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-card-h);
+}
+.agent-card.active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.agent-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--text-1);
+}
+.agent-card-name {
+  font-size: var(--font-sub);
+  font-weight: 600;
+  color: var(--text-1);
+}
+.agent-card-desc {
+  font-size: var(--font-caption);
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-top: var(--space-1);
+}
+.agent-card-meta {
+  font-size: var(--font-micro);
+  color: var(--text-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.agent-card-ok {
+  color: var(--ok);
+}
+.agent-card-badge {
+  font-size: var(--font-micro);
+  padding: 0 var(--space-2);
+  line-height: calc(20px * var(--ui-scale));
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-3);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.agent-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  margin-top: auto;
+}
+.agent-card-actions .btn.micro {
+  height: var(--ctl-h);
+  padding: 0 var(--ctl-pad);
+  line-height: 1;
+  font-size: var(--font-micro);
+  white-space: nowrap;
+}
+/* 智能体完整编辑器:两列自适应表单行 + 记忆提炼勾选 */
+.agent-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(180px * var(--ui-scale)), 1fr));
+  gap: var(--space-2);
+}
+.agent-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.agent-chip-btn {
+  background: var(--bg-hover);
+  padding: 0 var(--ctl-pad);
+  color: var(--text-2);
+}
+.agent-chip-btn:hover { background: var(--brand-soft); color: var(--brand-deep); }
+.agent-chip-text {
+  font-size: var(--font-caption);
+  max-width: calc(160px * var(--ui-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============ 设置页通用小徽章(模板 06 复用) ============ */
+
+.settings-badge {
+  font-size: var(--font-micro);
+  padding: 0 var(--space-2);
+  line-height: calc(20px * var(--ui-scale));
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-3);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.settings-badge.ok {
+  background: rgba(31, 146, 84, .12);
+  color: var(--ok);
+}
+

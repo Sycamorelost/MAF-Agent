@@ -158,7 +158,7 @@ export default function DrawResult({
                 历史作品 <span className="count">{history.length} 张</span>
               </span>
               <button
-                className="dw-hist-toggle"
+                className="icon-btn"
                 title={histCollapsed ? '展开历史作品' : '折叠历史作品'}
                 onClick={onToggleHist}
               >

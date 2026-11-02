@@ -2,6 +2,8 @@
 
 use std::time::Duration;
 
+use super::chunk;
+use super::extract;
 use super::markdown::{extract_title, html_to_markdown};
 use super::robots::robots_allows;
 use super::Page;
@@ -19,7 +21,15 @@ const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 /// 抓取网页正文。`max_chars` 省略时用默认值,超出上限自动收敛。
-pub async fn fetch_page(raw_url: &str, max_chars: Option<usize>) -> Result<Page, String> {
+///
+/// - `query`:检索意图。命中时按 BM25 选最相关段落(最相关在前),不再按原文顺序截断;
+/// - `start_index`:不传 query(或 query 未命中)时从第 N 个字符开始读,用于续读长页面。
+pub async fn fetch_page(
+    raw_url: &str,
+    max_chars: Option<usize>,
+    start_index: Option<usize>,
+    query: Option<&str>,
+) -> Result<Page, String> {
     let url = validate_url(raw_url)?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(TIMEOUT_SECS))
@@ -75,7 +85,7 @@ pub async fn fetch_page(raw_url: &str, max_chars: Option<usize>) -> Result<Page,
         final_url.host_str().unwrap_or("网页正文").to_string()
     };
     let content = if is_html {
-        html_to_markdown(&text)
+        webpage_markdown(&text)
     } else {
         text.trim().to_string()
     };
@@ -85,10 +95,21 @@ pub async fn fetch_page(raw_url: &str, max_chars: Option<usize>) -> Result<Page,
 
     let max = max_chars.unwrap_or(DEFAULT_MAX_CHARS).clamp(200, MAX_CHARS_CAP);
     let total_chars = content.chars().count();
-    let (content, truncated) = if total_chars > max {
-        (content.chars().take(max).collect::<String>(), true)
-    } else {
-        (content, false)
+    let query = query.map(str::trim).filter(|q| !q.is_empty());
+    let mut query_selected = false;
+
+    let (content, offset, truncated) = match query {
+        Some(q) => {
+            let sel = chunk::select(&content, q, max);
+            if sel.matched {
+                query_selected = true;
+                let returned = sel.text.chars().count();
+                (sel.text, 0, total_chars > returned)
+            } else {
+                slice_from(&content, start_index.unwrap_or(0), max)
+            }
+        }
+        None => slice_from(&content, start_index.unwrap_or(0), max),
     };
 
     Ok(Page {
@@ -97,7 +118,27 @@ pub async fn fetch_page(raw_url: &str, max_chars: Option<usize>) -> Result<Page,
         content,
         truncated,
         total_chars,
+        offset,
+        query_selected,
     })
+}
+
+/// 把页面 HTML 变成「干净正文」:先去模板容器,再转 Markdown,最后删纯链接行。
+fn webpage_markdown(html: &str) -> String {
+    let main = extract::main_html(html);
+    let source = if main.trim().is_empty() { html } else { &main };
+    let md = html_to_markdown(source);
+    let pruned = extract::drop_reference_sections(&extract::prune_link_lines(&md));
+    if pruned.trim().is_empty() { md } else { pruned }
+}
+
+/// 从第 `offset` 个字符起截取 `max` 个字符;返回(内容, 实际起点, 是否还有后续)。
+fn slice_from(text: &str, offset: usize, max: usize) -> (String, usize, bool) {
+    let total = text.chars().count();
+    let start = offset.min(total);
+    let body: String = text.chars().skip(start).take(max).collect();
+    let truncated = total > start + body.chars().count();
+    (body, start, truncated)
 }
 
 /// 校验链接:协议只允许 http/https,并拦截本机/私网地址。
@@ -297,5 +338,98 @@ mod tests {
         );
         assert_eq!(classify("", b"plain words").unwrap(), Kind::Text);
         assert!(classify("application/pdf", b"").is_err());
+    }
+
+    #[test]
+    fn webpage_markdown_drops_boilerplate_and_menu_links() {
+        let html = r#"<html><body>
+            <nav><a href="/">首页</a><a href="/p">产品</a></nav>
+            <div class="sidebar"><p>热门推荐</p></div>
+            <article><h1>安装说明</h1><p>这里才是正文。</p></article>
+            <footer>版权所有</footer>
+        </body></html>"#;
+        let md = webpage_markdown(html);
+        assert!(md.contains("这里才是正文"));
+        assert!(!md.contains("热门推荐"));
+        assert!(!md.contains("版权所有"));
+    }
+
+    #[test]
+    fn slice_from_reports_offset_and_continuation() {
+        let text: String = ('a'..='z').collect::<String>();
+        let (body, start, truncated) = slice_from(&text, 10, 5);
+        assert_eq!((body.as_str(), start, truncated), ("klmno", 10, true));
+
+        let (tail, start, truncated) = slice_from(&text, 24, 10);
+        assert_eq!((tail.as_str(), start, truncated), ("yz", 24, false));
+
+        let (empty, start, truncated) = slice_from(&text, 999, 5);
+        assert!(empty.is_empty());
+        assert_eq!(start, 26);
+        assert!(!truncated);
+    }
+
+    /// 真实网络冒烟测试(默认忽略,手动执行):
+    /// `cargo test live_fetch_picks_relevant -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore]
+    async fn live_fetch_picks_relevant() {
+        let page = fetch_page(
+            "https://en.wikipedia.org/wiki/Rust_(programming_language)",
+            Some(2000),
+            None,
+            Some("ownership borrow checker"),
+        )
+        .await
+        .expect("抓取失败");
+        assert!(page.query_selected, "query 应命中正文");
+        assert!(
+            page.content.to_ascii_lowercase().contains("borrow"),
+            "返回内容应包含相关段落: {}",
+            page.content
+        );
+        println!(
+            "原文 {} 字符 → 返回 {} 字符",
+            page.total_chars,
+            page.content.chars().count()
+        );
+
+        // 中文页面:二元组分词同样应命中「所有权」
+        let zh = fetch_page(
+            "https://zh.wikipedia.org/wiki/Rust_(%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80)",
+            Some(1500),
+            None,
+            Some("所有权 借用检查"),
+        )
+        .await
+        .expect("中文页面抓取失败");
+        println!(
+            "中文页: 原文 {} 字符 / 返回 {} 字符 / matched={} / 开头: {}",
+            zh.total_chars,
+            zh.content.chars().count(),
+            zh.query_selected,
+            zh.content.chars().take(200).collect::<String>()
+        );
+        assert!(zh.query_selected, "中文 query 应命中");
+        assert!(
+            zh.content.contains("所有权") || zh.content.contains("借用"),
+            "中文返回内容应相关: {}",
+            zh.content
+        );
+
+        // GitHub 仓库页:模板导航不应挤掉 README 正文
+        let gh = fetch_page(
+            "https://github.com/modelcontextprotocol/servers",
+            Some(1500),
+            None,
+            Some("fetch server installation"),
+        )
+        .await
+        .expect("GitHub 页面抓取失败");
+        assert!(
+            gh.content.to_ascii_lowercase().contains("server"),
+            "GitHub 返回内容应包含正文: {}",
+            gh.content
+        );
     }
 }

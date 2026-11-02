@@ -10,9 +10,14 @@
 //! 已知限制:只按 IP 字面量与已知主机名拦截,不解析域名实际 IP(防 DNS 回环需额外
 //! 依赖);需要登录或纯前端渲染的页面可能抓不到正文。
 //!
-//! 按职责拆分:`fetch`(URL 校验 / 重定向 / 读取解码)、`robots`(robots.txt 判定)、
-//! `markdown`(HTML → Markdown)、`render`(给模型的输出格式)。
+//! 按职责拆分:`fetch`(URL 校验 / 重定向 / 读取解码 / 取段)、`robots`(robots.txt 判定)、
+//! `extract`(去站点模板与纯链接行)、`markdown`(HTML → Markdown)、
+//! `chunk`(分块 + BM25 相关段落选择)、`render`(给模型的输出格式)。
+//!
+//! 长页面不再简单截断开头:`query` 命中时按相关度选段,未命中时可用 `start_index` 续读。
 
+mod chunk;
+mod extract;
 mod fetch;
 mod markdown;
 mod render;
@@ -30,4 +35,8 @@ pub struct Page {
     pub content: String,
     pub truncated: bool,
     pub total_chars: usize,
+    /// 本次内容在清理后正文中的起始字符偏移(按 query 选段时为 0)。
+    pub offset: usize,
+    /// 是否按检索意图(`query`)挑选了最相关段落。
+    pub query_selected: bool,
 }
