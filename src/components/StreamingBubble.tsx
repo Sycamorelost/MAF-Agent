@@ -1,9 +1,50 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMessagesStore } from '../stores/messages';
 import { MemoMarkdown } from './MemoMarkdown';
 import ReasoningBlock from './ReasoningBlock';
 import { ToolTrace, ToolTraceGroup } from './ToolTrace';
 import { groupTraceSegments, splitTraceSegments } from '../lib/toolTrace';
+
+/** 占位阶段 → 展示文案(P0-2/P1-4:发送后各耗时阶段都有明确指示,不再「空窗」) */
+const PHASE_LABELS: Record<string, string> = {
+  preparing: '正在准备…',
+  search: '正在联网搜索…',
+  connecting: '连接模型中…',
+};
+
+/** 「正在思考」占位:三点动画 + 阶段文案 + 已等待秒数。
+ *  P2-7:超过 3s 仍无首 chunk 追加「响应较慢」提示;超 30s 建议检查网络/服务商。 */
+function ThinkingHint({ sessionId, hasReasoning }: { sessionId: string; hasReasoning: boolean }) {
+  const phase = useMessagesStore((s) => s.streamingPhase[sessionId]);
+  const startedAt = useMessagesStore((s) => s.streamStartedAt[sessionId]);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const elapsed = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0;
+  const label = (phase && PHASE_LABELS[phase]) || '正在思考…';
+  let suffix = '';
+  if (elapsed >= 30) {
+    suffix = ` · 已等待 ${elapsed}s,可检查网络或服务商状态`;
+  } else if (elapsed >= 3 && phase !== 'search' && phase !== 'preparing' && !hasReasoning) {
+    // 等待的是模型(而非搜索/准备/已在输出的思考流)才提示「响应较慢」
+    suffix = ` · 模型响应较慢,已等待 ${elapsed}s`;
+  } else if (elapsed >= 1) {
+    suffix = ` · 已等待 ${elapsed}s`;
+  }
+  return (
+    <div className="thinking-hint" aria-live="polite">
+      <span className="th-dot" />
+      <span className="th-dot" />
+      <span className="th-dot" />
+      <span className="th-label">
+        {label}
+        {suffix}
+      </span>
+    </div>
+  );
+}
 
 /** 流式气泡:独立订阅 streaming[sessionId],ChatPage 主树不随 50ms 去抖重渲染。
  *  流式期间降级渲染(无语法高亮 / 无 mermaid),结束后由历史消息的完整渲染接管。
@@ -55,12 +96,7 @@ export default function StreamingBubble({
           <div className="bubble">
             <div className="md">
               {/* 即时响应:正文与思考都还没到时,先给「正在思考」动态提示(准备阶段/模型首字延迟) */}
-              <div className="thinking-hint" aria-live="polite">
-                <span className="th-dot" />
-                <span className="th-dot" />
-                <span className="th-dot" />
-                <span className="th-label">正在思考…</span>
-              </div>
+              <ThinkingHint sessionId={sessionId} hasReasoning={reasoningText.length > 0} />
             </div>
           </div>
         )}

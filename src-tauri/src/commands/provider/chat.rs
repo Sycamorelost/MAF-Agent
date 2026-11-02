@@ -179,6 +179,12 @@ pub async fn chat_stream(
         .unwrap_or_default();
     let pricing = pricing_for(&spec.provider_id, &input.model);
 
+    // P1-4:首个事件必须 <200ms 到达前端 —— spawn 之前先回「准备中」心跳,
+    // 否则工具收集/连接建立/模型排队这整段前端完全无感知(空窗)。
+    let _ = channel.send(StreamChunk::Phase {
+        phase: "preparing".into(),
+    });
+
     spawn_chat_with_failover(
         spec,
         req,
@@ -351,6 +357,11 @@ fn spawn_chat_with_failover(
                 };
                 let masked = usage::mask_key(&key);
                 let provider = build_openai(&spec, &key, stream_options);
+
+                // P1-4:即将发起 HTTPS 连接(TLS 握手 + 排队等 2xx),知会前端推进占位文案
+                let _ = channel.send(StreamChunk::Phase {
+                    phase: "connecting".into(),
+                });
 
                 // P2:建立连接 + 等到 2xx 响应的剩余总预算(不再单独设首字超时)
                 let connect = tokio::time::timeout(

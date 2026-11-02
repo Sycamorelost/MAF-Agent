@@ -232,12 +232,15 @@
 .notes-item.active .notes-item-title { color: var(--brand-deep); font-weight: 600; }
 .notes-item-meta {
   display: flex; gap: var(--space-2); margin-top: var(--space-1);
-  min-width: 0; flex-wrap: nowrap; white-space: nowrap;
+  min-width: 0; flex-wrap: wrap; row-gap: 2px;
   font-size: var(--font-caption); color: var(--text-4);
 }
+/* 日期/角标/标签都不参与压缩:窄侧栏时整块换到下一行,
+   而不是把中文逐字挤成竖条再裁切(flex 收缩到 0 的经典症状)。 */
+.notes-item-meta > span { flex: 0 0 auto; white-space: nowrap; }
 .notes-item-meta .tag {
-  min-width: 0; flex: 0 1 auto;
-  color: var(--brand); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  max-width: 100%; color: var(--brand);
+  overflow: hidden; text-overflow: ellipsis;
 }
 /* 预置知识库角标(预置术语表/表格速查,id 前缀 preset-) */
 .preset-badge {
@@ -419,10 +422,13 @@
 .notes-card-excerpt.empty { color: var(--text-4); }
 .notes-card-meta {
   display: flex; gap: var(--space-2); min-width: 0; margin-top: auto;
+  flex-wrap: wrap; row-gap: 2px;
   font-size: var(--font-micro); color: var(--text-4); white-space: nowrap;
 }
+/* 同侧栏列表:卡片变窄时换行,不压缩标签 */
+.notes-card-meta > span { flex: 0 0 auto; }
 .notes-card-meta .tag {
-  min-width: 0; color: var(--brand);
+  max-width: 100%; color: var(--brand);
   overflow: hidden; text-overflow: ellipsis;
 }
 .notes-landing-tip {

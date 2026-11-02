@@ -34,24 +34,34 @@ pub struct OpenAiCompat {
 }
 
 impl OpenAiCompat {
+    /// 全局共享 HTTP Client(P1-6):reqwest::Client 内部是 Arc + 连接池,
+    /// 复用后每轮对话不再重复 TLS 握手,缩短「连接模型中…」阶段耗时。
+    fn shared_client() -> Client {
+        static CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
+        CLIENT
+            .get_or_init(|| {
+                Client::builder()
+                    .timeout(Duration::from_secs(300))
+                    .connect_timeout(Duration::from_secs(15))
+                    .build()
+                    .unwrap_or_else(|_| Client::new())
+            })
+            .clone()
+    }
+
     pub fn new(
         id: impl Into<String>,
         display_name: impl Into<String>,
         base_url: impl Into<String>,
         api_key: impl Into<String>,
     ) -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(300))
-            .connect_timeout(Duration::from_secs(15))
-            .build()
-            .unwrap_or_else(|_| Client::new());
         Self {
             id: id.into(),
             display_name: display_name.into(),
             base_url: base_url.into().trim_end_matches('/').to_string(),
             api_key: api_key.into(),
             stream_options: false,
-            client,
+            client: Self::shared_client(),
         }
     }
 

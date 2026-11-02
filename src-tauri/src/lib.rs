@@ -154,6 +154,11 @@ pub fn run() {
                             log::warn!("MCP server `{name}` 自动启动失败: {e}");
                         } else {
                             log::info!("MCP server `{name}` 已随应用启动");
+                            // P1-5:启动即预热工具列表缓存 —— 首轮对话的 mcp_collect_tools
+                            // 直接命中,不再为每个 server 付一次 list_tools RPC(最坏 10s×N)
+                            if let Err(e) = rt.list_tools_cached(&name).await {
+                                log::warn!("MCP server `{name}` 工具列表预热失败: {e}");
+                            }
                         }
                     }
                     mcp::set_bootstrap_state(2);

@@ -12,6 +12,10 @@ interface MessagesState {
     string,
     { tokens: number | null; elapsedMs: number | null } | undefined
   >;
+  /** 流式占位阶段(P0-2/P1-4):preparing/search/connecting;undefined = 默认「正在思考…」 */
+  streamingPhase: Record<string, string | undefined>;
+  /** 占位开始时间戳(ms;P0-2「已等待 Xs」计时),endStreaming 清除 */
+  streamStartedAt: Record<string, number>;
   /** 会话是否还有更早的消息未加载(分页) */
   hasMore: Record<string, boolean>;
   /** 加载会话消息;force=false 时已缓存且非空则跳过(页面切换回会话不重复拉取) */
@@ -23,7 +27,18 @@ interface MessagesState {
     content: string,
     modelId?: string | null,
     attachments?: string | null,
+    /** P0-1:传入乐观渲染的临时行 id,落库成功后就地替换(不重插、不闪动) */
+    optimisticId?: number,
   ) => Promise<number>;
+  /** P0-1:乐观插入用户消息(临时负 id),返回临时 id;失败/取消时用 removeLocalRow 清掉 */
+  appendUserOptimistic: (
+    sessionId: string,
+    content: string,
+    modelId?: string | null,
+    attachments?: string | null,
+  ) => number;
+  /** P0-1:移除本地临时行(发送失败/准备阶段取消时兜底) */
+  removeLocalRow: (sessionId: string, id: number) => void;
   appendAssistant: (
     sessionId: string,
     content: string,
@@ -37,6 +52,8 @@ interface MessagesState {
   /** 删除单条消息并刷新 */
   remove: (sessionId: string, id: number) => Promise<void>;
   startStreaming: (sessionId: string) => void;
+  /** P0-2/P1-4:更新占位阶段文案(preparing/search/connecting;null = 恢复默认) */
+  setStreamPhase: (sessionId: string, phase: string | null) => void;
   pushStreamDelta: (sessionId: string, delta: string) => void;
   pushStreamReasoning: (sessionId: string, delta: string) => void;
   /** 记录思考 token(done chunk 上报;仅计数无明文端点用) */
@@ -80,6 +97,8 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
   streaming: {},
   streamingReasoning: {},
   streamingReasoningInfo: {},
+  streamingPhase: {},
+  streamStartedAt: {},
 
   load: async (sessionId, force = false) => {
     const cached = get().bySession[sessionId];
@@ -106,7 +125,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     }));
   },
 
-  appendUser: async (sessionId, content, modelId = null, attachments = null) => {
+  appendUser: async (sessionId, content, modelId = null, attachments = null, optimisticId) => {
     const row = await ipc.appendMessage({
       session_id: sessionId,
       role: 'user',
@@ -115,8 +134,55 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
       tokens: 0,
       attachments,
     });
-    await pushRow(sessionId, row);
+    if (optimisticId !== undefined) {
+      // P0-1:用真实行就地替换乐观行;临时行已被清掉(极端竞态)时按去重追加兜底
+      set((s) => {
+        const list = s.bySession[sessionId] ?? [];
+        const idx = list.findIndex((m) => m.id === optimisticId);
+        if (idx < 0) {
+          if (list.some((m) => m.id === row.id)) return {};
+          return { bySession: { ...s.bySession, [sessionId]: [...list, row] } };
+        }
+        const next = [...list];
+        next[idx] = row;
+        return { bySession: { ...s.bySession, [sessionId]: next } };
+      });
+    } else {
+      await pushRow(sessionId, row);
+    }
     return row.id;
+  },
+
+  appendUserOptimistic: (sessionId, content, modelId = null, attachments = null) => {
+    // 负 id 与 SQLite 自增 id 不会冲突;仅在落库前存在,成功后由真实行替换
+    const tempId = -Date.now();
+    const row: ipc.MessageRow = {
+      id: tempId,
+      session_id: sessionId,
+      role: 'user',
+      content,
+      model_id: modelId,
+      created: new Date().toISOString(),
+      tokens: 0,
+      attachments,
+      sources: null,
+      parent_id: null,
+      branch_id: 'main',
+      reasoning: '',
+    };
+    set((s) => ({
+      bySession: { ...s.bySession, [sessionId]: [...(s.bySession[sessionId] ?? []), row] },
+    }));
+    return tempId;
+  },
+
+  removeLocalRow: (sessionId, id) => {
+    set((s) => ({
+      bySession: {
+        ...s.bySession,
+        [sessionId]: (s.bySession[sessionId] ?? []).filter((m) => m.id !== id),
+      },
+    }));
   },
 
   appendAssistant: async (
@@ -148,7 +214,14 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
       streaming: { ...s.streaming, [sessionId]: '' },
       streamingReasoning: { ...s.streamingReasoning, [sessionId]: '' },
       streamingReasoningInfo: { ...s.streamingReasoningInfo, [sessionId]: undefined },
+      // P0-2:占位初始阶段为「准备中」;后续由联网搜索/后端 ack 推进
+      streamingPhase: { ...s.streamingPhase, [sessionId]: 'preparing' },
+      streamStartedAt: { ...s.streamStartedAt, [sessionId]: Date.now() },
     }));
+  },
+
+  setStreamPhase: (sessionId, phase) => {
+    set((s) => ({ streamingPhase: { ...s.streamingPhase, [sessionId]: phase ?? undefined } }));
   },
 
   remove: async (sessionId, id) => {
@@ -173,6 +246,17 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     }
     streamBuffers[sessionId] = (streamBuffers[sessionId] ?? '') + delta;
     if (streamTimers[sessionId]) return;
+    // P2-9:首包直通 —— 第一个 delta 立即渲染(不再等 50ms 合批),缩短「首字延迟」体感
+    if ((get().streaming[sessionId] ?? '') === '') {
+      const pending = streamBuffers[sessionId];
+      streamBuffers[sessionId] = '';
+      set((s) => ({
+        streaming: { ...s.streaming, [sessionId]: pending },
+        // 已有内容到达:阶段占位恢复默认(占位随后被正文取代)
+        streamingPhase: { ...s.streamingPhase, [sessionId]: undefined },
+      }));
+      return;
+    }
     streamTimers[sessionId] = setTimeout(() => {
       streamTimers[sessionId] = undefined;
       const pending = streamBuffers[sessionId] ?? '';
@@ -193,6 +277,16 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     if (!reasoningStarts[sessionId]) reasoningStarts[sessionId] = Date.now();
     reasoningBuffers[sessionId] = (reasoningBuffers[sessionId] ?? '') + delta;
     if (reasoningTimers[sessionId]) return;
+    // P2-9:首个思考 chunk 同样直通 —— 推理模型的「首字」就是思考内容
+    if ((get().streamingReasoning[sessionId] ?? '') === '') {
+      const pending = reasoningBuffers[sessionId];
+      reasoningBuffers[sessionId] = '';
+      set((s) => ({
+        streamingReasoning: { ...s.streamingReasoning, [sessionId]: pending },
+        streamingPhase: { ...s.streamingPhase, [sessionId]: undefined },
+      }));
+      return;
+    }
     reasoningTimers[sessionId] = setTimeout(() => {
       reasoningTimers[sessionId] = undefined;
       const pending = reasoningBuffers[sessionId] ?? '';
@@ -246,10 +340,16 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
       delete next[sessionId];
       const nextR = { ...s.streamingReasoning };
       delete nextR[sessionId];
+      const nextP = { ...s.streamingPhase };
+      delete nextP[sessionId];
+      const nextT = { ...s.streamStartedAt };
+      delete nextT[sessionId];
       return {
         streaming: next,
         streamingReasoning: nextR,
         streamingReasoningInfo: { ...s.streamingReasoningInfo, [sessionId]: info },
+        streamingPhase: nextP,
+        streamStartedAt: nextT,
       };
     });
     return { content, reasoning };

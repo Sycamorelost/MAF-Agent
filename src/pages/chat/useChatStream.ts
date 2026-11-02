@@ -32,7 +32,7 @@ export function useChatStream({
 }: ChatStreamParams): RunChatStream {
   const {
     appendAssistant, startStreaming, pushStreamDelta,
-    pushStreamReasoning, setStreamReasoningTokens, endStreaming,
+    pushStreamReasoning, setStreamReasoningTokens, endStreaming, setStreamPhase,
   } = useMessagesStore();
   /** F5:用指定模型(缺省当前模型)跑一次流式;modelOverride 只影响本次,不改全局/会话模型,
    *  新消息 model_id 记录为 override 模型。 */
@@ -61,11 +61,22 @@ export function useChatStream({
         startStreaming(sessionId);
         // 思考参数:模型不支持 → null(后端能力门控二次兜底);用户关闭 → 'off';否则档位
         const reasoningEffort = resolveReasoningEffort(thinkCap, thinkingSel);
+        // P2-8:工具收集(MCP list_tools)也可能耗时数秒 —— 期间允许「停止」:
+        // 先挂一个预取消标记,chatStream 句柄创建后再换成真正的 cancel
+        let preCancelled = false;
+        cancelRef.current = () => {
+          preCancelled = true;
+        };
         // Phase 5e:收集已启用 MCP server 的工具定义(按会话预设裁剪;空则不启用工具调用)
         const tools = await collectSessionTools(agent, sessionId);
+        if (preCancelled) {
+          // 工具收集期间被停止:未发起任何请求,直接收掉占位
+          endStreaming(sessionId);
+          return;
+        }
         chunks = createStreamChunks(
           sessionId,
-          { pushStreamDelta, pushStreamReasoning, setStreamReasoningTokens },
+          { pushStreamDelta, pushStreamReasoning, setStreamReasoningTokens, setStreamPhase },
           // 工具块打上当前进行中任务 id(val.md §5.4):检查器流水/产物按任务归集
           () => runningTask(useTasksStore.getState().bySession[sessionId])?.id ?? null,
         );
@@ -84,6 +95,10 @@ export function useChatStream({
           interrupted = true;
           cancel();
         };
+        if (preCancelled) {
+          // 句柄刚创建就被停止:走正常 cancel 路径(通知后端中断)
+          cancelRef.current();
+        }
         await done;
         const { content: fullText, reasoning } = endStreaming(sessionId);
         if (fullText) {

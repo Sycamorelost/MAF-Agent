@@ -29,6 +29,7 @@ export function McpView() {
     onToggleMirror,
     onToggleTools,
     onToggleBareMode,
+    onSetHumanVoice,
     onToggleBuiltin,
     onPickMode,
     onSaveAllowList,
@@ -69,6 +70,7 @@ export function McpView() {
         onToggleTools={onToggleTools}
         onToggleBuiltin={onToggleBuiltin}
         onToggleBareMode={onToggleBareMode}
+        onSetHumanVoice={onSetHumanVoice}
       />
 
       <WorkspaceSettingsCard

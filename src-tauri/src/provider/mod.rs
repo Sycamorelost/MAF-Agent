@@ -169,6 +169,10 @@ impl Default for ChatRequest {
 pub enum StreamChunk {
     /// 增量文本
     Delta { content: String },
+    /// 阶段心跳(P1-4):命令受理后、连接建立等耗时节点主动知会前端,
+    /// 让占位文案从「准备中」推进到「连接模型中…」,消除首 chunk 前的空窗。
+    /// 仅命令层产生(Provider 内部不发送);前端对未知类型天然忽略,向前兼容。
+    Phase { phase: String },
     /// 思考增量(delta.reasoning_content;与正文分流,前端折叠块单独累积展示)。
     /// 老中转站/不支持厂商不产生该 chunk,前端对未知类型亦有忽略分支,天然向前兼容。
     Reasoning { content: String },

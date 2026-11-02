@@ -109,6 +109,8 @@ export interface AppSettings {
   attachment_session_max_mb: number;
   /** 单次生成的总时长上限(分钟):1..=1440,默认 10 */
   chat_timeout_minutes: number;
+  /** 文字质感(去 AI 味)档位:off / light / standard(默认 standard) */
+  human_voice_level: 'off' | 'light' | 'standard';
 }
 
 export const getSettings = () => invoke<AppSettings>('get_settings');

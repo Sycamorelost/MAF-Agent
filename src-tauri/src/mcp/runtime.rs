@@ -66,6 +66,10 @@ pub struct McpRuntime {
     /// 正在启动中的 server 名。启动过程(npx 首次下载)最长 120s,
     /// 期间不能持有 `handles` 锁,否则会把所有 list_tools / call_tool 一起卡住。
     starting: Arc<Mutex<std::collections::HashSet<String>>>,
+    /// 工具列表缓存(P1-5):server 的工具清单在进程生命周期内基本不变,
+    /// 每轮对话实时 list_tools(最坏 10s×N 串行)是发送后空窗的主要来源。
+    /// 生命周期事件(启动/重启/停止)发生时按名失效。
+    tools_cache: Arc<Mutex<HashMap<String, Vec<McpToolInfo>>>>,
 }
 
 /// 已启动的 MCP server handle。`S` 类型就是 `.serve()` 返回的第二个类型参数。
@@ -107,6 +111,7 @@ impl McpRuntime {
             let mut lock = self.handles.lock().await;
             if let Some(old) = lock.remove(name) {
                 drop(old);
+                self.invalidate_tools_cache(name).await;
                 log::info!("[MCP] server `{name}` 连接已断,清理旧进程后重启");
             }
         }
@@ -164,6 +169,8 @@ impl McpRuntime {
                 started_at: chrono::Local::now(),
             },
         );
+        // 新进程的工具清单可能与旧实例不同,缓存即刻作废(P1-5)
+        self.invalidate_tools_cache(name).await;
 
         log::info!("[MCP] server `{name}` started");
         Ok(())
@@ -238,6 +245,7 @@ impl McpRuntime {
                 let mut lock = self.handles.lock().await;
                 if let Some(old) = lock.remove(name) {
                     drop(old);
+                    self.invalidate_tools_cache(name).await;
                     log::info!("[MCP] http server `{name}` 连接已断,清理旧连接后重启");
                 }
             }
@@ -254,6 +262,8 @@ impl McpRuntime {
                 started_at: chrono::Local::now(),
             },
         );
+        drop(lock);
+        self.invalidate_tools_cache(name).await;
 
         log::info!("[MCP] http server `{name}` started ({url})");
         Ok(())
@@ -283,6 +293,25 @@ impl McpRuntime {
         Ok(resp.tools.into_iter().map(tool_to_info).collect())
     }
 
+    /// 带缓存的 list_tools(P1-5):命中即回,未命中走真实 RPC 并回填缓存。
+    /// 对话链路(收集工具定义/按工具名路由)走这里;探活(peek_alive)仍走实时 RPC。
+    pub async fn list_tools_cached(&self, name: &str) -> Result<Vec<McpToolInfo>, String> {
+        if let Some(tools) = self.tools_cache.lock().await.get(name) {
+            return Ok(tools.clone());
+        }
+        let tools = self.list_tools(name).await?;
+        self.tools_cache
+            .lock()
+            .await
+            .insert(name.to_string(), tools.clone());
+        Ok(tools)
+    }
+
+    /// 生命周期事件(启动/重启/停止)后调用:该 server 的工具清单缓存即刻作废。
+    async fn invalidate_tools_cache(&self, name: &str) {
+        self.tools_cache.lock().await.remove(name);
+    }
+
     /// 按工具名反查所属 server —— ChatStream 只拿到工具名,需要路由到已启动的 server。
     /// 先收集名字列表再并行查询,避免持锁 await,也避免逐个串行把超时累加。
     pub async fn find_server_for_tool(&self, tool: &str) -> Option<String> {
@@ -293,7 +322,7 @@ impl McpRuntime {
         if names.is_empty() {
             return None;
         }
-        let lists = futures::future::join_all(names.iter().map(|n| self.list_tools(n))).await;
+        let lists = futures::future::join_all(names.iter().map(|n| self.list_tools_cached(n))).await;
         for (name, res) in names.iter().zip(lists) {
             if let Ok(tools) = res
                 && tools.iter().any(|t| t.name == tool)
@@ -362,7 +391,9 @@ impl McpRuntime {
     pub async fn stop_server(&self, name: &str) -> bool {
         let mut lock = self.handles.lock().await;
         let stopped = lock.remove(name).is_some();
+        drop(lock);
         if stopped {
+            self.invalidate_tools_cache(name).await;
             log::info!("[MCP] server `{name}` stopped");
         }
         stopped
@@ -374,6 +405,8 @@ impl McpRuntime {
         let mut lock = self.handles.lock().await;
         let names: Vec<_> = lock.keys().cloned().collect();
         lock.clear();
+        drop(lock);
+        self.tools_cache.lock().await.clear();
         for n in names {
             log::info!("[MCP] server `{n}` stopped");
         }

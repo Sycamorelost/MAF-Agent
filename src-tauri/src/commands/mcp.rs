@@ -517,21 +517,23 @@ pub async fn mcp_collect_tools(
         })
         .unwrap_or_default();
 
-    for server in servers {
+    // P1-5:并行收集各 server 工具定义 —— 此前为串行循环,单个 server 的 list_tools
+    // 超时(10s)会逐个累加,直接表现为发送后数秒空窗;启动预热后此处基本全部命中缓存。
+    let per_server = futures::future::join_all(servers.iter().map(|server| async {
         let name = server.name.clone();
         // 懒启动:应用启动时已统一拉起过所有 enabled server,
         // 这里只在 handle 不存在或已 stale(进程死了)时才启动/重启一次;
         // 幂等保护在 start_server 内部:健康运行的 server 不会被 kill+respawn。
-        let tools = match runtime.list_tools(&name).await {
+        match runtime.list_tools_cached(&name).await {
             Ok(t) => t,
             Err(_) => {
                 let was_running = runtime.is_running(&name).await;
-                match runtime.start_from_config(&server, &dir).await {
-                    Ok(()) => match runtime.list_tools(&name).await {
+                match runtime.start_from_config(server, &dir).await {
+                    Ok(()) => match runtime.list_tools_cached(&name).await {
                         Ok(t) => t,
                         Err(e) => {
                             log::warn!("重启后仍 list_tools 失败 `{name}`: {e}");
-                            continue;
+                            Vec::new()
                         }
                     },
                     Err(e) => {
@@ -543,11 +545,14 @@ pub async fn mcp_collect_tools(
                                 "懒启动"
                             }
                         );
-                        continue;
+                        Vec::new()
                     }
                 }
             }
-        };
+        }
+    }))
+    .await;
+    for tools in per_server {
         for t in tools {
             let params = if t.input_schema.is_null() {
                 serde_json::json!({ "type": "object", "properties": {} })

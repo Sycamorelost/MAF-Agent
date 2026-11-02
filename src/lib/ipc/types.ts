@@ -174,6 +174,7 @@ export interface ProviderTemplate {
 export type StreamChunk =
   | { type: 'delta'; content: string }
   | { type: 'reasoning'; content: string }
+  | { type: 'phase'; phase: string }
   | {
       type: 'tool_call_result';
       tool_call_id: string;

@@ -80,6 +80,10 @@ pub struct AppSettings {
     /// 默认 10 分钟;大工程可调大(上限 24 小时),到点后收口并保留已生成内容。
     #[serde(default = "default_chat_timeout_minutes")]
     pub chat_timeout_minutes: u32,
+    /// 文字质感(去 AI 味)档位:off / light / standard(默认 standard)。
+    /// 仅对白名单内的生成型智能体生效,代码/翻译/JSON 等场景始终不注入。
+    #[serde(default = "default_human_voice")]
+    pub human_voice_level: String,
 }
 
 /// 生成时长下限(分钟):低于 1 分钟无法完成一次正常请求。
@@ -156,6 +160,10 @@ fn default_preset() -> String {
     crate::presets::DEFAULT_PRESET.into()
 }
 
+fn default_human_voice() -> String {
+    "standard".into()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -180,6 +188,7 @@ impl Default for AppSettings {
             attachment_session_max_files: default_attachment_session_max_files(),
             attachment_session_max_mb: default_attachment_session_max_mb(),
             chat_timeout_minutes: default_chat_timeout_minutes(),
+            human_voice_level: default_human_voice(),
         }
     }
 }
@@ -254,6 +263,8 @@ mod tests {
             back.attachment_session_max_mb,
             DEFAULT_ATTACHMENT_SESSION_MAX_MB
         );
+        // 文字质感未配置时默认 standard(轻档/关闭需用户显式设置)
+        assert_eq!(back.human_voice_level, "standard");
     }
 
     #[test]

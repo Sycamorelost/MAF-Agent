@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import * as ipc from '../../lib/ipc';
 import { studyMemoryDigest } from '../../lib/ipc/study';
+import { parseHumanVoiceLevel, type HumanVoiceLevel } from '../../lib/humanVoice';
 
-/** 当前模型与发送流程相关的全局设置探测:上下文窗口、全裸模式、物理契约、思考能力、学习进度摘要。 */
+/** 当前模型与发送流程相关的全局设置探测:上下文窗口、全裸模式、物理契约、文字质感、思考能力、学习进度摘要。 */
 export function useChatSettings(current: { providerId: string; model: string } | null) {
   // 当前模型的思考能力(手动修正 > 内置规则表推断;查询失败按不支持处理,控件整体隐藏)
   const [thinkCap, setThinkCap] = useState<ipc.ReasoningCapability | null>(null);
@@ -36,6 +37,8 @@ export function useChatSettings(current: { providerId: string; model: string } |
   const [bareMode, setBareMode] = useState(false);
   /** 用户自定义底层物理契约(空 = 内置默认) */
   const [customContract, setCustomContract] = useState<string | null>(null);
+  /** 文字质感(去 AI 味)全局档位:off / light / standard(缺省 standard) */
+  const [humanVoiceLevel, setHumanVoiceLevel] = useState<HumanVoiceLevel>('standard');
   useEffect(() => {
     let alive = true;
     ipc
@@ -45,11 +48,12 @@ export function useChatSettings(current: { providerId: string; model: string } |
         setCtxWindow(s.context_window_messages ?? 24);
         setBareMode(!!s.bare_mode);
         setCustomContract(s.custom_base_prompt ?? null);
+        setHumanVoiceLevel(parseHumanVoiceLevel(s.human_voice_level));
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
   }, []);
-  return { ctxWindow, bareMode, customContract, thinkCap, studyDigest };
+  return { ctxWindow, bareMode, customContract, humanVoiceLevel, thinkCap, studyDigest };
 }

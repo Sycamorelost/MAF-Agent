@@ -9,6 +9,7 @@ export function ToolCapabilityCard({
   onToggleTools,
   onToggleBuiltin,
   onToggleBareMode,
+  onSetHumanVoice,
 }: {
   cfg: McpConfig;
   settings: AppSettings | null;
@@ -16,6 +17,7 @@ export function ToolCapabilityCard({
   onToggleTools: (enabled: boolean) => void;
   onToggleBuiltin: (enabled: boolean) => void;
   onToggleBareMode: (enabled: boolean) => void;
+  onSetHumanVoice: (level: AppSettings['human_voice_level']) => void;
 }) {
   const fullTrust = mode === 'full';
   const enabledServers = cfg.servers.filter((s) => s.enabled).length;
@@ -46,6 +48,24 @@ export function ToolCapabilityCard({
         />
         <span>自由人格模式:不追加「你是 myAgent 助手」身份锚(物理契约仍保留)</span>
       </label>
+      <div className="mcp-builtin-toggle" style={{ flexWrap: 'wrap', cursor: 'default' }}>
+        <span>文字质感(去 AI 味)</span>
+        <select
+          className="pg-field"
+          style={{ width: 'auto', minWidth: 240 }}
+          value={settings?.human_voice_level ?? 'standard'}
+          disabled={!settings}
+          onChange={(e) => onSetHumanVoice(e.target.value as AppSettings['human_voice_level'])}
+        >
+          <option value="standard">标准(推荐):去套话、拔高与客服腔</option>
+          <option value="light">轻档:只去套话与拔高,保留原有结构</option>
+          <option value="off">关闭:完全按智能体原提示输出</option>
+        </select>
+      </div>
+      <div className="mcp-time-hint" style={{ marginTop: 'var(--space-1)' }}>
+        仅对写作 / 问答 / 邮件 / 周报 / 报告等生成型智能体生效;
+        代码、翻译、JSON、合规等场景自动跳过。事实、数据、引用与术语不受影响。
+      </div>
 
       <div className="mcp-cap-list">
         <div className="mcp-cap-row">

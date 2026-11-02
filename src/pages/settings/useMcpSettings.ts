@@ -135,6 +135,17 @@ export function useMcpSettings() {
     );
   };
 
+  /** 切换文字质感(去 AI 味)档位(单字段保存应用设置)。 */
+  const onSetHumanVoice = async (level: ipc.AppSettings['human_voice_level']) => {
+    if (!settings) return;
+    const next = { ...settings, human_voice_level: level };
+    await ipc.saveSettings(next);
+    setSettings(next);
+    const label =
+      level === 'off' ? '已关闭(按智能体原提示输出)' : level === 'light' ? '已设为轻档' : '已设为标准档';
+    setMsg(`文字质感${label}${level === 'off' ? '' : ',下次发送生效'}`);
+  };
+
   /** 切换内置工具开关(取时间 / 白名单 shell)。 */
   const onToggleBuiltin = async (checked: boolean) => {
     const newCfg: McpConfig = { ...cfg, builtin_tools: checked };
@@ -289,6 +300,7 @@ export function useMcpSettings() {
     onToggleMirror,
     onToggleTools,
     onToggleBareMode,
+    onSetHumanVoice,
     onToggleBuiltin,
     onPickMode,
     onSaveAllowList,

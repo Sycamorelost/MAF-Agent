@@ -10,6 +10,7 @@ import * as ipc from '../../lib/ipc';
 import { composeSystemPrompt, compressMemoryIfOverBudget } from './memoryContext';
 import { CHAT_CANCEL_EVENT } from '../../lib/chatCancel';
 import { DEFAULT_SYSTEM_PROMPT, withBase } from '../../lib/systemPrompt';
+import { resolveHumanVoice } from '../../lib/humanVoice';
 import { buildUserContent, buildSendHistory, rebuildSendHistory } from './attachments';
 import { useChatSettings } from './useChatSettings';
 import { useChatStream } from './useChatStream';
@@ -17,6 +18,9 @@ import { useMessageActions } from './useMessageActions';
 import { useToast } from '../../lib/useToast';
 import { describeSendError, toErrorMessage } from './streamErrors';
 import { quoteSourceLabel, type QuoteRef } from '../../lib/quote';
+
+/** P2-8:准备阶段(预检索/联网/落库)用户点「停止」的哨兵错误 —— 静默收尾,不当失败提示 */
+class PrepCancelled extends Error {}
 export interface ChatSendParams {
   sessionId: string | undefined;
   session: SessionRow | undefined;
@@ -42,7 +46,7 @@ export function useChatSend({
   composerText, setComposerText, pendingAttachments, pendingImages,
   setPendingAttachments, setPendingImages, quotes, setQuotes, forkAndReload,
 }: ChatSendParams) {
-  const { appendUser, startStreaming, endStreaming } = useMessagesStore();
+  const { appendUser, appendUserOptimistic, removeLocalRow, startStreaming, endStreaming, setStreamPhase } = useMessagesStore();
   const loadMemory = useMemoryStore((s) => s.load);
   const setWebSearch = useSessionsStore((s) => s.setWebSearch);
   const thinkingSel = useThinkingStore((s) => (sessionId ? s.bySession[sessionId] : undefined));
@@ -52,10 +56,17 @@ export function useChatSend({
   /** 记忆自动压缩提示(D3.5) */
   const [compressNotice, setCompressNotice] = useState<string | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
+  /** P2-8:准备阶段(预检索/联网搜索/落库)的取消标记 —— 此时流式句柄尚未创建 */
+  const prepCancelRef = useRef(false);
   // 工作台运行状态条/底部状态栏的「停止」按钮通过窗口事件请求取消(与 Composer 停止同一入口)
   useEffect(() => {
     const onCancelReq = (e: Event) => {
-      if ((e as CustomEvent<string>).detail === sessionId) cancelRef.current?.();
+      if ((e as CustomEvent<string>).detail === sessionId) {
+        // P2-8:与 onCancel 同口径 —— 准备阶段也能停止
+        prepCancelRef.current = true;
+        cancelRef.current?.();
+        setSending(false);
+      }
     };
     window.addEventListener(CHAT_CANCEL_EVENT, onCancelReq);
     return () => window.removeEventListener(CHAT_CANCEL_EVENT, onCancelReq);
@@ -64,8 +75,9 @@ export function useChatSend({
   const [retryTarget, setRetryTarget] = useState<BubbleMessage | null>(null);
   /** F8:钉入记忆后的轻提示(多行文件导入清单常驻,可手动关闭) */
   const { toast, showToast, hideToast } = useToast();
-  // 模型能力 / 学习进度 / 上下文窗口 / 全裸模式 / 物理契约等设置
-  const { ctxWindow, bareMode, customContract, thinkCap, studyDigest } = useChatSettings(current);
+  // 模型能力 / 学习进度 / 上下文窗口 / 全裸模式 / 物理契约 / 文字质感等设置
+  const { ctxWindow, bareMode, customContract, humanVoiceLevel, thinkCap, studyDigest } =
+    useChatSettings(current);
   /** P5 / D19:会话生效预设的上下文条数上限(会话未单独设置时优先于全局滑窗;0 = 未解析/解析失败回落)。 */
   const [presetCtxMax, setPresetCtxMax] = useState(0);
   useEffect(() => {
@@ -98,9 +110,19 @@ export function useChatSend({
         agent?.system_prompt ||
         DEFAULT_SYSTEM_PROMPT;
       // Base 分层(R3 A1):人格来自会话/智能体提示,系统层只追加 [身份锚(全裸模式可关)] + 物理契约
-      return composeSystemPrompt(withBase(core, { identity: !bareMode, customContract }), memBody, strategy, studyDigest);
+      // 文字质感(去 AI 味):仅白名单内的生成型智能体注入,代码/翻译/JSON 等场景自动 off
+      return composeSystemPrompt(
+        withBase(core, {
+          identity: !bareMode,
+          customContract,
+          humanVoice: resolveHumanVoice(humanVoiceLevel, agent?.agent_id ?? null),
+        }),
+        memBody,
+        strategy,
+        studyDigest,
+      );
     },
-    [session?.system_prompt, agent, studyDigest, bareMode, customContract],
+    [session?.system_prompt, agent, studyDigest, bareMode, customContract, humanVoiceLevel],
   );
   const buildSystem = useCallback(
     (): string => buildSystemWith(memoryBody, session?.memory_injection_strategy ?? 'hybrid'),
@@ -173,10 +195,18 @@ export function useChatSend({
       setError('请先在右上角配置 API Key 并选择模型');
       return;
     }
-    // 即时响应:先点亮「正在思考」占位,再做联网搜索/落库/记忆预算等耗时准备;
+    // 渲染顺序:先插入用户气泡,再点亮「正在思考」占位 ——
+    // 用户消息必须第一时间出现在列表里,思考/联网/工具等后续状态始终排在它下方。
+    const displayContent = text; // 前端展示只存原始输入,附件在元数据卡片展示
+    const attachmentsJson = atts.length > 0 ? JSON.stringify(atts) : null;
+    const optimisticId = appendUserOptimistic(
+      sessionId, displayContent, current?.model ?? null, attachmentsJson,
+    );
+    // 即时响应:气泡出现后再点亮占位,随后做联网搜索/落库/记忆预算等耗时准备;
     // 正文/思考内容等流式 chunk 到达后才填充显示(runStream 内的 startStreaming 为幂等复位)
     startStreaming(sessionId);
     setSending(true);
+    prepCancelRef.current = false;
     // 输入框/附件立即清空(必须在任何 await 之前):否则只要后续准备步骤(预检索/落库/
     // 记忆预算/工具收集)稍慢,就会出现「已经显示正在思考,但文本还卡在输入框」的错位。
     // 发送失败时在 catch 里回填,内容不会丢失。
@@ -199,6 +229,20 @@ export function useChatSend({
             .join('\n\n')}`
         : '';
       let llmContentBase = base + quoteBlock;
+      // P0-3:联网搜索异步化 —— 与预检索/落库/记忆预算并行,搜索期间占位显示「正在联网搜索…」;
+      // 失败降级为普通对话并提示(catch 挂在 Promise 上,后台收尾不产生未处理拒绝)
+      let searchPromise: Promise<ipc.SourceItem[] | null> | null = null;
+      if (session?.web_search_enabled && text) {
+        setSearching(true);
+        setStreamPhase(sessionId, 'search');
+        searchPromise = ipc
+          .searchTest(text)
+          .then((res) => (res.length > 0 ? res : null))
+          .catch((e) => {
+            setError(`联网搜索失败:${toErrorMessage(e)}(本次按无联网继续)`);
+            return null;
+          });
+      }
       if (text) {
         try {
           const hit = await ipc.docPrefetch(sessionId, text);
@@ -207,35 +251,37 @@ export function useChatSend({
           // 预检索失败时退回纯文档卡/全文注入
         }
       }
-      const displayContent = text; // 前端展示只存原始输入,附件在元数据卡片展示
-      const attachmentsJson = atts.length > 0 ? JSON.stringify(atts) : null;
-      // 联网搜索(开关存会话;失败时降级为普通对话并提示)
-      let sources: ipc.SourceItem[] | null = null;
-      let llmContent = llmContentBase;
-      if (session?.web_search_enabled && text) {
-        setSearching(true);
-        try {
-          const res = await ipc.searchTest(text);
-          if (res.length > 0) {
-            sources = res;
-            const list = res.map((s) => `[${s.id}] ${s.title}\n${s.url}\n${s.snippet}`).join('\n\n');
-            llmContent = `${llmContentBase}\n\n【联网搜索结果】\n${list}\n\n请在回答中引用上述来源时用 [n] 标注(如 [1][2]),回答末尾无需列出来源。`;
-          }
-        } catch (e) {
-          setError(`联网搜索失败:${toErrorMessage(e)}(本次按无联网继续)`);
-        } finally {
-          setSearching(false);
-        }
-      }
-      // 2. 持久化用户消息
-      await appendUser(sessionId, displayContent, current?.model ?? null, attachmentsJson);
+      // P2-8:准备阶段任意时点可「停止」(哨兵取消,静默收尾,不当错误提示)
+      if (prepCancelRef.current) throw new PrepCancelled();
+      // 2. 持久化用户消息(就地替换乐观行)
+      await appendUser(sessionId, displayContent, current?.model ?? null, attachmentsJson, optimisticId);
       // 2.5 D3.5 记忆预算护栏:超限先压缩再发送
       await enforceMemoryBudget();
+      if (prepCancelRef.current) throw new PrepCancelled();
+      // 搜索收尾:与上面的落库/预算并行执行,发流前在这里取结果注入
+      let sources: ipc.SourceItem[] | null = null;
+      let llmContent = llmContentBase;
+      if (searchPromise) {
+        sources = await searchPromise;
+        setSearching(false);
+        setStreamPhase(sessionId, null);
+        if (sources) {
+          const list = sources.map((s) => `[${s.id}] ${s.title}\n${s.url}\n${s.snippet}`).join('\n\n');
+          llmContent = `${llmContentBase}\n\n【联网搜索结果】\n${list}\n\n请在回答中引用上述来源时用 [n] 标注(如 [1][2]),回答末尾无需列出来源。`;
+        }
+      }
+      if (prepCancelRef.current) throw new PrepCancelled();
       // 3. 构建历史(system + 滑窗 + 附件注入)并流式
       await runStream(buildHistory({ content: llmContent, images }), sources);
     } catch (e) {
-      // 会话在发送过程中被删除(如空会话清理竞态),提示用户重建
-      setError(describeSendError(toErrorMessage(e)));
+      setSearching(false);
+      // P0-1:失败/取消时移除乐观行,不留幽灵气泡
+      removeLocalRow(sessionId, optimisticId);
+      // 会话在发送过程中被删除(如空会话清理竞态),提示用户重建;
+      // PrepCancelled 是用户主动停止,静默收尾即可
+      if (!(e instanceof PrepCancelled)) {
+        setError(describeSendError(toErrorMessage(e)));
+      }
       // 发送前的准备步骤失败(runStream 自吞错误):回填输入框与附件,内容不丢失
       // (首页草稿直发同样回填到输入框,便于用户重试)
       setComposerText(text);
@@ -251,6 +297,8 @@ export function useChatSend({
     }
   };
   const onCancel = () => {
+    // P2-8:准备阶段(搜索/预检索/落库,流式句柄尚未创建)也允许停止
+    prepCancelRef.current = true;
     cancelRef.current?.();
     setSending(false);
   };

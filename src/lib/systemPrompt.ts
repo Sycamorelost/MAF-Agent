@@ -10,7 +10,14 @@
  *   DEFAULT_SYSTEM_PROMPT —— 未绑定智能体时的回退人格(即「默认助手」);
  *   BASE_IDENTITY         —— 身份锚(可关,一句话);
  *   BASE_PHYSICAL_CONTRACT —— 物理契约,除全裸豁免外恒定追加,已含则不重复。
+ *   HUMAN_VOICE —— 文字质感(去 AI 味)契约,按场景白名单可选追加。
  */
+
+import {
+  HUMAN_VOICE_MARK,
+  humanVoiceText,
+  type HumanVoiceLevel,
+} from './humanVoice';
 
 /** 未绑定智能体(或裸助手变体缺失)时的回退系统提示。 */
 export const DEFAULT_SYSTEM_PROMPT = `你是 myAgent 的通用助手，运行在用户本地桌面。
@@ -83,6 +90,7 @@ export const BASE_PHYSICAL_CONTRACT = `${CONTRACT_MARK}（优先级高于用户�
 - 回答语言跟随用户；代码块标注语言。
 - 无法完成时：「无法完成：<原因>。可尝试：<下一步>」，不要编造。`;
 
+/** `withBase` 可选项:身份锚开关、自定义契约、文字质感档位。 */
 export interface BaseOptions {
   /**
    * 是否追加身份锚(默认 true)。「自由人格模式」(设置 bare_mode)下传 false:
@@ -94,20 +102,28 @@ export interface BaseOptions {
    * 有值时优先使用,无值时回退内置 BASE_PHYSICAL_CONTRACT。
    */
   customContract?: string | null;
+  /**
+   * 文字质感(去 AI 味)档位,来自 lib/humanVoice.ts 的场景判定。
+   * 缺省 = off(不追加),保证既有调用方行为不变。
+   */
+  humanVoice?: HumanVoiceLevel;
 }
 
-/** 组装最终系统提示:核心提示(智能体人格) + [身份锚] + 物理契约(不重复追加)。 */
+/** 组装最终系统提示:核心提示(智能体人格) + [身份锚] + 物理契约 + [文字质感]。 */
 export function withBase(core: string, opts?: BaseOptions): string {
   const base = core.trim();
   const identity = opts?.identity !== false;
   const contract = opts?.customContract?.trim() || BASE_PHYSICAL_CONTRACT;
+  const voice = humanVoiceText(opts?.humanVoice ?? 'off');
+  // 核心提示已自带「文字质感」节时不再重复追加(用户自定义提示优先)
+  const voicePart = base.includes(HUMAN_VOICE_MARK) ? '' : voice;
   if (!base) {
-    return [DEFAULT_SYSTEM_PROMPT, identity ? BASE_IDENTITY : '', contract]
+    return [DEFAULT_SYSTEM_PROMPT, identity ? BASE_IDENTITY : '', contract, voice]
       .filter(Boolean)
       .join('\n\n');
   }
-  if (base.includes(CONTRACT_MARK)) return base;
-  return [base, identity ? BASE_IDENTITY : '', contract]
+  if (base.includes(CONTRACT_MARK)) return [base, voicePart].filter(Boolean).join('\n\n');
+  return [base, identity ? BASE_IDENTITY : '', contract, voicePart]
     .filter(Boolean)
     .join('\n\n');
 }

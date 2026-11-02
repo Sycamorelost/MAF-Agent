@@ -5,6 +5,8 @@ export interface StreamHandlers {
   pushStreamDelta: (sessionId: string, delta: string) => void;
   pushStreamReasoning: (sessionId: string, delta: string) => void;
   setStreamReasoningTokens: (sessionId: string, tokens: number | null) => void;
+  /** P1-4:后端阶段心跳(preparing/connecting) → 更新占位文案 */
+  setStreamPhase: (sessionId: string, phase: string | null) => void;
 }
 
 /** 创建本次流式的 chunk 处理器与 token 计数(正文/思考分流、工具结果围栏块、done 计数)。
@@ -14,12 +16,14 @@ export function createStreamChunks(
   handlers: StreamHandlers,
   getTaskId?: () => string | null,
 ) {
-  const { pushStreamDelta, pushStreamReasoning, setStreamReasoningTokens } = handlers;
+  const { pushStreamDelta, pushStreamReasoning, setStreamReasoningTokens, setStreamPhase } = handlers;
   let tokens = 0;
   const onChunk = (chunk: StreamChunk) => {
     if (chunk.type === 'delta') pushStreamDelta(sessionId, chunk.content);
     // 思考流分流:独立缓冲去抖,折叠块展示,不进正文
     else if (chunk.type === 'reasoning') pushStreamReasoning(sessionId, chunk.content);
+    // P1-4:后端阶段心跳 —— 占位文案从「准备中」推进到「连接模型中…」
+    else if (chunk.type === 'phase') setStreamPhase(sessionId, chunk.phase);
     // Phase 5e:工具执行结果 —— 以 maf-tool 围栏块并入正文(小字一行 + 折叠详情)
     // 性能:该正文会落库并随历史每轮重发,故单条结果截断到 1000 字符(原 4000)
     else if (chunk.type === 'tool_call_result') {
