@@ -1,0 +1,59 @@
+# name	软件/IT 开发
+# source	Microsoft Language Portal 术语库与《简体中文本地化风格指南》;Git/GitHub 中文术语表;MDN 中文本地化;术语在线(全国科学技术名词审定委员会)
+compile	编译	
+debug	调试	
+deploy	部署	
+rollback	回滚	
+refactor	重构	不译「重构代码」以外的引申义
+repository	仓库	
+branch	分支	代码分支;非「树枝」
+commit	提交	名词与动词同译
+merge	合并	冲突=merge conflict
+pull request	拉取请求	GitHub 官方译法;常保留 PR
+fork	派生	GitHub 文档作「复刻」;口语常保留 fork
+issue	议题	GitHub 中文文档统一译「议题」
+release	发行版	正式发布版本
+deprecate	弃用	不译「贬低」「过时」
+idempotent	幂等	名词 idempotency=幂等性
+breaking change	破坏性变更	
+backward compatibility	向后兼容	缩写 BC
+cache	缓存	
+latency	延迟	网络/接口响应
+throughput	吞吐量	
+bandwidth	带宽	
+middleware	中间件	
+dependency	依赖	
+runtime	运行时	
+thread	线程	
+process	进程	
+asynchronous	异步	缩写 async
+synchronous	同步	缩写 sync
+exception	异常	抛出=throw
+interface	接口	区别于 UI「界面」
+library	库	
+framework	框架	
+container	容器	
+virtual machine	虚拟机	缩写 VM
+kernel	内核	
+scalability	可扩展性	
+authentication	身份验证	验「你是谁」
+authorization	授权	定「你能做什么」
+credential	凭据	登录凭据
+access token	访问令牌	接口鉴权;纯 token 的 AI 译法见 AI 分类
+session	会话	
+encryption	加密	
+checksum	校验和	
+snapshot	快照	
+sharding	分片	区别于 partition(分区)
+telemetry	遥测	埋点/监控上报
+graceful degradation	优雅降级	
+blue-green deployment	蓝绿部署	
+canary release	金丝雀发布	
+feature flag	功能开关	亦译「特性开关」
+stale	过期的	缓存/数据语境
+side effect	副作用	函数式语境
+memoization	记忆化	缓存计算结果
+eventual consistency	最终一致性	
+circuit breaker	熔断器	微服务语境
+quota	配额	接口限流
+workaround	变通方案	临时绕过手段

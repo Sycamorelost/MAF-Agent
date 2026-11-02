@@ -104,6 +104,7 @@ export function ProviderSettingsCard({
         </button>
       </div>
       <div className="prov-card-b">
+        {tpl.notice && <div className="prov-notice">{tpl.notice}</div>}
         <div className="set-row">
           <div className="set-fld">
             <label className="lbl">显示名</label>

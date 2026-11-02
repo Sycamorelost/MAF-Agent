@@ -49,7 +49,7 @@ type ExtractResult = (
     Option<String>,
 );
 
-fn extract_and_index(
+pub(crate) fn extract_and_index(
     session_id: &str,
     name: &str,
     kind: AttachmentKind,
@@ -98,7 +98,7 @@ fn extract_and_index(
 }
 
 /// 附件单文件大小上限:20MB(保存与复用入口共用,前端另有同值预检)。
-const MAX_ATTACHMENT_BYTES: u64 = 20 * 1024 * 1024;
+pub(crate) const MAX_ATTACHMENT_BYTES: u64 = 20 * 1024 * 1024;
 
 /// 附件根目录:`<data_dir>/attachments`
 fn attachments_root() -> PathBuf {
@@ -110,15 +110,25 @@ fn attachments_dir(session_id: &str) -> PathBuf {
 }
 
 /// 校验路径必须位于 attachments 目录内(防越权读盘,OWASP Path Traversal / CWE-22)。
-fn ensure_in_attachments_dir(p: &std::path::Path) -> Result<(), String> {
+/// 文件已被外部删除时回退校验父目录:仍允许清理残留的数据库条目。
+pub(crate) fn ensure_in_attachments_dir(p: &std::path::Path) -> Result<(), String> {
     let root = attachments_root()
         .canonicalize()
         .map_err(|e| e.to_string())?;
-    let canon = p.canonicalize().map_err(|e| format!("路径无效: {e}"))?;
-    if canon.starts_with(&root) {
-        Ok(())
-    } else {
-        Err("路径不在 attachments 目录内".into())
+    match p.canonicalize() {
+        Ok(canon) if canon.starts_with(&root) => Ok(()),
+        Ok(_) => Err("路径不在 attachments 目录内".into()),
+        Err(_) => {
+            let parent = p.parent().ok_or_else(|| "路径无效".to_string())?;
+            let canon_parent = parent.canonicalize().map_err(|e| format!("路径无效: {e}"))?;
+            if !canon_parent.starts_with(&root) {
+                return Err("路径不在 attachments 目录内".into());
+            }
+            match p.file_name().and_then(|s| s.to_str()) {
+                Some(n) if n != "." && n != ".." => Ok(()),
+                _ => Err("路径无效".into()),
+            }
+        }
     }
 }
 
@@ -163,6 +173,20 @@ pub async fn save_attachment(
     if bytes.len() as u64 > MAX_ATTACHMENT_BYTES {
         return Err("附件超过 20MB 上限".into());
     }
+    // 权威安全闸:扩展名黑名单 + 可执行魔数(前端预检可被绕过,以此为准)
+    let blocked = crate::settings::load().attachment_blocked_ext;
+    crate::attachment_guard::check_attachment_allowed(&file_name, &bytes, &blocked)?;
+    // 会话配额:数量 / 容量(按路径去重)超限直接拒绝
+    // 放在安全闸之后,保证「格式被拒」的原因优先于配额提示
+    {
+        let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
+        crate::commands::attachment_quota::check_quota_on(
+            &conn,
+            &session_id,
+            None,
+            bytes.len() as u64,
+        )?;
+    }
 
     let kind = attachment::classify(&file_name);
     let dir = attachments_dir(&session_id);
@@ -205,6 +229,9 @@ pub async fn extract_text_preview(file_name: String, data_base64: String) -> Res
     if bytes.len() as u64 > MAX_ATTACHMENT_BYTES {
         return Err("文件超过 20MB 上限".into());
     }
+    // 与 save_attachment 同一套安全闸,防止预览入口被用来读可执行文件
+    let blocked = crate::settings::load().attachment_blocked_ext;
+    crate::attachment_guard::check_attachment_allowed(&file_name, &bytes, &blocked)?;
     let kind = attachment::classify(&file_name);
     if matches!(kind, AttachmentKind::Image | AttachmentKind::Other) {
         return Err("该格式不支持文本提取(请直接粘贴文本)".into());
@@ -330,7 +357,7 @@ pub async fn list_all_attachments() -> Result<Vec<AttachmentEntry>, String> {
 }
 
 /// 从落盘文件名剥离 `{ts}_` 前缀,还原展示名(落盘格式:{yyyyMMdd-HHmmssSSS}_{safe})。
-fn display_name_from_path(p: &std::path::Path) -> String {
+pub(crate) fn display_name_from_path(p: &std::path::Path) -> String {
     let file = p
         .file_name()
         .map(|s| s.to_string_lossy().to_string())
@@ -362,9 +389,19 @@ pub async fn insert_attachment_to_session(
     if fs_meta.len() > MAX_ATTACHMENT_BYTES {
         return Err("附件超过 20MB 上限".into());
     }
+    // 会话配额:同一路径已在会话内复用时放行,新文件按数量 / 容量校验
+    let path_str = p.to_string_lossy().to_string();
+    {
+        let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
+        crate::commands::attachment_quota::check_quota_on(
+            &conn,
+            &session_id,
+            Some(&path_str),
+            fs_meta.len(),
+        )?;
+    }
     let name = display_name_from_path(p);
     let kind = attachment::classify(&name);
-    let path_str = p.to_string_lossy().to_string();
     let (extracted_text, extract_note, chunk_count, summary, doc_id) =
         extract_and_index(&session_id, &name, kind, &path_str);
     Ok(AttachmentMeta {
@@ -423,7 +460,7 @@ fn remove_from_message_on(
 }
 
 /// 同会话内仍在引用该 doc_id 的附件数(内容相同的重复上传会共享 doc_id)。
-fn count_doc_id_refs_on(
+pub(crate) fn count_doc_id_refs_on(
     conn: &rusqlite::Connection,
     session_id: &str,
     doc_id: &str,
@@ -450,34 +487,43 @@ fn count_doc_id_refs_on(
     Ok(n)
 }
 
-/// 删除附件:从来源消息 JSON 移除条目;全库无其他引用时一并删除磁盘文件,
-/// 并级联清理该文档的检索块(R13:删附件后 doc_search 不应再返回旧内容)。
+/// 删除单条消息中的一个附件引用(DB 部分),返回全库剩余引用数。
+/// 全库无引用时级联清理该文档检索块(R13)。
+pub(crate) fn delete_one_on(
+    conn: &rusqlite::Connection,
+    message_id: i64,
+    path: &str,
+) -> Result<usize, String> {
+    let removed = remove_from_message_on(conn, message_id, path)?;
+    let session_id: String = conn
+        .query_row(
+            "SELECT session_id FROM messages WHERE id=?1",
+            rusqlite::params![message_id],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    let refs = count_references_on(conn, path)?;
+    if refs == 0 {
+        for meta in &removed {
+            let Some(doc_id) = meta.doc_id.as_deref() else {
+                continue;
+            };
+            if count_doc_id_refs_on(conn, &session_id, doc_id)? == 0 {
+                crate::doc::service::purge(conn, &session_id, doc_id)?;
+            }
+        }
+    }
+    Ok(refs)
+}
+
+/// 删除附件:从来源消息 JSON 移除条目;全库无其他引用时一并删除磁盘文件。
 #[tauri::command]
 pub async fn delete_attachment(message_id: i64, path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     ensure_in_attachments_dir(p)?;
     let refs = {
         let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
-        let removed = remove_from_message_on(&conn, message_id, &path)?;
-        let session_id: String = conn
-            .query_row(
-                "SELECT session_id FROM messages WHERE id=?1",
-                rusqlite::params![message_id],
-                |r| r.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-        let refs = count_references_on(&conn, &path)?;
-        if refs == 0 {
-            for meta in &removed {
-                let Some(doc_id) = meta.doc_id.as_deref() else {
-                    continue;
-                };
-                if count_doc_id_refs_on(&conn, &session_id, doc_id)? == 0 {
-                    crate::doc::service::purge(&conn, &session_id, doc_id)?;
-                }
-            }
-        }
-        refs
+        delete_one_on(&conn, message_id, &path)?
     };
     // 无引用则清理磁盘(文件已不存在则忽略)
     if refs == 0 && p.exists() {

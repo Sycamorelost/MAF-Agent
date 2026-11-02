@@ -166,6 +166,8 @@ export interface ProviderTemplate {
   all_models: string[];
   image_models: string[];
   docs_url: string | null;
+  /** 使用提示(如「勿用 GLM Coding Plan 的 Key」),无则为 null */
+  notice: string | null;
   openai_compat: boolean;
 }
 

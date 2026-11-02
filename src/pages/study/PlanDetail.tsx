@@ -6,6 +6,7 @@ import { EXPORT_TARGET_EXISTS, pickSavePath } from '../../lib/ipc/export';
 import { safeExportName } from '../../lib/export/names';
 import { levelText } from './PlanList';
 import { StatsSec } from './StatsSec';
+import { uiConfirm } from '../../components/confirmService';
 
 /** 每日任务类型徽标。 */
 const TASK_KIND_LABEL: Record<string, string> = {
@@ -40,7 +41,13 @@ export function ExportBtn({ id, topic }: { id: string; topic: string }) {
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
               if (msg === EXPORT_TARGET_EXISTS) {
-                if (!window.confirm(`目标文件已存在:\n${pick.path}\n\n确认覆盖?`)) return;
+                if (
+                  !(await uiConfirm({
+                    title: '确认覆盖',
+                    message: `目标文件已存在:\n${pick.path}\n\n确认覆盖?`,
+                  }))
+                )
+                  return;
                 saved = await doExport(true);
               } else {
                 throw e;

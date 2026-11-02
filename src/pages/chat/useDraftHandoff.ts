@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { useAttachmentInsertStore } from '../../stores/attachmentInsert';
 import { useSessionsStore } from '../../stores/sessions';
 import type { AttachmentMeta } from '../../lib/ipc';
+import type { SkippedFile } from '../../lib/attachmentDrop';
 import * as ipc from '../../lib/ipc';
 type DraftAttachments = { metas: AttachmentMeta[]; images: Record<string, string> };
 interface DraftHandoffParams {
@@ -14,11 +15,13 @@ interface DraftHandoffParams {
   setPendingImages: Dispatch<SetStateAction<Record<string, string>>>;
   onSend: (text: string, att?: DraftAttachments) => void;
   onError: (msg: string) => void;
+  /** 轻提示(拖入文件夹时的逐个文件拒绝原因),不占用错误栏 */
+  onNotice: (msg: string) => void;
 }
 /** 输入框(草稿)交接与附件操作:附件中心插入队列 / 划词预填 / 首页草稿直发 / 附件增删。 */
 export function useDraftHandoff({
   sessionId, setComposerText, pendingAttachments, pendingImages,
-  setPendingAttachments, setPendingImages, onSend, onError,
+  setPendingAttachments, setPendingImages, onSend, onError, onNotice,
 }: DraftHandoffParams) {
   // F7:消费附件中心「插入当前会话」队列,追加到输入框待发附件
   useEffect(() => {
@@ -62,10 +65,24 @@ export function useDraftHandoff({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  /** 选中文件 → 落盘附件(图片同时保留完整 data URL 供 vision 注入)。 */
-  const handlePickFiles = async (files: FileList) => {
+  /** 选中文件 → 落盘附件(图片同时保留完整 data URL 供 vision 注入)。
+   *  notice 为拖入文件夹时的跳过/截断提示(黑名单、阈值、空文件);
+   *  rejected 为逐文件拒绝明细,落盘留存供附件中心查看。 */
+  const handlePickFiles = async (files: File[], notice?: string, rejected?: SkippedFile[]) => {
     if (!sessionId) return;
-    const picked = Array.from(files);
+    if (rejected?.length) {
+      void ipc
+        .recordAttachmentRejects(
+          sessionId,
+          rejected.map((r) => ({ name: r.name, reason: r.reason, source: 'import' as const })),
+        )
+        .catch(() => {});
+    }
+    if (files.length === 0) {
+      if (notice) onNotice(notice);
+      return;
+    }
+    const picked = files;
     const sizeErr = ipc.validateAttachmentFiles(picked, pendingAttachments.length);
     if (sizeErr) {
       onError(sizeErr);
@@ -94,13 +111,20 @@ export function useDraftHandoff({
           newImages[meta.path] = `data:${mime};base64,${b64}`;
         }
       } catch (e) {
-        onError(`附件 ${f.name} 上传失败: ${e instanceof Error ? e.message : String(e)}`);
+        const msg = e instanceof Error ? e.message : String(e);
+        void ipc
+          .recordAttachmentRejects(sessionId, [
+            { name: f.name, reason: msg, source: 'save' as const },
+          ])
+          .catch(() => {});
+        onError(`附件 ${f.name} 上传失败: ${msg}`);
       }
     }
     if (newMetas.length) {
       setPendingAttachments((prev) => [...prev, ...newMetas]);
       setPendingImages(newImages);
     }
+    if (notice) onNotice(notice);
   };
   const handleRemoveAttachment = (index: number) => {
     setPendingAttachments((prev) => {

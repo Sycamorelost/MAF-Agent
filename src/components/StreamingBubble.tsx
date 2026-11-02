@@ -24,11 +24,15 @@ export default function StreamingBubble({
   const streaming = text !== undefined;
   const reasoningText = reasoning ?? '';
 
-  // 流式增量到达:直接滚动到底部(无动画,避免去抖刷新时 smooth 动画堆积卡顿)
+  // 流式增量到达:仅在用户停在底部时跟随滚动(上滚查看时不再被强行拽回底部)
   useEffect(() => {
     if (!streaming) return;
-    const scroller = rootRef.current?.closest('.chat-scroll');
-    scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' });
+    const scroller = rootRef.current?.closest('.chat-scroll') as HTMLElement | null;
+    if (!scroller) return;
+    // 阈值与 ChatPage 的「跟随」判定保持一致(距底 <80px 才算停在底部)
+    const dist = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    if (dist >= 80) return;
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' });
   }, [streaming, text, reasoningText]);
 
   if (!streaming) return null;

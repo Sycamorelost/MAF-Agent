@@ -5,6 +5,9 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import * as ipc from '../lib/ipc';
 import AsideDrawer from '../components/AsideDrawer';
+import NotePresetBadge, { displayTags } from '../components/NotePresetBadge';
+import { useUiStore } from '../stores/ui';
+import { uiConfirm } from '../components/confirmService';
 import {
   IconNote,
   IconPlus,
@@ -12,6 +15,8 @@ import {
   IconEdit,
   IconDoc,
   IconSearch,
+  IconRefresh,
+  IconX,
 } from '../components/icons';
 
 /**
@@ -34,6 +39,9 @@ export default function NotesPage() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [meta, setMeta] = useState<{ created: string; updated: string } | null>(null);
+  /** 预置导入报告(非空 = 弹窗展示) */
+  const [report, setReport] = useState<ipc.ReimportReport | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const flash = (text: string) => {
     setStatus(text);
@@ -65,7 +73,14 @@ export default function NotesPage() {
   const requestSelect = useCallback(
     async (id: string) => {
       if (id === selId) return;
-      if (dirty && !window.confirm('当前笔记有未保存的修改,切换后将丢失。确定切换?')) return;
+      if (
+        dirty &&
+        !(await uiConfirm({
+          title: '切换笔记',
+          message: '当前笔记有未保存的修改,切换后将丢失。确定切换?',
+        }))
+      )
+        return;
       await selectNote(id);
       setParams({ id }, { replace: true });
     },
@@ -79,7 +94,8 @@ export default function NotesPage() {
     return list;
   }, []);
 
-  // 首次进入:扫盘 + 按 ?id 或首项定位
+  // 首次进入:扫盘;仅当 URL 带有效 ?id 时直接定位,
+  // 否则停在「落地页」(最新 5 条小卡片 + 快速新建),不自动钻进第一条笔记。
   const booted = useRef(false);
   useEffect(() => {
     if (booted.current) return;
@@ -87,8 +103,7 @@ export default function NotesPage() {
     (async () => {
       const list = await reload();
       const want = params.get('id');
-      const pick = want && list.some((n) => n.id === want) ? want : (list[0]?.id ?? null);
-      if (pick) await selectNote(pick);
+      if (want && list.some((n) => n.id === want)) await selectNote(want);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -120,7 +135,14 @@ export default function NotesPage() {
 
   /** 新建空笔记并立即落盘。 */
   const createNote = useCallback(async () => {
-    if (dirty && !window.confirm('当前笔记有未保存的修改,新建后将丢失。确定新建?')) return;
+    if (
+      dirty &&
+      !(await uiConfirm({
+        title: '新建笔记',
+        message: '当前笔记有未保存的修改,新建后将丢失。确定新建?',
+      }))
+    )
+      return;
     setBusy(true);
     try {
       const doc = await ipc.notesSave(null, '', [], '');
@@ -144,30 +166,59 @@ export default function NotesPage() {
   /** 删除当前笔记(md + 索引)。 */
   const del = useCallback(async () => {
     if (!selId) return;
-    if (!window.confirm('删除该笔记?此操作不可撤销(md 文件与索引一并清除)。')) return;
+    if (
+      !(await uiConfirm({
+        title: '删除笔记',
+        message: '删除该笔记?此操作不可撤销(md 文件与索引一并清除)。',
+        danger: true,
+        confirmText: '删除',
+      }))
+    )
+      return;
     setBusy(true);
     try {
       await ipc.notesDelete(selId);
-      const list = await reload();
-      const next = list[0]?.id ?? null;
+      await reload();
+      // 删除后回到落地页(最新 5 条 + 快速新建),不再跳到一条无关笔记
       setSelId(null);
       setMeta(null);
-      if (next) {
-        await selectNote(next);
-        setParams({ id: next }, { replace: true });
-      } else {
-        setTitle('');
-        setTags('');
-        setBody('');
-        setParams({}, { replace: true });
-      }
+      setTitle('');
+      setTags('');
+      setBody('');
+      setDirty(false);
+      setParams({}, { replace: true });
       flash('已删除');
     } catch (e) {
       setStatus('删除失败: ' + String(e));
     } finally {
       setBusy(false);
     }
-  }, [selId, reload, selectNote, setParams]);
+  }, [selId, reload, setParams]);
+
+  /** 一键重新导入预置内容:恢复缺失 + 合并重复(不覆盖用户数据),弹窗展示明细。 */
+  const importPresets = useCallback(async () => {
+    if (
+      dirty &&
+      !(await uiConfirm({
+        title: '导入预置',
+        message: '当前笔记有未保存的修改,导入后将从磁盘重新加载。先保存或放弃修改,继续导入?',
+      }))
+    ) {
+      return;
+    }
+    setImporting(true);
+    try {
+      const rep = await ipc.notesReimportPresets();
+      setReport(rep);
+      const list = await reload();
+      // 当前打开的笔记可能被合并过,从磁盘重新加载避免陈旧缓冲
+      if (selId && list.some((n) => n.id === selId)) await selectNote(selId);
+    } catch (e) {
+      setStatus('导入失败: ' + String(e));
+    } finally {
+      setImporting(false);
+    }
+  }, [dirty, reload, selId, selectNote]);
 
   // Ctrl/Cmd + S 保存
   useEffect(() => {
@@ -199,12 +250,27 @@ export default function NotesPage() {
     return Number.isNaN(d.getTime()) ? s : d.toLocaleString('zh-CN');
   };
 
+  /** 落地页「查看全部」:释放左侧玻璃抽屉(全部笔记 + 筛选) */
+  const setAsideOpen = useUiStore((s) => s.setAsideOpen);
+
+  /** 落地页展示的最新笔记(后端已按更新时间倒序)。 */
+  const latest = useMemo(() => metas.slice(0, 5), [metas]);
+
   return (
     <div className="notes-page">
       <AsideDrawer>
       <div className="notes-list drawer">
         <div className="notes-list-head">
           <span className="t">知识库</span>
+          <button
+            className="new"
+            onClick={importPresets}
+            disabled={busy || importing}
+            title="重新导入预置内容:恢复缺失、合并重复,不覆盖现有数据"
+          >
+            <IconRefresh size={14} />
+            {importing ? '导入中…' : '导入预置'}
+          </button>
           <button className="new" onClick={createNote} disabled={busy} title="新建笔记">
             <IconPlus size={14} />
             新建
@@ -242,7 +308,12 @@ export default function NotesPage() {
               <div className="notes-item-title">{n.title || '(未命名笔记)'}</div>
               <div className="notes-item-meta">
                 {n.updated ? <span>{fmtDate(n.updated)}</span> : null}
-                {n.tags.length > 0 && <span className="tag">{n.tags.join(' · ')}</span>}
+                <NotePresetBadge id={n.id} />
+                {displayTags(n.id, n.tags).map((t) => (
+                  <span className="tag" key={t}>
+                    {t}
+                  </span>
+                ))}
               </div>
               {n.excerpt && <div className="notes-item-excerpt">{n.excerpt}</div>}
             </div>
@@ -339,12 +410,137 @@ export default function NotesPage() {
             </div>
           </>
         ) : (
-          <div className="notes-empty" style={{ flex: 1 }}>
-            <IconNote size={40} strokeWidth={1.1} />
-            <span>{metas.length === 0 ? '还没有笔记,点左侧「新建」开始记录' : '从左侧选择一条笔记'}</span>
+          <div className="notes-landing">
+            <div className="notes-landing-inner">
+              <div className="notes-landing-hero">
+                <div className="notes-landing-icon">
+                  <IconNote size={26} strokeWidth={1.2} />
+                </div>
+                <h2>知识库</h2>
+                <p>
+                  {metas.length > 0
+                    ? `共 ${metas.length} 条笔记,最近更新如下`
+                    : '还没有笔记,现在开始记录第一条'}
+                </p>
+                <div className="notes-landing-actions">
+                  <button className="notes-cta primary" onClick={createNote} disabled={busy}>
+                    <IconPlus size={15} />
+                    新建笔记
+                  </button>
+                  {metas.length > 0 && (
+                    <button className="notes-cta" onClick={() => setAsideOpen(true)}>
+                      查看全部
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {latest.length > 0 && (
+                <>
+                  <div className="notes-landing-sub">
+                    <span>最近更新</span>
+                    <span className="sp" />
+                    <span className="hint">
+                      最新 {latest.length} 条{metas.length > latest.length ? ` · 共 ${metas.length} 条` : ''}
+                    </span>
+                  </div>
+                  <div className="notes-cards">
+                    {latest.map((n) => (
+                      <button
+                        key={n.id}
+                        className="notes-card"
+                        onClick={() => void requestSelect(n.id)}
+                      >
+                        <span className="notes-card-title">{n.title || '(未命名笔记)'}</span>
+                        <span className={`notes-card-excerpt${n.excerpt ? '' : ' empty'}`}>
+                          {n.excerpt || '暂无摘要'}
+                        </span>
+                        <span className="notes-card-meta">
+                          {n.updated ? <span>{fmtDate(n.updated)}</span> : null}
+                          <NotePresetBadge id={n.id} />
+                          {displayTags(n.id, n.tags).map((t) => (
+                            <span className="tag" key={t}>
+                              {t}
+                            </span>
+                          ))}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {metas.length === 0 && (
+                <div className="notes-landing-tip">
+                  支持 Markdown;笔记以文件形式保存在本机 data/notes/ 目录,可随时用其他编辑器打开。
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {/* 预置导入报告弹窗:恢复 / 合并 / 完全重复 三组明细,可滚动翻阅 */}
+      {report && (
+        <div className="att-modal-mask" onClick={() => setReport(null)}>
+          <div className="att-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="att-modal-head">
+              <span className="t">预置内容导入结果</span>
+              <span className="att-modal-sub">
+                恢复 {report.added.length} · 合并 {report.merged.length} · 完全重复{' '}
+                {report.skipped.length}
+              </span>
+              <button onClick={() => setReport(null)} title="关闭">
+                <IconX size={14} />
+              </button>
+            </div>
+            <div className="att-modal-body notes-import-report">
+              {report.merged.length > 0 && (
+                <section>
+                  <h4>已合并({report.merged.length})——预置缺漏内容已并入,你的内容零改动</h4>
+                  <ul>
+                    {report.merged.map((it) => (
+                      <li key={it.id}>
+                        <span className="r-title">{it.title}</span>
+                        <span className="r-detail">{it.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {report.added.length > 0 && (
+                <section>
+                  <h4>新恢复({report.added.length})</h4>
+                  <ul>
+                    {report.added.map((it) => (
+                      <li key={it.id}>
+                        <span className="r-title">{it.title}</span>
+                        <span className="r-detail">{it.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {report.skipped.length > 0 && (
+                <section>
+                  <h4>完全重复({report.skipped.length})——未做任何改动</h4>
+                  <ul>
+                    {report.skipped.map((it) => (
+                      <li key={it.id}>
+                        <span className="r-title">{it.title}</span>
+                        <span className="r-detail">{it.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {report.added.length === 0 &&
+                report.merged.length === 0 &&
+                report.skipped.length === 0 && <p>没有可导入的预置内容。</p>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

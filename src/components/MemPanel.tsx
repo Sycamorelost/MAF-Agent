@@ -115,11 +115,6 @@ export default function MemPanel({ sessionId, width, narrow, onCollapse }: Props
     setUserDirty(false);
   };
 
-  const onCancelEdit = () => {
-    setDraft(savedFull);
-    setUserDirty(false);
-  };
-
   const statusInfo = useMemo(() => {
     if (conflict || externalBlink) return { color: 'var(--brand)', text: '外部变更' };
     if (dirty) return { color: '#C9942A', text: '未保存编辑' };
@@ -199,9 +194,6 @@ export default function MemPanel({ sessionId, width, narrow, onCollapse }: Props
         <div className="mem-actions">
           <button type="button" onClick={onSave} style={{ color: 'var(--brand)' }}>
             保存
-          </button>
-          <button type="button" onClick={onCancelEdit}>
-            取消
           </button>
           <button type="button" onClick={() => setShowVersions((v) => !v)}>
             {showVersions ? '收起' : '历史'}

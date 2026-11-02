@@ -8,6 +8,7 @@ import DataDirSetupDialog from './components/DataDirSetupDialog';
 import OnboardingDialog from './components/OnboardingDialog';
 import * as ipc from './lib/ipc';
 import McpApprovalDialog from './components/McpApprovalDialog';
+import { ConfirmHost } from './components/confirmService';
 import { getBootstrapState } from './lib/ipc/mcp';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useSessionsStore } from './stores/sessions';
@@ -310,6 +311,7 @@ export default function App() {
         <MainApp />
       </ErrorBoundary>
       <McpApprovalDialog />
+      <ConfirmHost />
     </HashRouter>
   );
 }

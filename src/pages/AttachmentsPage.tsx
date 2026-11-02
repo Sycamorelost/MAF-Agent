@@ -1,95 +1,31 @@
 /**
- * 附件管理中心(/attachments,迭代 F7)。
+ * 附件管理中心(/attachments,迭代 F7 / F7.1)。
  * 数据源:list_all_attachments 聚合全部历史消息附件(联表会话标题),按会话分组展示。
- * 操作:预览(图片 lightbox / 文本弹窗)、插入当前会话(复用磁盘文件,经 insertQueue 交 ChatPage)、
- *       定位来源消息(自动切分支)、删除(联动消息 JSON 与磁盘文件,两态确认)。
+ * 操作:预览、插入当前会话、定位来源消息、删除、失败重试、批量清理;
+ *       按会话展示配额用量;拒绝原因落盘后可在此查看与清空。
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   deleteAttachment,
   insertAttachmentToSession,
-  listAllAttachments,
   readAttachmentData,
+  retryAttachmentExtract,
   type AttachmentEntry,
-  type AttachmentMeta,
 } from '../lib/ipc';
 import { useSessionsStore } from '../stores/sessions';
 import { useAttachmentInsertStore } from '../stores/attachmentInsert';
 import { sessionPath } from '../lib/workbench';
-import {
-  IconAttach,
-  IconChat,
-  IconCheck,
-  IconClipboardList,
-  IconDoc,
-  IconExternalLink,
-  IconEye,
-  IconFileText,
-  IconImage,
-  IconPlus,
-  IconSearch,
-  IconTrash,
-  IconX,
-} from '../components/icons';
-
-type Kind = AttachmentMeta['kind'];
-
-const KIND_LABEL: Record<Kind, string> = {
-  image: '图片',
-  docx: '文档',
-  xlsx: '表格',
-  pdf: 'PDF',
-  pptx: '演示',
-  epub: '电子书',
-  html: '网页',
-  text: '文本',
-  other: '其他',
-};
-
-const KIND_FILTERS: Array<{ key: 'all' | Kind; label: string }> = [
-  { key: 'all', label: '全部' },
-  { key: 'image', label: '图片' },
-  { key: 'docx', label: '文档' },
-  { key: 'xlsx', label: '表格' },
-  { key: 'pdf', label: 'PDF' },
-  { key: 'pptx', label: '演示' },
-  { key: 'epub', label: '电子书' },
-  { key: 'html', label: '网页' },
-  { key: 'text', label: '文本' },
-  { key: 'other', label: '其他' },
-];
-
-function KindIcon({ kind }: { kind: Kind }) {
-  switch (kind) {
-    case 'image':
-      return <IconImage size={26} strokeWidth={1.2} />;
-    case 'xlsx':
-      return <IconClipboardList size={26} strokeWidth={1.2} />;
-    case 'text':
-      return <IconFileText size={26} strokeWidth={1.2} />;
-    case 'docx':
-    case 'pdf':
-    case 'pptx':
-    case 'epub':
-    case 'html':
-      return <IconDoc size={26} strokeWidth={1.2} />;
-    default:
-      return <IconAttach size={26} strokeWidth={1.2} />;
-  }
-}
-
-const fmtSize = (n: number) =>
-  n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`;
-
-const fmtDate = (s: string) => {
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? s : d.toLocaleString('zh-CN');
-};
-
-/** 删除确认 key:同一消息可能引用同路径两次,需组合区分。 */
-const delKey = (e: AttachmentEntry) => `${e.message_id}:${e.meta.path}`;
+import { quotaLabel, quotaTone } from '../lib/attachmentQuota';
+import { IconAttach, IconChat, IconCheck, IconSearch } from '../components/icons';
+import { AttachmentsHeader } from './attachments/AttachmentsHeader';
+import { AttachmentCard } from './attachments/AttachmentCard';
+import { RejectLogModal } from './attachments/RejectLogModal';
+import { ConfirmBatchModal, ImageLightbox, TextPreviewModal } from './attachments/AttachmentModals';
+import { useAttachmentsData } from './attachments/useAttachmentsData';
+import { useAttachmentBatch } from './attachments/useAttachmentBatch';
+import { delKey, type Kind } from './attachments/shared';
 
 export default function AttachmentsPage() {
   const nav = useNavigate();
@@ -97,53 +33,47 @@ export default function AttachmentsPage() {
   const setActiveBranch = useSessionsStore((s) => s.setActiveBranch);
   const enqueue = useAttachmentInsertStore((s) => s.enqueue);
 
-  const [entries, setEntries] = useState<AttachmentEntry[] | null>(null);
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<'all' | Kind>('all');
-  const [imgUrls, setImgUrls] = useState<Record<string, string>>({});
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [textPreview, setTextPreview] = useState<{ name: string; text: string } | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [status, setStatus] = useState('');
-  const requestedRef = useRef<Set<string>>(new Set());
+  const [retrying, setRetrying] = useState<Set<string>>(new Set());
+  const [rejectsOpen, setRejectsOpen] = useState(false);
 
-  /** Esc 关闭图片/文本预览(与全局搜索一致,避免只能点遮罩) */
+  const flash = (text: string) => {
+    setStatus(text);
+    window.setTimeout(() => setStatus((s) => (s === text ? '' : s)), text.length > 40 ? 5000 : 2000);
+  };
+
+  const {
+    entries,
+    setEntries,
+    quota,
+    imgUrls,
+    usageMap,
+    rejects,
+    rejectsLoading,
+    clearingRejects,
+    refreshRejects,
+    clearRejects,
+  } = useAttachmentsData(flash);
+  const batch = useAttachmentBatch(entries, setEntries, flash);
+  const { setConfirmBatch } = batch;
+
+  /** Esc 关闭所有浮层(预览 / 批量确认 / 拒绝记录) */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       setLightbox(null);
       setTextPreview(null);
+      setRejectsOpen(false);
+      setConfirmBatch(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const flash = (text: string) => {
-    setStatus(text);
-    window.setTimeout(() => setStatus((s) => (s === text ? '' : s)), 2000);
-  };
-
-  useEffect(() => {
-    listAllAttachments()
-      .then(setEntries)
-      .catch((e) => {
-        setEntries([]);
-        flash('加载失败: ' + String(e));
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // 图片缩略:逐个读 dataURL(已请求过的跳过,失败保持图标)
-  useEffect(() => {
-    if (!entries) return;
-    for (const e of entries) {
-      if (e.meta.kind !== 'image' || requestedRef.current.has(e.meta.path)) continue;
-      requestedRef.current.add(e.meta.path);
-      readAttachmentData(e.meta.path)
-        .then((url) => setImgUrls((prev) => ({ ...prev, [e.meta.path]: url })))
-        .catch(() => {});
-    }
-  }, [entries]);
+  }, [setConfirmBatch]);
 
   // 删除两态确认 3 秒自动复位
   useEffect(() => {
@@ -156,7 +86,8 @@ export default function AttachmentsPage() {
     if (!entries) return [];
     const kw = q.trim().toLowerCase();
     return entries.filter(
-      (e) => (kind === 'all' || e.meta.kind === kind) && (!kw || e.meta.name.toLowerCase().includes(kw)),
+      (e) =>
+        (kind === 'all' || e.meta.kind === kind) && (!kw || e.meta.name.toLowerCase().includes(kw)),
     );
   }, [entries, q, kind]);
 
@@ -180,6 +111,7 @@ export default function AttachmentsPage() {
       if (cached) {
         setLightbox(cached);
       } else {
+        // 缩略尚未就绪时兜底读取大图
         readAttachmentData(e.meta.path)
           .then(setLightbox)
           .catch(() => flash('图片读取失败'));
@@ -224,39 +156,62 @@ export default function AttachmentsPage() {
       await deleteAttachment(e.message_id, e.meta.path);
       setEntries(
         (prev) =>
-          prev?.filter((x) => !(x.message_id === e.message_id && x.meta.path === e.meta.path)) ?? null,
+          prev?.filter((x) => !(x.message_id === e.message_id && x.meta.path === e.meta.path)) ??
+          null,
       );
+      batch.dropKey(key);
       flash('已删除');
     } catch (err) {
       flash('删除失败: ' + String(err));
     }
   };
 
+  /** 重试文本提取:成功后原地刷新卡片(失败时保留旧元数据并提示原因)。 */
+  const onRetry = async (e: AttachmentEntry) => {
+    const key = delKey(e);
+    if (retrying.has(key)) return;
+    setRetrying((prev) => new Set(prev).add(key));
+    try {
+      const meta = await retryAttachmentExtract(e.message_id, e.meta.path);
+      setEntries(
+        (prev) =>
+          prev?.map((x) =>
+            x.message_id === e.message_id && x.meta.path === e.meta.path ? { ...x, meta } : x,
+          ) ?? null,
+      );
+      flash(meta.extract_note ? `重试后仍失败: ${meta.extract_note}` : '文本提取已重试成功');
+    } catch (err) {
+      flash('重试失败: ' + String(err));
+    } finally {
+      setRetrying((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="att-page">
-      <div className="att-head">
-        <span className="att-title">附件中心</span>
-        <div className="att-search">
-          <IconSearch size={14} />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="按文件名搜索…"
-            spellCheck={false}
-          />
-        </div>
-        <div className="att-kinds">
-          {KIND_FILTERS.map((f) => (
-            <button
-              key={f.key}
-              className={`att-kind ${kind === f.key ? 'active' : ''}`}
-              onClick={() => setKind(f.key)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <AttachmentsHeader
+        q={q}
+        onQuery={setQ}
+        kind={kind}
+        onKind={setKind}
+        batchMode={batch.batchMode}
+        selectedCount={batch.selected.size}
+        shownCount={shown.length}
+        rejectTotal={rejects?.total ?? 0}
+        deleting={batch.deleting}
+        onToggleBatch={batch.toggleBatch}
+        onSelectAll={() => batch.selectAllShown(shown)}
+        onClearSelect={() => batch.setSelected(new Set())}
+        onDeleteSelected={() => batch.setConfirmBatch(true)}
+        onOpenRejects={() => {
+          setRejectsOpen(true);
+          void refreshRejects();
+        }}
+      />
 
       <div className="att-body">
         {entries === null && <div className="att-empty">加载中…</div>}
@@ -272,81 +227,90 @@ export default function AttachmentsPage() {
             <span>没有匹配的附件</span>
           </div>
         )}
-        {groups.map((g) => (
-          <div key={g.sessionId} className="att-group">
-            <button className="att-group-head" onClick={() => nav(sessionPath(g.sessionId))} title="打开会话">
-              <IconChat size={14} />
-              <span className="t">{g.title}</span>
-              <span className="n">{g.items.length}</span>
-            </button>
-            <div className="att-grid">
-              {g.items.map((e) => {
-                const thumb = e.meta.kind === 'image' ? imgUrls[e.meta.path] : undefined;
-                const canPreview = e.meta.kind === 'image' || !!e.meta.extracted_text;
-                const confirming = confirmDel === delKey(e);
-                return (
-                  <div key={delKey(e)} className="att-card">
-                    <div
-                      className={`att-thumb ${canPreview ? 'clickable' : ''}`}
-                      onClick={() => canPreview && onPreview(e)}
-                      title={canPreview ? '预览' : e.meta.name}
-                    >
-                      {thumb ? <img src={thumb} alt={e.meta.name} /> : <KindIcon kind={e.meta.kind} />}
-                    </div>
-                    <div className="att-name" title={e.meta.name}>
-                      {e.meta.name}
-                    </div>
-                    <div className="att-meta">
-                      {KIND_LABEL[e.meta.kind]} · {fmtSize(e.meta.size)} · {fmtDate(e.created)}
-                    </div>
-                    <div className="att-ops">
-                      {canPreview && (
-                        <button title="预览" onClick={() => onPreview(e)}>
-                          <IconEye size={14} />
-                        </button>
-                      )}
-                      <button title="插入当前会话" onClick={() => void onInsert(e)}>
-                        <IconPlus size={14} />
-                      </button>
-                      <button title="定位来源消息" onClick={() => onLocate(e)}>
-                        <IconExternalLink size={14} />
-                      </button>
-                      <button
-                        className={confirming ? 'danger' : ''}
-                        title={confirming ? '再次点击确认删除' : '删除'}
-                        onClick={() => void onDelete(e)}
-                      >
-                        {confirming ? <IconCheck size={14} /> : <IconTrash size={14} />}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+        {groups.map((g) => {
+          const usage = usageMap.get(g.sessionId) ?? { files: 0, bytes: 0 };
+          const tone = quotaTone(usage, quota.maxFiles, quota.maxMb);
+          const allSelected = batch.groupAllSelected(g.items);
+          return (
+            <div key={g.sessionId} className="att-group">
+              <div className="att-group-head">
+                {batch.batchMode && (
+                  <button
+                    className={`att-select small${allSelected ? ' on' : ''}`}
+                    title={allSelected ? '取消本组选择' : '选择本组全部'}
+                    onClick={() => batch.toggleGroup(g.items)}
+                  >
+                    {allSelected && <IconCheck size={11} strokeWidth={2} />}
+                  </button>
+                )}
+                <button
+                  className="att-group-title"
+                  onClick={() => nav(sessionPath(g.sessionId))}
+                  title="打开会话"
+                >
+                  <IconChat size={14} />
+                  <span className="t">{g.title}</span>
+                  <span className="n">{g.items.length}</span>
+                </button>
+                <span
+                  className={`att-quota-chip ${tone}`}
+                  title="本会话附件配额(可在设置 · 存储位置 · 附件中调整)"
+                >
+                  {quotaLabel(usage, quota.maxFiles, quota.maxMb)}
+                </span>
+              </div>
+              <div className="att-grid">
+                {g.items.map((e) => (
+                  <AttachmentCard
+                    key={delKey(e)}
+                    entry={e}
+                    thumb={e.meta.kind === 'image' ? imgUrls[e.meta.path] : undefined}
+                    selectMode={batch.batchMode}
+                    selected={batch.selected.has(delKey(e))}
+                    confirming={confirmDel === delKey(e)}
+                    retrying={retrying.has(delKey(e))}
+                    onPreview={onPreview}
+                    onInsert={onInsert}
+                    onLocate={onLocate}
+                    onDelete={onDelete}
+                    onToggleSelect={batch.toggleSelect}
+                    onRetry={(x) => void onRetry(x)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {lightbox && (
-        <div className="att-lightbox" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="预览" />
-        </div>
-      )}
+      {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
 
       {textPreview && (
-        <div className="att-modal-mask" onClick={() => setTextPreview(null)}>
-          <div className="att-modal" onClick={(ev) => ev.stopPropagation()}>
-            <div className="att-modal-head">
-              <span className="t" title={textPreview.name}>
-                {textPreview.name}
-              </span>
-              <button onClick={() => setTextPreview(null)} title="关闭">
-                <IconX size={14} />
-              </button>
-            </div>
-            <pre className="att-modal-body">{textPreview.text}</pre>
-          </div>
-        </div>
+        <TextPreviewModal
+          name={textPreview.name}
+          text={textPreview.text}
+          onClose={() => setTextPreview(null)}
+        />
+      )}
+
+      {batch.confirmBatch && (
+        <ConfirmBatchModal
+          count={batch.selected.size}
+          deleting={batch.deleting}
+          onCancel={() => batch.setConfirmBatch(false)}
+          onConfirm={() => void batch.runBatchDelete()}
+        />
+      )}
+
+      {rejectsOpen && (
+        <RejectLogModal
+          data={rejects}
+          loading={rejectsLoading}
+          clearing={clearingRejects}
+          onClose={() => setRejectsOpen(false)}
+          onRefresh={() => void refreshRejects()}
+          onClear={() => void clearRejects()}
+        />
       )}
 
       {status && <div className="att-toast">{status}</div>}

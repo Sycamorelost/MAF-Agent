@@ -1,6 +1,7 @@
 //! 设置 · 存储位置视图(从 SettingsPage 搬出,纯搬家:视觉与行为不变)。
 
 import * as ipc from '../../lib/ipc';
+import { AttachmentSettingsCard } from './AttachmentSettingsCard';
 
 export interface StorageViewProps {
   dataDir: ipc.DataDirInfo | null;
@@ -9,6 +10,9 @@ export interface StorageViewProps {
   dirRestarting: boolean;
   onChangeDataDir: () => void;
   onOpenDataDir: () => void;
+  /** 应用设置(附件阈值 / 黑名单) */
+  settings: ipc.AppSettings | null;
+  onSaveAttachmentSettings: (patch: Partial<ipc.AppSettings>) => Promise<void>;
 }
 
 export function StorageView({
@@ -18,6 +22,8 @@ export function StorageView({
   dirRestarting,
   onChangeDataDir,
   onOpenDataDir,
+  settings,
+  onSaveAttachmentSettings,
 }: StorageViewProps) {
   return (
     <>
@@ -88,6 +94,8 @@ export function StorageView({
           )}
         </div>
       </div>
+
+      <AttachmentSettingsCard settings={settings} onSave={onSaveAttachmentSettings} />
 
       <div className="set-card">
         <div className="set-card-h">内部结构</div>

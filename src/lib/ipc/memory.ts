@@ -99,6 +99,16 @@ export interface AppSettings {
   default_workbench: 'chat' | 'work';
   /** 全局默认运行时预设(D19):economy / standard / deep / code */
   default_preset: string;
+  /** 拖入文件夹时单文件夹最多加入的附件数(1..=50;默认 10) */
+  attachment_folder_limit: number;
+  /** 附件扩展名黑名单追加项(内置默认清单始终生效) */
+  attachment_blocked_ext: string[];
+  /** 单会话附件数量配额(去重文件数;1..=2000;默认 200) */
+  attachment_session_max_files: number;
+  /** 单会话附件容量配额(MB;1..=10240;默认 1024) */
+  attachment_session_max_mb: number;
+  /** 单次生成的总时长上限(分钟):1..=1440,默认 10 */
+  chat_timeout_minutes: number;
 }
 
 export const getSettings = () => invoke<AppSettings>('get_settings');

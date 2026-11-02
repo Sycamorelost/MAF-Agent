@@ -39,11 +39,12 @@ export default memo(function ReasoningBlock({
   const [open, setOpen] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
-  // 展开态下思考流继续增长:跟随滚动到底部
+  // 展开态下思考流继续增长:仅在窗口已贴底时跟随;用户上滚查看后不再抢滚动
   useEffect(() => {
-    if (open && streaming && bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
+    const body = bodyRef.current;
+    if (!open || !streaming || !body) return;
+    const near = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+    if (near) body.scrollTop = body.scrollHeight;
   }, [open, streaming, text]);
 
   const countOnly = !text && tokens != null && tokens > 0;

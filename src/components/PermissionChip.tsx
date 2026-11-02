@@ -13,6 +13,7 @@ import {
 } from '../lib/ipc/mcp';
 import type { PermissionMode } from '../lib/ipc/types';
 import { useSessionsStore } from '../stores/sessions';
+import { uiConfirm } from './confirmService';
 
 const MODES: { id: ApprovalMode; label: string; note: string }[] = [
   { id: 'ask', label: '逐次审批', note: '每个工具调用都弹窗确认' },
@@ -86,7 +87,13 @@ export function PermissionChip({ sessionId, onError }: Props) {
       mode === 'full' || reGrantGlobal
         ? '\n\n注意:将签发 60 分钟完全信任临时授权,到期自动回落;期间工具不再询问、命令直接执行(写删仍备份并审计)。'
         : '';
-    if (!window.confirm(`本会话权限档切为「${desc}」,仅影响当前会话。${warn}`)) return;
+    if (
+      !(await uiConfirm({
+        title: '切换权限档',
+        message: `本会话权限档切为「${desc}」,仅影响当前会话。${warn}`,
+      }))
+    )
+      return;
     try {
       await setPermissionMode(sessionId, mode);
       // P8:进入 full 先落库会话覆盖,再签发绑定本会话的临时授权;离开时按会话吊销

@@ -9,6 +9,7 @@ import * as ipc from '../../lib/ipc';
 import type { AttachmentMeta } from '../../lib/ipc';
 import { useEditResend } from './attachments';
 import type { RunChatStream } from './useChatStream';
+import { uiConfirm } from '../../components/confirmService';
 
 interface MessageActionsParams {
   sessionId: string | undefined;
@@ -64,6 +65,16 @@ export function useMessageActions({
   const onDelete = useCallback(
     async (id: number) => {
       if (!sessionId) return;
+      // 应用内确认:先确认后删除(原生 confirm 在 WebView 下时序不可靠)
+      if (
+        !(await uiConfirm({
+          title: '删除消息',
+          message: '删除该条消息?此操作不可撤销。',
+          danger: true,
+          confirmText: '删除',
+        }))
+      )
+        return;
       await remove(sessionId, id);
     },
     [sessionId, remove],

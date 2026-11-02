@@ -40,27 +40,28 @@ pub struct NoteDoc {
 }
 
 /// 笔记文件的 YAML front-matter。
+/// pub(crate):预置知识库种子(notes_presets)落盘时复用同一序列化格式。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct NoteFrontmatter {
+pub(crate) struct NoteFrontmatter {
     #[serde(default)]
-    id: String,
+    pub(crate) id: String,
     #[serde(default)]
-    title: String,
+    pub(crate) title: String,
     #[serde(default)]
-    tags: Vec<String>,
+    pub(crate) tags: Vec<String>,
     #[serde(default)]
-    created: String,
+    pub(crate) created: String,
     #[serde(default)]
-    updated: String,
+    pub(crate) updated: String,
 }
 
 /// 笔记目录:`<repo>/data/notes`。
-fn notes_dir() -> PathBuf {
+pub(crate) fn notes_dir() -> PathBuf {
     db::data_dir().join("notes")
 }
 
 /// 标签序列化(逗号分隔,存储友好)。
-fn tags_to_db(tags: &[String]) -> String {
+pub(crate) fn tags_to_db(tags: &[String]) -> String {
     tags.iter()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
@@ -68,14 +69,59 @@ fn tags_to_db(tags: &[String]) -> String {
         .join(",")
 }
 
-/// 正文摘要:取前 120 字符并折叠换行。
+/// 正文摘要:剥掉 Markdown 结构符号(标题 # / 引用 > / 列表 - * + / 表格竖线),
+/// 跳过表格分隔行,取前 120 字符并折叠换行——列表预览不再出现原始标记。
 fn excerpt_of(body: &str) -> String {
-    let s: String = body.trim_start().chars().take(120).collect();
-    s.replace('\n', " ").trim().to_string()
+    let mut out = String::new();
+    for raw in body.lines() {
+        let mut line = raw.trim();
+        // 标题/引用标记(可叠加,如 "> ## ")
+        loop {
+            let l = line.trim_start_matches(['#', '>']).trim_start();
+            if l.len() == line.len() {
+                break;
+            }
+            line = l;
+        }
+        // 列表标记
+        for m in ["- ", "* ", "+ "] {
+            if let Some(rest) = line.strip_prefix(m) {
+                line = rest.trim_start();
+                break;
+            }
+        }
+        if line.is_empty() {
+            continue;
+        }
+        // 表格行:竖线折成空格;分隔行(| --- | :-: |)整行跳过
+        if line.starts_with('|') {
+            let cells: Vec<&str> = line
+                .split('|')
+                .map(|c| c.trim())
+                .filter(|c| !c.is_empty())
+                .collect();
+            if !cells.is_empty()
+                && cells
+                    .iter()
+                    .all(|c| c.chars().all(|ch| ch == '-' || ch == ':'))
+            {
+                continue;
+            }
+            out.push_str(&cells.join(" "));
+        } else {
+            out.push_str(line);
+        }
+        if out.chars().count() >= 120 {
+            break;
+        }
+        out.push(' ');
+    }
+    let collapsed = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    collapsed.chars().take(120).collect()
 }
 
 /// 解析 md 文本 → (front-matter, body)。无 front-matter 时给默认元数据。
-fn parse_note(text: &str) -> (NoteFrontmatter, String) {
+pub(crate) fn parse_note(text: &str) -> (NoteFrontmatter, String) {
     let t = text.trim_start_matches('\u{feff}');
     if !t.starts_with("---") {
         return (NoteFrontmatter::default(), text.to_string());
@@ -95,7 +141,7 @@ fn parse_note(text: &str) -> (NoteFrontmatter, String) {
 }
 
 /// 序列化 front-matter + body 为完整 md 文本。
-fn render_note(fm: &NoteFrontmatter, body: &str) -> String {
+pub(crate) fn render_note(fm: &NoteFrontmatter, body: &str) -> String {
     let yaml = serde_yaml::to_string(fm).unwrap_or_default();
     let yaml = yaml.trim_end();
     let yaml = yaml.strip_suffix("---").unwrap_or(yaml).trim_end();
@@ -103,7 +149,7 @@ fn render_note(fm: &NoteFrontmatter, body: &str) -> String {
 }
 
 /// 按 id 写入/更新 DB 元数据 + 刷新 FTS(幂等 upsert,rid 稳定)。
-fn index_note(
+pub(crate) fn index_note(
     id: &str,
     title: &str,
     tags: &str,
@@ -320,6 +366,13 @@ pub async fn notes_save(
     })
 }
 
+/// 一键重新导入预置知识库(预置术语表/速查):
+/// 恢复被删条目 + 按章节/表格合并(用户数据零丢失),返回弹窗报告。
+#[tauri::command]
+pub async fn notes_reimport_presets() -> Result<crate::notes_presets::ReimportReport, String> {
+    crate::notes_presets::reimport_and_index()
+}
+
 /// 删除笔记(同时清理 md 文件与 FTS 索引)。
 #[tauri::command]
 pub async fn notes_delete(id: String) -> Result<(), String> {
@@ -372,6 +425,27 @@ mod tests {
     fn excerpt_collapses_newlines() {
         let e = excerpt_of("第一行\n第二行");
         assert_eq!(e, "第一行 第二行");
+    }
+
+    #[test]
+    fn excerpt_strips_markdown_marks() {
+        // 预置笔记的典型开头:标题 + 引用说明 → 摘要不含 # / > 符号
+        let body = "# 数据清洗常见规则\n\n> 通用最佳实践整理。让 AI 清洗表格时参考。\n\n## 一、去重\n\n正文内容";
+        let e = excerpt_of(body);
+        assert!(!e.contains('#'), "摘要不应含标题符号: {e}");
+        assert!(!e.contains('>'), "摘要不应含引用符号: {e}");
+        assert!(e.starts_with("数据清洗常见规则 通用最佳实践整理"), "实际: {e}");
+    }
+
+    #[test]
+    fn excerpt_skips_table_separator_and_list_marks() {
+        let body = "| 英文 | 中文 |\n| --- | --- |\n| apple | 苹果 |\n\n- 第一条\n* 第二条";
+        let e = excerpt_of(body);
+        assert!(!e.contains('|'), "摘要不应含表格竖线: {e}");
+        assert!(!e.contains("---"), "摘要不应含分隔行: {e}");
+        assert!(e.contains("英文 中文"), "实际: {e}");
+        assert!(e.contains("apple 苹果"), "实际: {e}");
+        assert!(e.contains("第一条 第二条"), "实际: {e}");
     }
 
     #[test]

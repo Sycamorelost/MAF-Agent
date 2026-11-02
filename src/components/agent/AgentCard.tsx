@@ -1,5 +1,6 @@
 import * as ipc from '../../lib/ipc';
 import { agentIconComponent } from '../icons';
+import { uiConfirm } from '../confirmService';
 
 export const CAT_LABEL: Record<string, string> = {
   chat: '日常',
@@ -153,7 +154,17 @@ export function AgentCard({
               className="btn ghost micro"
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm(`删除自定义模板「${t.name}」?`)) onRemove(t.agent_id);
+                void (async () => {
+                  if (
+                    await uiConfirm({
+                      title: '删除模板',
+                      message: `删除自定义模板「${t.name}」?`,
+                      danger: true,
+                      confirmText: '删除',
+                    })
+                  )
+                    onRemove(t.agent_id);
+                })();
               }}
             >
               删除

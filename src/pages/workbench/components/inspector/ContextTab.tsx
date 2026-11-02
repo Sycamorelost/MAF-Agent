@@ -13,6 +13,7 @@ import { renderFull } from '../../../../components/MemPanel';
 import { IconCheck, IconInfo, IconRefresh, IconSparkles } from '../../../../components/icons';
 import { useProvidersStore } from '../../../../stores/providers';
 import type { WorkbenchData } from '../../useWorkbenchData';
+import { uiConfirm } from '../../../../components/confirmService';
 
 export function ContextTab({ sessionId, data }: { sessionId: string; data: WorkbenchData }) {
   const { budget, memory, memoryError, refreshMemory } = data;
@@ -45,9 +46,11 @@ export function ContextTab({ sessionId, data }: { sessionId: string; data: Workb
       return;
     }
     if (
-      !window.confirm(
-        '压缩将把当前对话提炼为记忆摘要。\n保留:任务计划、产物索引与最近 10 条对话;其余细节合并为摘要。\n继续?',
-      )
+      !(await uiConfirm({
+        title: '压缩记忆',
+        message:
+          '压缩将把当前对话提炼为记忆摘要。\n保留:任务计划、产物索引与最近 10 条对话;其余细节合并为摘要。\n继续?',
+      }))
     ) {
       return;
     }

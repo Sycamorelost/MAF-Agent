@@ -23,6 +23,7 @@ import { buildRewriteUserMsg, buildAgentMsg } from './aiflavorHelpers';
 import { AiFlavorInputPanel } from './AiFlavorInputPanel';
 import { AiFlavorReportPanel } from './AiFlavorReportPanel';
 import { AiFlavorOutputPanel } from './AiFlavorOutputPanel';
+import { uiConfirm } from '../../components/confirmService';
 
 export default function AiFlavorPage() {
   const [text, setText] = useState('');
@@ -115,6 +116,15 @@ export default function AiFlavorPage() {
   };
 
   const removeHistory = async (id: number) => {
+    if (
+      !(await uiConfirm({
+        title: '删除报告',
+        message: '删除该条检测报告?此操作不可撤销。',
+        danger: true,
+        confirmText: '删除',
+      }))
+    )
+      return;
     try {
       await ipc.aiflavorReportDelete(id);
       if (report?.id === id) setReport(null);

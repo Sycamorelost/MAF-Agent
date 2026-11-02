@@ -14,6 +14,7 @@ import { buildUserContent, buildSendHistory, rebuildSendHistory } from './attach
 import { useChatSettings } from './useChatSettings';
 import { useChatStream } from './useChatStream';
 import { useMessageActions } from './useMessageActions';
+import { useToast } from '../../lib/useToast';
 import { describeSendError, toErrorMessage } from './streamErrors';
 import { quoteSourceLabel, type QuoteRef } from '../../lib/quote';
 export interface ChatSendParams {
@@ -61,14 +62,8 @@ export function useChatSend({
   }, [sessionId]);
   /** F5:换模型重试的目标消息 */
   const [retryTarget, setRetryTarget] = useState<BubbleMessage | null>(null);
-  /** F8:钉入记忆后的轻提示 */
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2200);
-  }, []);
+  /** F8:钉入记忆后的轻提示(多行文件导入清单常驻,可手动关闭) */
+  const { toast, showToast, hideToast } = useToast();
   // 模型能力 / 学习进度 / 上下文窗口 / 全裸模式 / 物理契约等设置
   const { ctxWindow, bareMode, customContract, thinkCap, studyDigest } = useChatSettings(current);
   /** P5 / D19:会话生效预设的上下文条数上限(会话未单独设置时优先于全局滑窗;0 = 未解析/解析失败回落)。 */
@@ -271,6 +266,7 @@ export function useChatSend({
   // 附件增删与草稿交接见 useDraftHandoff
   return {
     sending, searching, error, setError, compressNotice, setCompressNotice, toast,
+    showToast, hideToast,
     retryTarget, setRetryTarget, thinkCap, buildSystemWith, onSend, onCancel, onTranslate,
     onEditResend, onDelete, onRegenerate, onPickRetryModel, onSaveSources, onPin,
     onRecall, onToggleWebSearch,

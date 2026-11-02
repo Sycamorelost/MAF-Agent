@@ -21,6 +21,9 @@ pub struct ProviderTemplate {
     pub image_models: Vec<String>,
     /// 官网/文档链接,便于用户去拿 API Key
     pub docs_url: Option<String>,
+    /// 使用提示(如「勿用 Coding Plan 的 Key」),设置页展示;None 表示无提示
+    #[serde(default)]
+    pub notice: Option<String>,
     /// 是否 OpenAI 兼容(目前全部为 true,未来支持 Anthropic / Gemini 原生协议时扩展)
     pub openai_compat: bool,
 }
@@ -33,23 +36,28 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             display_name: "OpenAI".into(),
             base_url: "https://api.openai.com/v1".into(),
             models: vec![
-                "gpt-5.2".into(),
-                "gpt-5.2-pro".into(),
-                "gpt-4o".into(),
-                "gpt-4o-mini".into(),
+                "gpt-5.5".into(),
+                "gpt-5.4".into(),
+                "gpt-5.4-mini".into(),
+                "gpt-5.4-nano".into(),
             ],
             image_models: vec!["dall-e-3".into(), "dall-e-2".into(), "gpt-image-1".into()],
             docs_url: Some("https://platform.openai.com/api-keys".into()),
+            notice: None,
             openai_compat: true,
             all_models: vec![],
         },
         ProviderTemplate {
             id: "deepseek".into(),
             display_name: "DeepSeek".into(),
-            base_url: "https://api.deepseek.com/v1".into(),
-            models: vec!["deepseek-chat".into(), "deepseek-reasoner".into()],
+            base_url: "https://api.deepseek.com".into(),
+            models: vec!["deepseek-flash".into(), "deepseek-v4-pro".into()],
             image_models: vec![],
             docs_url: Some("https://platform.deepseek.com/api_keys".into()),
+            notice: Some(
+                "旧模型名 deepseek-chat / deepseek-reasoner 已于 2026-07-24 弃用，请使用 deepseek-flash 或 deepseek-v4-pro。"
+                    .into(),
+            ),
             openai_compat: true,
             all_models: vec![],
         },
@@ -58,12 +66,17 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             display_name: "Kimi (Moonshot)".into(),
             base_url: "https://api.moonshot.cn/v1".into(),
             models: vec![
-                "kimi-k2.5".into(),
-                "kimi-k2".into(),
-                "moonshot-v1-128k".into(),
+                "kimi-k3.1-pro".into(),
+                "kimi-k3".into(),
+                "kimi-k2.7-code".into(),
+                "kimi-k2.6".into(),
             ],
             image_models: vec![],
             docs_url: Some("https://platform.moonshot.cn/console/api-keys".into()),
+            notice: Some(
+                "moonshot-v1 与 kimi-k2.5 已下线；kimi-k2.6 / kimi-k2.7-code 计划于 2026 年 12 月底下线，长期使用建议选 K3 系列。"
+                    .into(),
+            ),
             openai_compat: true,
             all_models: vec![],
         },
@@ -72,13 +85,14 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             display_name: "通义千问 (DashScope)".into(),
             base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".into(),
             models: vec![
-                "qwen-max".into(),
-                "qwen-plus".into(),
-                "qwen-turbo".into(),
-                "qwen-long".into(),
+                "qwen3.8-max".into(),
+                "qwen3.8-flash".into(),
+                "qwen3.7-plus".into(),
+                "qwen3-vl-plus".into(),
             ],
             image_models: vec![],
             docs_url: Some("https://bailian.console.aliyun.com/".into()),
+            notice: None,
             openai_compat: true,
             all_models: vec![],
         },
@@ -86,10 +100,20 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             id: "zhipu".into(),
             display_name: "智谱 GLM".into(),
             base_url: "https://open.bigmodel.cn/api/paas/v4".into(),
-            models: vec!["glm-4.5".into(), "glm-4-plus".into(), "glm-4-air".into()],
+            models: vec![
+                "glm-5.3".into(),
+                "glm-5.3-flash".into(),
+                "glm-5.2".into(),
+                "glm-5.1".into(),
+                "glm-4.6".into(),
+            ],
             // 智谱图像模型走同一 base_url 的 /images/generations
             image_models: vec!["cogview-3-plus".into(), "cogview-3-flash".into()],
-            docs_url: Some("https://open.bigmodel.cn/usercenter/apikeys".into()),
+            docs_url: Some("https://bigmodel.cn/usercenter/proj-mgmt/apikeys".into()),
+            notice: Some(
+                "请勿使用 GLM Coding Plan 套餐的 API Key：该套餐仅限官方指定工具使用，接入本应用属违规，可能导致权益被限制或账号封禁。请在开放平台按标准 API 单独创建 Key。"
+                    .into(),
+            ),
             openai_compat: true,
             all_models: vec![],
         },
@@ -100,6 +124,7 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             models: vec![], // 专用翻译 Provider,不走对话模型
             image_models: vec![],
             docs_url: Some("https://www.deepl.com/pro-api".into()),
+            notice: None,
             openai_compat: false,
             all_models: vec![],
         },
@@ -110,6 +135,7 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             models: vec![],
             image_models: vec![],
             docs_url: None,
+            notice: None,
             openai_compat: true,
             all_models: vec![],
         },
@@ -183,4 +209,41 @@ mod tests {
         assert_eq!(t.display_name, "OpenAI");
         assert!(t.base_url.starts_with("https://"));
     }
+
+    /// 预设模型必须与厂家当前可售模型一致:不得混入已下线/弃用的模型名。
+    #[test]
+    fn preset_models_exclude_retired_names() {
+        const RETIRED: [&str; 8] = [
+            "deepseek-chat",
+            "deepseek-reasoner",
+            "kimi-k2.5",
+            "moonshot-v1-",
+            "glm-4.5",
+            "glm-4-plus",
+            "glm-4-air",
+            "qwen-max",
+        ];
+        for tpl in builtin_templates() {
+            for m in &tpl.models {
+                assert!(
+                    !RETIRED.iter().any(|r| m == r || m.starts_with(r)),
+                    "模板 {} 仍预置已下线模型 {m}",
+                    tpl.id
+                );
+            }
+        }
+    }
+
+    /// 智谱必须提示「勿用 Coding Plan 的 Key」,避免用户违规导致封号。
+    #[test]
+    fn zhipu_template_warns_against_coding_plan() {
+        let t = builtin_templates()
+            .into_iter()
+            .find(|t| t.id == "zhipu")
+            .unwrap();
+        let notice = t.notice.expect("zhipu 模板应带使用提示");
+        assert!(notice.contains("Coding Plan"));
+        assert!(notice.contains("封禁"));
+    }
+
 }

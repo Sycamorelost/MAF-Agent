@@ -7,6 +7,7 @@ import * as ipc from '../../lib/ipc';
 import { mcpLoadConfig } from '../../lib/ipc/mcp';
 import { ENGINES, NAV_VISIBILITY } from './constants';
 import type { SearchDraft } from './SearchView';
+import { uiConfirm } from '../../components/confirmService';
 
 export function useGeneralSettings() {
   const [settings, setSettings] = useState<ipc.AppSettings | null>(null);
@@ -108,7 +109,13 @@ export function useGeneralSettings() {
         return;
       }
       const oldTip = dataDir?.path ? `\n\n迁移完成后原目录\n${dataDir.path}\n将被删除。` : '';
-      if (!confirm(`确定把数据目录更改为:\n${p}${oldTip}\n\n应用将自动重启以完成迁移。`)) return;
+      if (
+        !(await uiConfirm({
+          title: '更改数据目录',
+          message: `确定把数据目录更改为:\n${p}${oldTip}\n\n应用将自动重启以完成迁移。`,
+        }))
+      )
+        return;
       setDirBusy(true);
       const r = await ipc.setDataDir(p, true);
       if (r.restart_required) {
@@ -253,6 +260,35 @@ export function useGeneralSettings() {
     }
   };
 
+  /** 导入预置术语(内置 8 类权威词表,双向展开;合并不覆盖,后端直接落盘)。 */
+  const onImportPresetGlossary = async () => {
+    const ok = await uiConfirm({
+      title: '一键导入预置术语',
+      message:
+        '将从内置的 8 类专业术语表(IT / AI / 学术 / 法律 / 金融 / 医学 / 商务 / 通用)导入中英双向词条。\n\n' +
+        '合并规则:已有词条一律保留你的译法;缺失的预置词条会被补回,可反复点击。' +
+        (glossaryDirty ? '\n\n注意:当前有未保存的修改,导入会以磁盘上的术语表为准,这些修改将丢失。' : ''),
+      confirmText: '开始导入',
+    });
+    if (!ok) return;
+    setSavingGlossary(true);
+    setGlossaryMsg(null);
+    try {
+      const r = await ipc.glossaryImportPresets();
+      setGlossary(await ipc.glossaryList());
+      setGlossaryDirty(false);
+      setGlossaryMsg(
+        r.added > 0
+          ? `已导入预置术语:新增 ${r.added} 条,保留已有 ${r.kept} 条,共 ${r.total} 条`
+          : `预置术语已全部存在(共 ${r.total} 条),未做改动`,
+      );
+    } catch (e) {
+      setGlossaryMsg(`导入失败:${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSavingGlossary(false);
+    }
+  };
+
   // ---- 划词提问(迭代 D9)----
 
   const patchSettings = (patch: Partial<ipc.AppSettings>) =>
@@ -261,6 +297,15 @@ export function useGeneralSettings() {
   /** 保存:划词开关等 settings。 */
   const onSaveSelection = async () => {
     await onSaveSettings();
+  };
+
+  /** 局部设置即时写盘(附件等卡片的小保存按钮用);失败向上抛出以便展示。 */
+  const saveSettingsPatch = async (patch: Partial<ipc.AppSettings>) => {
+    if (!settings) throw new Error('设置尚未加载');
+    const next = { ...settings, ...patch };
+    await ipc.saveSettings(next);
+    setSettings(next);
+    setSettingsSaved(true);
   };
 
   // ---- 导航菜单可见性 + 顺序(标题栏 ⋮ 菜单)----
@@ -354,7 +399,9 @@ export function useGeneralSettings() {
     mutateGlossary,
     onSaveGlossary,
     onImportGlossary,
+    onImportPresetGlossary,
     patchSettings,
+    saveSettingsPatch,
     onSaveSelection,
     toggleNavItem,
     reorderNavItem,

@@ -1,4 +1,4 @@
-﻿import { invoke, Channel } from '@tauri-apps/api/core';
+﻿﻿import { invoke, Channel } from '@tauri-apps/api/core';
 import { cancelStream } from './provider';
 
 import type { AttachmentMeta, StreamChunk } from './types';
@@ -119,6 +119,21 @@ export const glossaryList = () => invoke<GlossaryEntry[]>('glossary_list');
 
 export const glossarySave = (entries: GlossaryEntry[]) =>
   invoke<void>('glossary_save', { entries });
+
+/** 预置术语导入报告(内置 8 类专业术语表双向展开,合并不覆盖) */
+export interface GlossaryImportReport {
+  /** 本次新增词条数 */
+  added: number;
+  /** 与现有词条重复、保留用户译法的条数 */
+  kept: number;
+  /** 合并后术语表总条数 */
+  total: number;
+  /** 预置来源清单(分类:权威来源) */
+  sources: string[];
+}
+
+export const glossaryImportPresets = () =>
+  invoke<GlossaryImportReport>('glossary_import_presets');
 
 // ---- 翻译历史(迭代 D6.2)----
 

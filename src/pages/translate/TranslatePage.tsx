@@ -8,6 +8,7 @@ import TranslateForm, { langLabel } from './TranslateForm';
 import GlossaryPanel from './GlossaryPanel';
 import { useTranslateEngine } from './useTranslateEngine';
 import { stripMarkdown } from '../../lib/stripMarkdown';
+import { uiConfirm } from '../../components/confirmService';
 
 /** 对话页「翻译」按钮写入 sessionStorage 的 key。 */
 const DRAFT_KEY = 'translate_draft';
@@ -193,6 +194,15 @@ export default function TranslatePage() {
 
   const removeHistory = async (rec: ipc.TranslationRecord) => {
     if (!rec.file_name) return;
+    if (
+      !(await uiConfirm({
+        title: '删除翻译历史',
+        message: '删除该条翻译历史?此操作不可撤销。',
+        danger: true,
+        confirmText: '删除',
+      }))
+    )
+      return;
     try {
       await ipc.deleteTranslation(rec.file_name);
       setHistory((h) => h?.filter((x) => x.file_name !== rec.file_name) ?? h);

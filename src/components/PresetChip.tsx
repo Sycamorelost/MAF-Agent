@@ -13,6 +13,7 @@ import {
 import { PRESET_SOURCE_LABEL } from '../lib/presets/resolve';
 import { useSessionsStore } from '../stores/sessions';
 import { PresetDiffDialog } from './PresetDiffDialog';
+import { uiConfirm } from './confirmService';
 
 interface Props {
   sessionId: string;
@@ -108,7 +109,13 @@ export function PresetChip({ sessionId, onError }: Props) {
   const resetInherit = async () => {
     setOpen(false);
     if (!pinned) return;
-    if (!window.confirm('恢复为跟随默认(Agent 模板 > 全局设置)?仅影响当前会话。')) return;
+    if (
+      !(await uiConfirm({
+        title: '恢复默认预设',
+        message: '恢复为跟随默认(Agent 模板 > 全局设置)?仅影响当前会话。',
+      }))
+    )
+      return;
     try {
       await setPreset(sessionId, null);
     } catch (e) {

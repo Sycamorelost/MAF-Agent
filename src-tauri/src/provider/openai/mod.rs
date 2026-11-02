@@ -141,9 +141,15 @@ impl Provider for OpenAiCompat {
             body["stream_options"] = json!({ "include_usage": true });
         }
 
+        // 单次生成时长以设置项为准(默认 10 分钟,可在设置中调大),覆盖"连接 + 首字 + 整体流式输出"。
+        // reqwest 的 timeout 会贯穿响应体读取,因此必须按请求覆写:否则长流式输出会被
+        // 客户端默认的 300 秒总超时提前掐断(应用层预算比它多 30 秒,保证错误由应用层先收口)。
+        let budget = Duration::from_secs(u64::from(crate::settings::chat_timeout_minutes()) * 60);
+
         let resp = self
             .client
             .post(&url)
+            .timeout(budget + Duration::from_secs(30))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")

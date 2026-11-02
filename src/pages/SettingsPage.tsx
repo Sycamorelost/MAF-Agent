@@ -19,6 +19,7 @@ import { NavMenuView } from './settings/NavMenuView';
 import { AppearanceView } from './settings/AppearanceView';
 import { WorkbenchView } from './settings/WorkbenchView';
 import { PresetsView } from './settings/PresetsView';
+import { GenerationView } from './settings/GenerationView';
 import { McpView } from './settings/McpView';
 
 export default function SettingsPage() {
@@ -105,7 +106,9 @@ export default function SettingsPage() {
     mutateGlossary,
     onSaveGlossary,
     onImportGlossary,
+    onImportPresetGlossary,
     patchSettings,
+    saveSettingsPatch,
     onSaveSelection,
     toggleNavItem,
     reorderNavItem,
@@ -185,6 +188,7 @@ export default function SettingsPage() {
       onMutateGlossary={mutateGlossary}
       onSaveGlossary={onSaveGlossary}
       onImportGlossary={onImportGlossary}
+      onImportPresetGlossary={onImportPresetGlossary}
     />
   );
 
@@ -196,6 +200,8 @@ export default function SettingsPage() {
       dirRestarting={dirRestarting}
       onChangeDataDir={onChangeDataDir}
       onOpenDataDir={onOpenDataDir}
+      settings={settings}
+      onSaveAttachmentSettings={saveSettingsPatch}
     />
   );
 
@@ -244,6 +250,7 @@ export default function SettingsPage() {
         onSelect={setDefaultPreset}
       />
     ),
+    generation: <GenerationView settings={settings} onSave={saveSettingsPatch} />,
     usage: usageView,
     storage: storageView,
     mcp: <McpView />,

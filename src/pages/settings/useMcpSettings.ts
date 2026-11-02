@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+﻿﻿import { useEffect, useState } from 'react';
 import {
   mcpLoadConfig,
   mcpSaveConfig,
@@ -26,6 +26,7 @@ import {
 import { APPROVAL_MODES } from './ApprovalPolicyCard';
 import type { McpServerStatus } from './McpServerCard';
 import { useMcpServerActions } from './useMcpServerActions';
+import { uiConfirm } from '../../components/confirmService';
 
 /** MCP 设置页状态与保存动作(页面只负责展示与 props 组装)。 */
 export function useMcpSettings() {
@@ -210,7 +211,15 @@ export function useMcpSettings() {
 
   /** 清除「长期记忆」全局数据:先停 server 进程,再删 mcp-memory.jsonl。 */
   const onClearMemory = async () => {
-    if (!confirm("确定清除全部长期记忆数据?\n该数据由「长期记忆」MCP 工具跨会话共享,删除后不可恢复。")) return;
+    if (
+      !(await uiConfirm({
+        title: '清除长期记忆',
+        message: '确定清除全部长期记忆数据?\n该数据由「长期记忆」MCP 工具跨会话共享,删除后不可恢复。',
+        danger: true,
+        confirmText: '清除',
+      }))
+    )
+      return;
     try {
       const size = await mcpClearMemory();
       setMsg(

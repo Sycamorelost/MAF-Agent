@@ -8,7 +8,7 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 
 | 项目 | 说明 |
 |---|---|
-| **版本** | v2.2.1 |
+| **版本** | v2.3.1 Beta |
 | **许可证** | Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明） |
 | **平台** | Windows 10 / 11（64 位） |
 
@@ -70,12 +70,16 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 
 - 内置 Markdown 笔记，支持标签、预览渲染
 - 保存时自动校验，Ctrl+S 快捷保存
+- **预置知识库(v2.3.0，v2.3.1 扩充至 11 条)**：首次启动自动落盘开箱内容——IT/编程/技术、学术/科研、法律/商务/金融、通用办公/营销/数据 四类中英对照术语表(参照微软语言门户、Git 官方中文本地化、Academic Phrasebank、香港律政司法律词汇、UNTERM 等权威来源整理,每类 50 组以上),及 Markdown 表格语法、CSV/TSV 约定、数据清洗规则、Excel 公式与数据透视、正则表达式、中文排版与标点规范、数据可视化图表选型 七篇速查;落盘后就是普通笔记,可自由编辑/删除,删除后不再出现,列表带「预置」角标
+- **一键导入预置(v2.3.0)**：被删的预置笔记一键找回;改过的条目按章节与表格首列逐条合并——你的内容一字不动,只补缺漏的行/表格/章节;导入结果弹窗按「新恢复 / 已合并 / 完全重复」三组明细展示,可滚动逐条核对
+- 标签独立为胶囊样式、笔记摘要剥离 Markdown 符号(v2.3.1);全应用删除操作统一使用应用内确认框,确认前不再先执行删除(v2.3.1)
 
 ### 翻译
 
 - 8 种语言互译，源语言自动检测
 - 输入即译(防抖自动触发)
-- 术语表(Glossary)支持
+- 术语表(Glossary)支持：翻译时自动注入命中词条,保证专有名词译法一致
+- **预置术语表(v2.3.1)**：内置 8 类专业术语表(IT / AI / 学术 / 法律 / 金融 / 医学 / 商务 / 通用,参照微软语言门户、术语在线、Google 机器学习术语表、IASB 中文译本、WHO ICD-11、香港律政司法律词汇等权威来源,共 350 词条、中英双向展开 699 条);设置页「一键导入预置术语」合并不覆盖、可反复点击,被删词条自动补回;命中过多时按词长优先注入,大词表支持搜索与分段渲染
 - 最近 100 条历史记录，译文可一键发送到对话
 
 ### AI 绘画
@@ -124,7 +128,7 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 |---|---|
 | 桌面框架 | Tauri 2.12（Rust + 系统 WebView2，不捆绑 Chromium） |
 | 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
-| 后端 | Rust（edition 2024，rust 1.90+），约 125 个 IPC 命令 |
+| 后端 | Rust（edition 2024，rust 1.90+），约 126 个 IPC 命令 |
 | 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 37） |
 | 网络 | reqwest（rustls-tls）+ SSE 流式解析，Rust 层直推前端 |
 | 附件解析 | pdf-extract / docx-rs / calamine / pptxgenjs（全部本地原生） |
@@ -200,7 +204,7 @@ pnpm tauri build
 
 ```bash
 cd src-tauri
-cargo test        # Rust 单元测试(492 项)
+cargo test        # Rust 单元测试(530 项)
 cargo check       # 静态检查
 ```
 
@@ -264,7 +268,7 @@ data/
 ├── conversations/<id>/
 │   ├── memory.md               # 会话记忆(可直接编辑)
 │   └── memory.versions/        # 记忆版本快照
-├── notes/                      # 知识库 Markdown 笔记
+├── notes/                      # 知识库 Markdown 笔记(含 8 条预置术语表/速查;preset_seeded.json 记录落盘状态,删除不复活)
 ├── translations/               # 翻译历史
 ├── attachments/                # 会话附件
 ├── images/                     # AI 绘画产物
@@ -284,6 +288,8 @@ data/
 > 数据库迁移全自动且幂等：升级即建（如 V26 会话预设钉住列、V27 文档块全文索引 `doc_chunks_fts`）,存量数据自动回填；索引表缺失或分词器过旧时自动重建自愈，无需手工干预。
 >
 > 迁移前快照（v2.2.0）：检测到磁盘版本落后时，迁移前自动用 `VACUUM INTO` 生成 `metaagent-v<旧版本>-<时间戳>.db.bak` 快照（保留最近 2 份），升级异常时可手工回滚。
+>
+> 预置知识库（v2.3.0，v2.3.1 扩充至 11 条）：首次启动在 `notes/` 落盘 11 条预置内容并写入 `preset_seeded.json` 标记；标记存在期间被删除的预置不会自动复活，需要找回时用知识库页的「导入预置」一键恢复（合并不覆盖,完全重复的跳过）。
 
 ---
 

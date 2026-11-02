@@ -1,0 +1,42 @@
+# name	医学/临床
+# source	WHO 国际疾病分类 ICD-11 中文版;术语在线医学名词;人卫版医学教材通行译法
+diagnosis	诊断	
+prognosis	预后	
+symptom	症状	体征=sign(如体温、血压)
+syndrome	综合征	不译「症候群」(港台用法)
+etiology	病因	亦作 aetiology
+epidemiology	流行病学	
+incidence	发病率	新发病例
+prevalence	患病率	现患病例
+mortality	死亡率	
+clinical trial	临床试验	
+randomized controlled trial	随机对照试验	缩写 RCT
+efficacy	疗效	药效
+adverse event	不良事件	缩写 AE
+contraindication	禁忌证	不译「禁忌症」
+indication	适应证	不译「适应症」
+dosage	剂量	给药量
+oral administration	口服给药	
+injection	注射	
+generic drug	仿制药	对比 brand drug(原研药)
+comorbidity	合并症	共病
+standard of care	现行诊疗标准	缩写 SoC
+case report	病例报告	
+sensitivity	敏感度	诊断试验
+specificity	特异度	诊断试验
+screening	筛查	
+biopsy	活检	
+pathology	病理学	
+radiology	放射学	
+anesthesia	麻醉	
+inpatient	住院患者	
+outpatient	门诊患者	
+triage	分诊	急诊分级
+resuscitation	复苏	心肺复苏=CPR
+sepsis	脓毒症	不译「败血症」
+ischemia	缺血	
+infarction	梗死	心肌梗死=MI
+thrombosis	血栓形成	
+hypertension	高血压	
+diabetes mellitus	糖尿病	缩写 DM
+palliative care	姑息治疗	安宁疗护

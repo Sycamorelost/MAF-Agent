@@ -239,6 +239,26 @@
   min-width: 0; flex: 0 1 auto;
   color: var(--brand); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
+/* 预置知识库角标(预置术语表/表格速查,id 前缀 preset-) */
+.preset-badge {
+  flex: 0 0 auto;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--brand);
+  border-radius: var(--radius-s);
+  color: var(--brand);
+  font-size: var(--font-micro);
+  line-height: 1.6;
+}
+/* 预置导入报告弹窗(复用 att-modal 壳,内容可滚动) */
+.notes-import-report h4 {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--font-caption); font-weight: 600; color: var(--text-2);
+}
+.notes-import-report section + section { margin-top: var(--space-3); }
+.notes-import-report ul { margin: 0; padding-left: var(--space-4); }
+.notes-import-report li { margin: var(--space-1) 0; }
+.notes-import-report .r-title { color: var(--text-1); font-weight: 500; }
+.notes-import-report .r-detail { display: block; color: var(--text-4); font-size: var(--font-micro); }
 .notes-item-excerpt {
   margin-top: var(--space-1); font-size: var(--font-caption); color: var(--text-3);
   display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -324,6 +344,90 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: var(--space-3); padding: var(--space-8);
   color: var(--text-4); font-size: var(--font-sub); text-align: center;
+}
+
+/* ---------- 知识库落地页(侧栏默认收起时,中间直接展示最新 5 条 + 快速新建) ---------- */
+.notes-landing {
+  flex: 1; min-height: 0; overflow-y: auto; background: var(--bg-main);
+  display: flex; justify-content: center;
+}
+.notes-landing-inner {
+  width: 100%;
+  max-width: clamp(320px, 100%, calc(860px * var(--ui-scale)));
+  margin: 0 auto;
+  padding: clamp(var(--space-4), 5vh, calc(56px * var(--ui-scale))) var(--pad-x) var(--space-6);
+}
+.notes-landing-hero {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+  text-align: center;
+}
+.notes-landing-icon {
+  width: calc(52px * var(--ui-scale)); height: calc(52px * var(--ui-scale));
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--brand-soft); color: var(--brand-deep);
+}
+.notes-landing-hero h2 { margin: 0; font-size: var(--font-h2); color: var(--text-1); }
+.notes-landing-hero p { margin: 0; font-size: var(--font-caption); color: var(--text-3); }
+.notes-landing-actions {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.notes-cta {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  height: calc(34px * var(--ui-scale)); padding: 0 var(--space-4);
+  border: 1px solid var(--border); border-radius: var(--radius-s);
+  background: transparent; color: var(--text-2); cursor: pointer;
+  font-size: var(--font-caption); line-height: 1; white-space: nowrap;
+}
+.notes-cta:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--brand-line); color: var(--brand-deep); }
+.notes-cta:disabled { opacity: .5; cursor: not-allowed; }
+.notes-cta.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 500; }
+.notes-cta.primary:hover:not(:disabled) { background: var(--ink-hover); color: #fff; }
+.notes-landing-sub {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin: var(--space-5) 0 var(--space-3);
+  font-size: var(--font-caption); font-weight: 600; color: var(--text-2);
+}
+.notes-landing-sub .sp { flex: 1; }
+.notes-landing-sub .hint { font-weight: 400; color: var(--text-4); }
+.notes-cards {
+  display: grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(calc(190px * var(--ui-scale)), 100%), 1fr));
+}
+.notes-card {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  min-width: 0; text-align: left; cursor: pointer;
+  padding: var(--space-3);
+  background: var(--bg-surface); border: 1px solid var(--composer-border);
+  border-radius: var(--radius-m); box-shadow: var(--shadow-card);
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.notes-card:hover {
+  border-color: var(--brand-line); background: var(--bg-hover);
+  box-shadow: var(--shadow-card-h);
+}
+.notes-card-title {
+  font-size: var(--font-sub); font-weight: 600; color: var(--text-1);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.notes-card-excerpt {
+  font-size: var(--font-caption); color: var(--text-3); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden;
+  min-height: calc(1.6em * 2);
+}
+.notes-card-excerpt.empty { color: var(--text-4); }
+.notes-card-meta {
+  display: flex; gap: var(--space-2); min-width: 0; margin-top: auto;
+  font-size: var(--font-micro); color: var(--text-4); white-space: nowrap;
+}
+.notes-card-meta .tag {
+  min-width: 0; color: var(--brand);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.notes-landing-tip {
+  margin-top: var(--space-5); text-align: center;
+  font-size: var(--font-caption); color: var(--text-4); line-height: 1.7;
 }
 
 /* 笔记预览 Markdown(字号/间距走 token,与全局阶梯一致) */

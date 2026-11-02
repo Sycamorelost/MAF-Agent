@@ -1,4 +1,4 @@
-﻿import { useState, type Dispatch, type SetStateAction } from 'react';
+﻿﻿import { useState, type Dispatch, type SetStateAction } from 'react';
 import {
   mcpSaveConfig,
   mcpRemoveServer,
@@ -10,6 +10,7 @@ import {
 } from '../../lib/ipc/mcp';
 import { pickDataDir } from '../../lib/ipc';
 import type { McpServerStatus } from './McpServerCard';
+import { uiConfirm } from '../../components/confirmService';
 
 /** MCP server 级动作:启停、启动测试、一键启动、允许目录与删除。 */
 export function useMcpServerActions({
@@ -133,7 +134,15 @@ export function useMcpServerActions({
   };
 
   const onRemove = async (name: string) => {
-    if (!confirm(`删除 server \`${name}\` ?`)) return;
+    if (
+      !(await uiConfirm({
+        title: '删除 MCP Server',
+        message: `删除 server \`${name}\` ?`,
+        danger: true,
+        confirmText: '删除',
+      }))
+    )
+      return;
     try {
       await mcpRemoveServer(name);
       await refresh();

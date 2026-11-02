@@ -24,7 +24,7 @@ export interface ThinkingControl {
 
 interface Props {
   disabled?: boolean;
-  onPickFiles?: (files: FileList) => void;
+  onPickFiles?: (files: File[]) => void;
   webSearch?: boolean;
   onToggleWebSearch?: () => void;
   thinking?: ThinkingControl | null;
@@ -103,7 +103,8 @@ export default function ToolBar({
             accept={ACCEPT}
             style={{ display: 'none' }}
             onChange={(e) => {
-              if (e.target.files?.length) onPickFiles(e.target.files);
+              const list = e.target.files;
+              if (list?.length) onPickFiles(Array.from(list));
               e.target.value = '';
             }}
           />

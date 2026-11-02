@@ -959,6 +959,15 @@ mod tests {
         p
     }
 
+    /// 分批写会话是进程级全局表,且 `write_chunk_begin_in` 会顺带清扫过期会话:
+    /// 并行跑测试时,别的用例 begin 会把「被回拨成过期」的会话扫掉,
+    /// 令 TTL 用例拿到「不存在」而非「已超时」。相关用例统一持此锁串行执行。
+    static CHUNK_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn chunk_guard() -> std::sync::MutexGuard<'static, ()> {
+        CHUNK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn write_read_delete_with_backup() {
         let root = ws();
@@ -1155,6 +1164,7 @@ mod tests {
 
     #[test]
     fn chunked_write_restores_large_file_exactly() {
+        let _g = chunk_guard();
         let root = ws();
         let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
         // 100 段 × 1.5 万字符(≈4.3MB 字节),模拟模型分段输出
@@ -1181,6 +1191,7 @@ mod tests {
 
     #[test]
     fn chunked_write_rejects_unknown_id_and_backs_up_overwrite() {
+        let _g = chunk_guard();
         let root = ws();
         let base = bak();
         let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
@@ -1270,6 +1281,7 @@ mod tests {
 
     #[test]
     fn chunked_write_handles_10mb_across_many_chunks() {
+        let _g = chunk_guard();
         let root = ws();
         let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
         let chunk = "A".repeat(50_000); // 每片 50KB,共 200 片 = 10MB
@@ -1287,6 +1299,7 @@ mod tests {
 
     #[test]
     fn chunked_writes_are_isolated_across_threads() {
+        let _g = chunk_guard();
         let root = ws();
         let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
         std::thread::scope(|s| {
@@ -1311,6 +1324,7 @@ mod tests {
 
     #[test]
     fn chunked_write_supports_unicode_nested_path() {
+        let _g = chunk_guard();
         let root = ws();
         let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
         let rel = "中文目录/深层结构/实验报告.md";
@@ -1330,6 +1344,7 @@ mod tests {
 
     #[test]
     fn chunk_begin_enforces_workspace_boundary() {
+        let _g = chunk_guard();
         let root = ws();
         let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
         let err = write_chunk_begin_in(&root, "../outside-part.txt", true, &tmp, None)
@@ -1352,6 +1367,7 @@ mod tests {
 
     #[test]
     fn chunk_session_expires_after_ttl() {
+        let _g = chunk_guard();
         let root = ws();
         let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
         let st = write_chunk_begin_in(&root, "ttl.txt", false, &tmp, None).unwrap();
@@ -1374,6 +1390,7 @@ mod tests {
 
     #[test]
     fn chunk_sessions_per_owner_are_capped() {
+        let _g = chunk_guard();
         let root = ws();
         let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
         let sid = format!("owner-{}", uuid::Uuid::new_v4());

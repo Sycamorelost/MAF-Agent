@@ -1,0 +1,47 @@
+# name	商务/营销/项目
+# source	Google Analytics 官方中文;PMBOK 项目管理知识体系中文版;Microsoft 营销本地化风格指南
+KPI	关键绩效指标	通常保留 KPI
+OKR	目标与关键结果	通常保留 OKR
+conversion rate	转化率	
+target audience	目标受众	
+brand awareness	品牌知名度	
+campaign	营销活动	广告系列
+market share	市场份额	
+customer retention	客户留存	
+churn rate	流失率	
+engagement	互动率	参与度
+reach	触达	覆盖人数
+impression	曝光	
+click-through rate	点击率	缩写 CTR
+funnel	漏斗	转化漏斗
+positioning	定位	品牌定位
+value proposition	价值主张	
+bounce rate	跳出率	
+attribution	归因	营销归因
+cohort analysis	同期群分析	亦译「队列分析」
+LTV	用户生命周期价值	常保留 LTV
+CAC	获客成本	常保留 CAC
+MoM	环比	month over month
+YoY	同比	year over year
+scope creep	范围蔓延	PMBOK 术语
+deliverable	交付物	
+milestone	里程碑	
+stakeholder	利益相关者	
+onboarding	入职	客户语境=上手引导
+performance review	绩效评估	
+minutes	会议纪要	复数表「记录」
+agenda	议程	
+briefing	简报	
+reimbursement	报销	
+granularity	粒度	
+deduplication	去重	
+one-hot encoding	独热编码	
+single source of truth	单一事实来源	缩写 SSOT
+dashboard	仪表盘	
+drill down	下钻	
+segmentation	细分	客户/市场细分
+pivot table	数据透视表	
+pain point	痛点	
+quick win	速赢	快速见效项
+roadmap	路线图	
+backlog	待办列表	产品待办

@@ -317,6 +317,20 @@
 .set-actions { display: flex; gap: var(--space-2); align-items: center; }
 .set-actions .sp { flex: 1; }
 
+/* 生成时长快捷档位(设置 · 能力 · 生成时长):胶囊按钮,窄窗自动换行 */
+.gen-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.gen-chip {
+  height: calc(26px * var(--ui-scale)); padding: 0 var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-s);
+  background: transparent; color: var(--text-3); cursor: pointer;
+  font-size: var(--font-caption); line-height: 1; white-space: nowrap;
+}
+.gen-chip:hover { background: var(--bg-hover); border-color: var(--brand-line); color: var(--brand-deep); }
+.gen-chip.on {
+  background: var(--brand-soft); border-color: var(--brand-line);
+  color: var(--brand-deep); font-weight: 600;
+}
+
 /* 字段组(label + 控件): 窄窗时按「组」整体换行,避免 label 与控件被拆散 */
 .set-fld {
   display: flex; align-items: center; gap: var(--space-2);
@@ -429,6 +443,17 @@
 }
 .prov-card.open .prov-card-b { display: block; }
 .prov-card-b .set-prov-line { flex-wrap: wrap; align-items: center; }
+
+/* 服务商使用提示(如「勿用 GLM Coding Plan 的 Key」),折叠面板展开后首行展示 */
+.prov-notice {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-caption);
+  line-height: 1.6;
+  color: var(--text-2);
+  background: var(--warn-soft);
+  border-left: 2px solid var(--warn);
+}
 
 /* ---- API 流转:多 Key 槽位 ---- */
 .key-slots {

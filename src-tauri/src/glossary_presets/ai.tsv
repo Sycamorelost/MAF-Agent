@@ -1,0 +1,46 @@
+# name	人工智能/机器学习
+# source	Google《机器学习术语表》中文本地化;术语在线;arXiv 论文与主流框架(Transformers/Diffusers)中文文档惯例
+model	模型	
+training set	训练集	
+validation set	验证集	
+test set	测试集	
+inference	推理	区别于 training(训练)
+fine-tuning	微调	缩写 SFT=监督微调
+overfitting	过拟合	
+underfitting	欠拟合	
+regularization	正则化	
+embedding	嵌入	向量化表示
+attention	注意力机制	
+hallucination	幻觉	模型编造事实
+ground truth	真值	不译「地面真相」
+annotation	标注	人工标注
+labeled data	标注数据	
+feature engineering	特征工程	
+loss function	损失函数	
+gradient descent	梯度下降	
+learning rate	学习率	
+epoch	轮次	训练轮次
+batch size	批大小	
+checkpoint	检查点	模型存档
+distillation	蒸馏	知识蒸馏
+quantization	量化	模型压缩
+alignment	对齐	价值对齐
+guardrail	护栏	安全护栏
+benchmark	基准测试	
+evaluation	评估	
+ablation study	消融实验	
+token	词元	Google ML 术语表译法;鉴权语境见 access token
+tokenizer	分词器	
+multimodal	多模态	
+few-shot learning	少样本学习	
+zero-shot	零样本	
+chain of thought	思维链	缩写 CoT
+retrieval-augmented generation	检索增强生成	缩写 RAG
+vector database	向量数据库	
+reranking	重排序	
+chunking	分块	RAG 文档切分
+prompt	提示词	不译「提示」
+agent	智能体	不译「代理」
+hallucination rate	幻觉率	
+temperature	温度	采样参数
+top-p sampling	核采样	亦作 nucleus sampling

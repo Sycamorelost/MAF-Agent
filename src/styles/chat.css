@@ -874,18 +874,21 @@
   30% { opacity: 1; transform: translateY(-2px); }
 }
 
-/* 1.2 思考块:收起为 0 高度,展开为「固定高度的可滚动窗口」
-   —— 超出 320px 在块内部滚动,不再撑高消息流或被视口裁断 */
+/* 1.2 思考块:收起为 0 高度,展开为「固定大小的可滚动窗口」
+   —— 高度随 --ui-scale 缩放,同时按视口高度收敛(小窗不占满、大窗不超高),内容在块内部滚动 */
 .reasoning-body {
+  height: 0;
   max-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  transition: max-height 0.35s ease-out, padding 0.25s ease-out;
+  scrollbar-gutter: stable;
+  transition: height 0.35s ease-out, padding 0.25s ease-out;
   padding: 0 var(--space-3);
 }
 .reasoning-block.open .reasoning-body {
-  max-height: calc(320px * var(--ui-scale));
+  height: clamp(calc(120px * var(--ui-scale)), 34vh, calc(240px * var(--ui-scale)));
+  max-height: clamp(calc(120px * var(--ui-scale)), 34vh, calc(240px * var(--ui-scale)));
   padding: var(--space-2) var(--space-3);
 }
 

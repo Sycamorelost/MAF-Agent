@@ -1,5 +1,6 @@
 import type { VersionItem } from '../../lib/ipc';
 import type { DiffSide } from '../MemoryDiffDialog';
+import { uiConfirm } from '../confirmService';
 
 interface Props {
   versions: VersionItem[];
@@ -39,7 +40,10 @@ export function VersionHistory({ versions, selected, onToggle, onOpenDiff, onRol
                 type="button"
                 className="btn ghost"
                 onClick={() => {
-                  if (confirm(`回滚到 v${v.id}(${v.note})?`)) onRollback(v.id);
+                  void (async () => {
+                    if (await uiConfirm({ title: '回滚记忆版本', message: `回滚到 v${v.id}(${v.note})?` }))
+                      onRollback(v.id);
+                  })();
                 }}
               >
                 回滚

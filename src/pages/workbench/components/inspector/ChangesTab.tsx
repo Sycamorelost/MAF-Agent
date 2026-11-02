@@ -7,6 +7,7 @@ import { diffLines } from '../../../../lib/diffLines';
 import { fmtBytes } from '../../../../lib/toolTrace';
 import { IconClock, IconCompare, IconInfo, IconRefresh, IconRestore } from '../../../../components/icons';
 import type { WorkbenchData } from '../../useWorkbenchData';
+import { uiConfirm } from '../../../../components/confirmService';
 
 interface DiffState {
   rel: string;
@@ -58,9 +59,10 @@ export function ChangesTab({ data }: { data: WorkbenchData }) {
 
   const restore = async (b: FsBackup, label: string) => {
     if (
-      !window.confirm(
-        `${label}\n\n文件:${b.rel}\n备份时间:${b.created}\n\n恢复前会自动再备份一次当前内容。`,
-      )
+      !(await uiConfirm({
+        title: '恢复备份',
+        message: `${label}\n\n文件:${b.rel}\n备份时间:${b.created}\n\n恢复前会自动再备份一次当前内容。`,
+      }))
     ) {
       return;
     }

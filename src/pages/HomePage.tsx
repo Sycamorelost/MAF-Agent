@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import Composer from '../components/Composer';
+import Toast from '../components/Toast';
 import AgentPickerDialog from '../components/AgentPickerDialog';
 import {
   IconEdit,
@@ -24,7 +25,9 @@ import { DEFAULT_THINKING_LEVEL, useThinkingStore } from '../stores/thinking';
 import type { ThinkingSelection } from '../stores/thinking';
 import * as ipc from '../lib/ipc';
 import { sessionPath } from '../lib/workbench';
+import { useToast } from '../lib/useToast';
 import type { AttachmentMeta } from '../lib/ipc';
+import type { SkippedFile } from '../lib/attachmentDrop';
 
 /** 首页默认提示语(用户可在设置 · 主题与字体大小 · 首页中自定义)。 */
 export const DEFAULT_HOME_PROMPT = 'myAgent | 向更美好的生活出发！';
@@ -114,6 +117,8 @@ export default function HomePage() {
   });
   const [thinkCap, setThinkCap] = useState<ipc.ReasoningCapability | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 拖入文件夹时的逐个文件拒绝提示(轻提示,不占用错误栏) */
+  const { toast, showToast, hideToast } = useToast();
   const [greeting, setGreeting] = useState(DEFAULT_HOME_PROMPT);
   /** 最近对话加载失败(非阻塞,仅小节内提示) */
   const [recentError, setRecentError] = useState(false);
@@ -181,8 +186,22 @@ export default function HomePage() {
     [sessions],
   );
 
-  const pickFiles = (files: FileList) => {
-    const arr = Array.from(files);
+  const pickFiles = (files: File[], notice?: string, rejected?: SkippedFile[]) => {
+    // notice:拖入文件夹时的逐个文件拒绝提示(黑名单、空文件、超限)
+    // rejected:逐文件拒绝明细,会话尚未创建,以空 session_id 落盘留存
+    if (rejected?.length) {
+      void ipc
+        .recordAttachmentRejects(
+          '',
+          rejected.map((r) => ({ name: r.name, reason: r.reason, source: 'import' as const })),
+        )
+        .catch(() => {});
+    }
+    if (files.length === 0) {
+      if (notice) showToast(notice, 5200);
+      return;
+    }
+    const arr = files;
     const err = ipc.validateAttachmentFiles(arr, pending.length);
     if (err) {
       setError(err);
@@ -203,6 +222,7 @@ export default function HomePage() {
         },
       })),
     ]);
+    if (notice) showToast(notice, 5200);
   };
 
   const removeAttachment = (index: number) => {
@@ -239,7 +259,18 @@ export default function HomePage() {
           const dataUrl = await ipc.readFileAsDataURL(file);
           const idx = dataUrl.indexOf(',');
           const b64 = idx >= 0 ? dataUrl.slice(idx + 1) : dataUrl;
-          const meta = await ipc.saveAttachment(id, file.name, b64);
+          let meta: AttachmentMeta;
+          try {
+            meta = await ipc.saveAttachment(id, file.name, b64);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            void ipc
+              .recordAttachmentRejects(id, [
+                { name: file.name, reason: msg, source: 'save' as const },
+              ])
+              .catch(() => {});
+            throw e;
+          }
           metas.push(meta);
           if (meta.kind === 'image') images[meta.path] = dataUrl;
         }
@@ -361,6 +392,7 @@ export default function HomePage() {
           onClose={() => setPickerOpen(false)}
         />
       )}
+      <Toast text={toast} onClose={hideToast} />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   type TaskStep,
 } from '../../../lib/ipc/task';
 import { IconCheck, IconChevronDown, IconPlus, IconTrash, IconX } from '../../../components/icons';
+import { uiConfirm } from '../../../components/confirmService';
 
 const STATUS_FLOW: { id: TaskStatus; label: string }[] = [
   { id: 'pending', label: '待办' },
@@ -77,8 +78,16 @@ export function TaskCard({ task, onChanged, onError }: Props) {
     setNewStep('');
   };
 
-  const onDelete = () => {
-    if (!window.confirm(`删除任务「${task.title}」?关联的步骤清单保留在会话中。`)) return;
+  const onDelete = async () => {
+    if (
+      !(await uiConfirm({
+        title: '删除任务',
+        message: `删除任务「${task.title}」?关联的步骤清单保留在会话中。`,
+        danger: true,
+        confirmText: '删除',
+      }))
+    )
+      return;
     void run(taskDelete(task.id));
   };
 

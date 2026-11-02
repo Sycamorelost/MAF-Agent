@@ -4,6 +4,7 @@ import type { VirtualizerHandle } from 'virtua';
 import { mcpClearSessionAllowed } from '../../lib/ipc/mcp';
 import StreamingBubble from '../../components/StreamingBubble';
 import Composer from '../../components/Composer';
+import Toast from '../../components/Toast';
 import { ResizeHandle } from '../../components/ResizeHandle';
 import { usePanelWidth } from '../../lib/usePanelWidth';
 import MemPanel from '../../components/MemPanel';
@@ -264,6 +265,7 @@ export default function ChatPage() {
     setPendingImages,
     onSend: chat.onSend,
     onError: chat.setError,
+    onNotice: (msg: string) => chat.showToast(msg, 5200),
   });
 
   // 新消息到达 / 切换会话时:平滑滚动到底部
@@ -271,12 +273,20 @@ export default function ChatPage() {
   //  用 ref 读取最新目标,避免定位完成后清空 query 触发本 effect 再次拉到底部)
   const msgTargetRef = useRef<string | null>(null);
   msgTargetRef.current = searchParams.get('msg');
+  /** 用户是否停在底部(跟随新内容);一旦手动上滚即暂停,滚回底部恢复。 */
+  const followRef = useRef(true);
+  /** 换会话时重置为跟随 */
+  useEffect(() => {
+    followRef.current = true;
+  }, [sessionId]);
   useEffect(() => {
     if (prependingRef.current) {
       prependingRef.current = false;
       return;
     }
     if (msgTargetRef.current) return;
+    // 用户正在上滚查看时不抢滚动,避免「一有输出就被拽回底部」
+    if (!followRef.current) return;
     // P3:虚拟列表条目按需挂载,直接 scrollTo(scrollHeight) 会因高度估算偏短;
     // 先按 index 定位到最后一条(库内部会在测量后校正),再补滚动一次以覆盖列表下方元素。
     const n = messages.length;
@@ -287,6 +297,13 @@ export default function ChatPage() {
     });
     return () => cancelAnimationFrame(raf);
   }, [sessionId, messages.length]);
+
+  /** 距底部 80px 内视为「跟随」,否则用户已主动上滚查看。 */
+  const onScrollFollow = () => {
+    const sc = scrollRef.current;
+    if (!sc) return;
+    followRef.current = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
+  };
 
   // ---------- D3.1/D3.2:模型切换交接 ----------
   const { handoff, switchBanner, setSwitchBanner, showInjected, setShowInjected,
@@ -323,7 +340,7 @@ export default function ChatPage() {
             onToggleOutline={() => setOutlineOpen((v) => !v)}
             onError={chat.setError}
           />
-          <div className="chat-scroll" ref={scrollRef}>
+          <div className="chat-scroll" ref={scrollRef} onScroll={onScrollFollow}>
             <div className="chat-inner">
               {switchBanner && (
                 <div className="switch-banner">
@@ -435,7 +452,11 @@ export default function ChatPage() {
           <Composer
             value={composerText}
             onChange={setComposerText}
-            onSend={chat.onSend}
+            onSend={() => {
+              // 用户主动发送:恢复「跟随到底部」
+              followRef.current = true;
+              chat.onSend();
+            }}
             disabled={chat.sending || chat.searching}
             variant="docked"
             sending={chat.sending}
@@ -549,7 +570,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {chat.toast && <div className="toast">{chat.toast}</div>}
+      {chat.toast && <Toast text={chat.toast} onClose={chat.hideToast} />}
     </>
   );
 }

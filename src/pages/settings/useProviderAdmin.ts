@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as ipc from '../../lib/ipc';
+import { uiConfirm } from '../../components/confirmService';
 
 export function useProviderAdmin() {
   const [templates, setTemplates] = useState<ipc.ProviderTemplate[]>([]);
@@ -97,7 +98,15 @@ export function useProviderAdmin() {
 
   /** 删除单个槽位的 Key。 */
   const onDeleteSlot = async (providerId: string, slot: number) => {
-    if (!confirm(`删除槽位 #${slot} 的 API Key?`)) return;
+    if (
+      !(await uiConfirm({
+        title: '删除 API Key',
+        message: `删除槽位 #${slot} 的 API Key?`,
+        danger: true,
+        confirmText: '删除',
+      }))
+    )
+      return;
     await ipc.deleteProviderKey(providerId, slot);
     await loadSlots(providerId);
     setStoredIds(await ipc.listStoredProviderIds());
@@ -124,7 +133,15 @@ export function useProviderAdmin() {
   };
 
   const onClearKey = async (providerId: string) => {
-    if (!confirm(`清除 ${providerId} 的全部 API Key?`)) return;
+    if (
+      !(await uiConfirm({
+        title: '清除 API Key',
+        message: `清除 ${providerId} 的全部 API Key?`,
+        danger: true,
+        confirmText: '清除',
+      }))
+    )
+      return;
     await ipc.deleteApiKey(providerId);
     setStoredIds((ids) => ids.filter((x) => x !== providerId));
     await loadSlots(providerId);
@@ -215,6 +232,7 @@ export function useProviderAdmin() {
         all_models: [],
         image_models: [],
         docs_url: null,
+        notice: null,
         openai_compat: true,
       });
       setTemplates(await ipc.listProviderTemplates());
@@ -230,7 +248,15 @@ export function useProviderAdmin() {
 
   /** 删除服务商(内置模板亦可删除),同时清理其 Key、单模型配置与模型缓存。 */
   const onDeleteTemplate = async (providerId: string, name: string) => {
-    if (!confirm(`删除服务商「${name}」?将同时清除其 API Key、单模型配置与模型缓存。`)) return;
+    if (
+      !(await uiConfirm({
+        title: '删除服务商',
+        message: `删除服务商「${name}」?将同时清除其 API Key、单模型配置与模型缓存。`,
+        danger: true,
+        confirmText: '删除',
+      }))
+    )
+      return;
     setSavingTpl(providerId);
     setTplMsg(null);
     try {

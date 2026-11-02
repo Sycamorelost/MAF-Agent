@@ -3,6 +3,9 @@
 pub mod agents;
 pub mod aiflavor;
 pub mod attachment;
+pub mod attachment_center;
+pub mod attachment_quota;
+pub mod attachment_rejects;
 pub mod capability;
 pub mod datadir;
 pub mod diagnostics;
@@ -97,6 +100,12 @@ macro_rules! all_commands {
             crate::commands::attachment::list_all_attachments,
             crate::commands::attachment::insert_attachment_to_session,
             crate::commands::attachment::delete_attachment,
+            // 附件中心增强(F7.1):批量清理 / 失败重试 / 拒绝原因留存
+            crate::commands::attachment_center::delete_attachments_batch,
+            crate::commands::attachment_center::retry_attachment_extract,
+            crate::commands::attachment_rejects::record_attachment_rejects,
+            crate::commands::attachment_rejects::list_attachment_rejects,
+            crate::commands::attachment_rejects::clear_attachment_rejects,
             // 文档预检索(R4:发送前本地检索,不依赖模型主动调工具)
             crate::commands::doc::doc_prefetch,
             // provider
@@ -140,6 +149,7 @@ macro_rules! all_commands {
             // 翻译增强(迭代 D6)
             crate::commands::translate::glossary_list,
             crate::commands::translate::glossary_save,
+            crate::commands::translate::glossary_import_presets,
             crate::commands::translate::save_translation,
             crate::commands::translate::list_translations,
             crate::commands::translate::delete_translation,
@@ -179,6 +189,7 @@ macro_rules! all_commands {
             crate::commands::notes::notes_get,
             crate::commands::notes::notes_save,
             crate::commands::notes::notes_delete,
+            crate::commands::notes::notes_reimport_presets,
             // Agent 模板(迭代 B2)
             crate::commands::agents::list_agent_templates,
             crate::commands::agents::save_agent_template,

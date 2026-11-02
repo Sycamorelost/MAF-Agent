@@ -1,5 +1,13 @@
 import { useRef, useEffect, useState, type ReactNode } from 'react';
-import { searchAll, type AttachmentMeta } from '../../lib/ipc';
+import { searchAll, MAX_ATTACHMENTS, type AttachmentMeta } from '../../lib/ipc';
+import {
+  collectDroppedFiles,
+  entriesOf,
+  screenFiles,
+  skipMessage,
+  type SkippedFile,
+} from '../../lib/attachmentDrop';
+import { loadAttachmentPolicy } from '../../lib/attachmentPolicy';
 import { registerAtRef } from '../../lib/atRefs';
 import AtMenu, { findAtTrigger, type AtItem } from './AtMenu';
 import AttachTray from './AttachTray';
@@ -21,8 +29,10 @@ interface Props {
   onStop?: () => void;
   /** 待发送附件列表 */
   attachments?: AttachmentMeta[];
-  /** 选择文件回调(input[type=file] 内部处理) */
-  onPickFiles?: (files: FileList) => void;
+  /** 选择/拖入/粘贴的文件回调(input[type=file] 内部处理)。
+   *  notice 为跳过项提示(黑名单、阈值、空文件),无跳过时为 undefined;
+   *  rejected 为逐文件拒绝明细,供调用方留存拒绝原因 */
+  onPickFiles?: (files: File[], notice?: string, rejected?: SkippedFile[]) => void;
   onRemoveAttachment?: (index: number) => void;
   /** 待发送引用(完整原文存 state,输入框只显示摘要) */
   quotes?: QuoteRef[];
@@ -65,22 +75,56 @@ export default function Composer({
   const ref = useRef<HTMLTextAreaElement>(null);
   const { boxH, resizing, onResizeDown, onResizeMove, onResizeUp } = useComposerHeight(ref);
 
-  /** 从 clipboard event 中抽取 file items,转成 FileList 供 onPickFiles 统一处理。 */
-  const extractPasteFiles = (e: React.ClipboardEvent): FileList | null => {
-    if (!onPickFiles || !e.clipboardData) return null;
+  /** 从 clipboard event 中抽取 file items,交给统一的提交流程。 */
+  const extractPasteFiles = (e: React.ClipboardEvent): File[] => {
+    if (!onPickFiles || !e.clipboardData) return [];
     const items = e.clipboardData.items;
     const files: File[] = [];
     for (const item of Array.from(items)) {
       if (item.kind === 'file') {
         const f = item.getAsFile();
-        if (f && f.size > 0) files.push(f);
+        if (f) files.push(f);
       }
     }
-    if (files.length === 0) return null;
-    const dt = new DataTransfer();
-    files.forEach((f) => dt.items.add(f));
-    return dt.files;
+    return files;
   };
+
+  /** 统一提交(选择/粘贴):逐个筛掉不允许的文件,其余照常加入,拒绝项逐个提示。 */
+  const submitPicked = async (files: File[]) => {
+    if (!onPickFiles || files.length === 0) return;
+    const policy = await loadAttachmentPolicy();
+    const { ok, skipped } = screenFiles(files, policy.blockedExt);
+    const remaining = Math.max(0, MAX_ATTACHMENTS - (attachments?.length ?? 0));
+    const kept = ok.slice(0, remaining);
+    const notes =
+      ok.length > kept.length
+        ? [`受单条消息 ${MAX_ATTACHMENTS} 个附件上限约束,${ok.length - kept.length} 个文件未加入`]
+        : [];
+    onPickFiles(kept, skipMessage(skipped, notes), skipped);
+  };
+
+  /** 拖入:文件夹递归展开(受单文件夹阈值与消息附件总数约束),再走统一提交。 */
+  const handleDrop = async (e: React.DragEvent) => {
+    if (!onPickFiles) return;
+    // DataTransfer 在 await 之后可能被清空,先同步取出条目与文件
+    const entries = entriesOf(e.dataTransfer);
+    const plain = Array.from(e.dataTransfer.files ?? []);
+    if (entries.length === 0 && plain.length === 0) return;
+    e.preventDefault();
+    try {
+      const policy = await loadAttachmentPolicy();
+      const remaining = Math.max(0, MAX_ATTACHMENTS - (attachments?.length ?? 0));
+      const { files, skipped, notices } = await collectDroppedFiles(entries, plain, {
+        folderLimit: policy.folderLimit,
+        totalLimit: remaining,
+        blockedExt: policy.blockedExt,
+      });
+      onPickFiles(files, skipMessage(skipped, notices), skipped);
+    } catch (err) {
+      onPickFiles([], `读取拖入的文件失败:${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
 
   // ---------- F9:@ 召回(记忆 + 知识库) ----------
   const [atState, setAtState] = useState<{ start: number; query: string } | null>(null);
@@ -181,11 +225,7 @@ export default function Composer({
       }}
       onDrop={(e) => {
         setDragOver(false);
-        if (!onPickFiles) return;
-        if (e.dataTransfer.files.length > 0) {
-          e.preventDefault();
-          onPickFiles(e.dataTransfer.files);
-        }
+        void handleDrop(e);
       }}
     >
       <div className="composer-box">
@@ -213,11 +253,10 @@ export default function Composer({
             syncAtTrigger(e.target.value, e.target.selectionStart ?? e.target.value.length);
           }}
           onPaste={(e) => {
-            const fl = extractPasteFiles(e);
-            if (fl) {
-              e.preventDefault();
-              onPickFiles!(fl);
-            }
+            const files = extractPasteFiles(e);
+            if (files.length === 0) return;
+            e.preventDefault();
+            void submitPicked(files);
           }}
           onSelect={(e) => {
             const t = e.currentTarget;
@@ -271,7 +310,7 @@ export default function Composer({
         )}
         <ToolBar
           disabled={disabled}
-          onPickFiles={onPickFiles}
+          onPickFiles={(files) => void submitPicked(files)}
           webSearch={webSearch}
           onToggleWebSearch={onToggleWebSearch}
           thinking={thinking}

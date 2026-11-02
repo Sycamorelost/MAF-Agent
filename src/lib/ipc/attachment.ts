@@ -74,5 +74,63 @@ export const insertAttachmentToSession = (sessionId: string, path: string) =>
 export const deleteAttachment = (messageId: number, path: string) =>
   invoke<void>('delete_attachment', { messageId, path });
 
+/** 批量清理的单条请求 */
+export interface BatchDeleteItem {
+  message_id: number;
+  path: string;
+}
 
+/** 批量清理的单条结果(失败项由前端保留) */
+export interface BatchDeleteOutcome {
+  message_id: number;
+  path: string;
+  ok: boolean;
+  error: string | null;
+}
 
+/** 批量删除附件(逐条返回结果,单条失败不影响其他条目)。 */
+export const deleteAttachmentsBatch = (items: BatchDeleteItem[]) =>
+  invoke<BatchDeleteOutcome[]>('delete_attachments_batch', { items });
+
+/** 重试文本提取(文件仍在时重新解析并刷新元数据)。 */
+export const retryAttachmentExtract = (messageId: number, path: string) =>
+  invoke<AttachmentMeta>('retry_attachment_extract', { messageId, path });
+
+// ============ 附件拒绝原因留存(F7.1)============
+
+/** 拒绝来源:导入采集阶段 / 后端保存失败 */
+export type RejectSource = 'import' | 'save';
+
+/** 待记录的拒绝项 */
+export interface AttachmentRejectInput {
+  name: string;
+  reason: string;
+  source: RejectSource;
+}
+
+/** 已落盘的拒绝记录(附带会话标题) */
+export interface AttachmentRejectEntry {
+  time: string;
+  session_id: string;
+  session_title: string;
+  name: string;
+  reason: string;
+  source: string;
+}
+
+/** 拒绝记录列表:总数 + 最新若干条 */
+export interface AttachmentRejectList {
+  total: number;
+  items: AttachmentRejectEntry[];
+}
+
+/** 记录导入/保存被拒绝的文件(失败不阻断主流程)。 */
+export const recordAttachmentRejects = (sessionId: string, items: AttachmentRejectInput[]) =>
+  invoke<void>('record_attachment_rejects', { sessionId, items });
+
+/** 列出最近被拒绝的文件(最新在前)。 */
+export const listAttachmentRejects = (limit = 200) =>
+  invoke<AttachmentRejectList>('list_attachment_rejects', { limit });
+
+/** 清空拒绝记录。 */
+export const clearAttachmentRejects = () => invoke<void>('clear_attachment_rejects');

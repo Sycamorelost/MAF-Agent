@@ -12,6 +12,7 @@ mod agents;
 mod agents_prompts;
 mod aiflavor;
 mod attachment;
+mod attachment_guard;
 mod commands;
 mod db;
 mod diagnostics;
@@ -19,10 +20,12 @@ mod doc;
 mod draw_prompt;
 mod export;
 mod fs;
+mod glossary_presets;
 mod gui;
 mod mcp;
 mod memory;
 mod navguard;
+mod notes_presets;
 mod paths;
 mod presets;
 mod project_rules;
@@ -179,6 +182,12 @@ pub fn run() {
 
             // 学习中心目录迁移:data/study/* → learningcenter/*(幂等;目标已存在则并集合并,不覆盖)
             study::lc::migrate_legacy_dirs();
+
+            // 预置知识库:首次启动落盘术语表/表格速查(用户可编辑/删除,删除不复活);
+            // 失败仅记日志,不阻断启动。
+            if let Err(e) = notes_presets::seed_if_needed() {
+                log::warn!("预置知识库种子失败: {e}");
+            }
 
             // 迭代 D9:启动全局输入监听(划词提问)
             selection::spawn_listener(app.handle().clone());

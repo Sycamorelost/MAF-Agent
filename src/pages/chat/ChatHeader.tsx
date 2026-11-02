@@ -21,6 +21,7 @@ import { useSessionsStore } from '../../stores/sessions';
 import * as ipc from '../../lib/ipc';
 import { safeExportName } from '../../lib/export/names';
 import { buildSessionHtml, buildSessionMarkdown } from './chatExport';
+import { uiConfirm } from '../../components/confirmService';
 
 /** 分支显示名:用户自定义 > 默认(主分支 / 分支 xxxx)。 */
 function branchLabel(b: ipc.BranchInfo | undefined, fallbackId: string): string {
@@ -113,7 +114,13 @@ export function ChatHeader({
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg === ipc.EXPORT_TARGET_EXISTS) {
-          if (!window.confirm(`目标文件已存在:\n${pick.path}\n\n确认覆盖?`)) return;
+          if (
+            !(await uiConfirm({
+              title: '确认覆盖',
+              message: `目标文件已存在:\n${pick.path}\n\n确认覆盖?`,
+            }))
+          )
+            return;
           saved = await doExport(true);
         } else {
           throw e;

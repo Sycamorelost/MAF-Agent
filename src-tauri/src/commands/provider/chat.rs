@@ -203,13 +203,11 @@ pub async fn chat_stream(
 }
 
 /// P2(选项 B):整体生成的总时长上限 —— 覆盖连接、首字等待、流式输出与各轮工具调用。
+/// 时长由设置「生成时长」决定(默认 10 分钟,1..=1440),大工程可调大。
 /// 不额外设首字/空闲分段超时(长任务不会被中途的慢思考误杀),只在总时长到点后收口。
 /// 超时会向前端补 `Error`(而不是静默关闭 channel),前端据此保留已生成内容(P1)。
-const STREAM_TOTAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
-
-/// 距离总时长上限还剩多少;已超时返回 0(让下一次 await 立即超时收口)。
-fn remaining_budget(started: &Instant) -> Duration {
-    STREAM_TOTAL_TIMEOUT.saturating_sub(started.elapsed())
+fn remaining_budget(started: &Instant, total: Duration) -> Duration {
+    total.saturating_sub(started.elapsed())
 }
 
 /// 用量归因上下文(与 Key 选择无关,仅影响落库内容)。
@@ -248,6 +246,9 @@ fn spawn_chat_with_failover(
         let group = rotation_group(&spec.provider_id, &spec.base_url);
         let request_id = next_request_id();
         let started = Instant::now();
+        // 每次请求开始时读一次设置(默认 10 分钟,已夹到 1..=1440):改完设置对下一次请求生效
+        let total_minutes = crate::settings::chat_timeout_minutes();
+        let total_timeout = Duration::from_secs(u64::from(total_minutes) * 60);
         // D5:按模型上下文窗口算预算(未知窗口回落 48k 字符),整轮对话只算一次
         let budget = ContextBudget::for_model(&spec.provider_id, &spec.model);
         let mut stream_options = cfg.supports_stream_options;
@@ -262,11 +263,11 @@ fn spawn_chat_with_failover(
 
         'rounds: loop {
             // P2:总时长到点即收口(工具执行同样计入预算),避免单轮工具卡死绕过上限。
-            if remaining_budget(&started).is_zero() {
+            if remaining_budget(&started, total_timeout).is_zero() {
                 let _ = channel.send(StreamChunk::Error {
                     message: format!(
                         "生成超时(总时长超过 {} 分钟),已中断;已生成内容会保留。",
-                        STREAM_TOTAL_TIMEOUT.as_secs() / 60
+                        total_minutes
                     ),
                 });
                 return;
@@ -353,7 +354,7 @@ fn spawn_chat_with_failover(
 
                 // P2:建立连接 + 等到 2xx 响应的剩余总预算(不再单独设首字超时)
                 let connect = tokio::time::timeout(
-                    remaining_budget(&started),
+                    remaining_budget(&started, total_timeout),
                     provider.chat_stream(req.clone()),
                 )
                 .await;
@@ -374,7 +375,10 @@ fn spawn_chat_with_failover(
                         let mut timed_out = false;
                         loop {
                             let chunk =
-                                match tokio::time::timeout(remaining_budget(&started), stream.next())
+                                match tokio::time::timeout(
+                                    remaining_budget(&started, total_timeout),
+                                    stream.next(),
+                                )
                                     .await
                                 {
                                     Ok(Some(c)) => c,
@@ -460,7 +464,7 @@ fn spawn_chat_with_failover(
                         if timed_out {
                             let msg = format!(
                                 "生成超时(总时长超过 {} 分钟),已中断;已生成内容会保留。",
-                                STREAM_TOTAL_TIMEOUT.as_secs() / 60
+                                total_minutes
                             );
                             let _ = channel.send(StreamChunk::Error { message: msg });
                             return;
@@ -621,7 +625,7 @@ fn spawn_chat_with_failover(
                     Err(_elapsed) => {
                         last_error = Some(format!(
                             "生成超时(总时长超过 {} 分钟),已中断;已生成内容会保留。",
-                            STREAM_TOTAL_TIMEOUT.as_secs() / 60
+                            total_minutes
                         ));
                         break;
                     }

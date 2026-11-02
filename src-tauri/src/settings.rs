@@ -63,6 +63,85 @@ pub struct AppSettings {
     /// 会话创建时钉住;已有会话可用 sessions.preset_id 覆盖。
     #[serde(default = "default_preset")]
     pub default_preset: String,
+    /// 拖入文件夹时单文件夹最多加入的附件数(1..=50;默认 10)
+    #[serde(default = "default_attachment_folder_limit")]
+    pub attachment_folder_limit: u32,
+    /// 附件扩展名黑名单的追加项(小写、不含点)。
+    /// 内置默认清单(`attachment_guard::DEFAULT_BLOCKED_EXT`)始终生效,此处只能追加。
+    #[serde(default)]
+    pub attachment_blocked_ext: Vec<String>,
+    /// 单个会话的附件数量配额(去重后的文件数;1..=2000;默认 200)
+    #[serde(default = "default_attachment_session_max_files")]
+    pub attachment_session_max_files: u32,
+    /// 单个会话的附件容量配额(MB;1..=10240;默认 1024)
+    #[serde(default = "default_attachment_session_max_mb")]
+    pub attachment_session_max_mb: u32,
+    /// 单次生成的总时长上限(分钟):覆盖连接、思考、流式输出与工具轮次。
+    /// 默认 10 分钟;大工程可调大(上限 24 小时),到点后收口并保留已生成内容。
+    #[serde(default = "default_chat_timeout_minutes")]
+    pub chat_timeout_minutes: u32,
+}
+
+/// 生成时长下限(分钟):低于 1 分钟无法完成一次正常请求。
+pub const MIN_CHAT_TIMEOUT_MINUTES: u32 = 1;
+/// 生成时长上限(分钟):24 小时,避免误填极大值造成无限挂起。
+pub const MAX_CHAT_TIMEOUT_MINUTES: u32 = 1440;
+/// 生成时长默认值(分钟):与旧版固定 10 分钟一致,升级后行为不变。
+pub const DEFAULT_CHAT_TIMEOUT_MINUTES: u32 = 10;
+
+/// 单会话附件数量配额范围:1..=2000。
+pub const MIN_ATTACHMENT_SESSION_MAX_FILES: u32 = 1;
+pub const MAX_ATTACHMENT_SESSION_MAX_FILES: u32 = 2000;
+/// 单会话附件容量配额范围(MB):1..=10240(10GB)。
+pub const MIN_ATTACHMENT_SESSION_MAX_MB: u32 = 1;
+pub const MAX_ATTACHMENT_SESSION_MAX_MB: u32 = 10240;
+/// 配额默认值:200 个文件 / 1GB,足以覆盖常规长会话,又避免单会话无限膨胀。
+pub const DEFAULT_ATTACHMENT_SESSION_MAX_FILES: u32 = 200;
+pub const DEFAULT_ATTACHMENT_SESSION_MAX_MB: u32 = 1024;
+
+fn default_attachment_session_max_files() -> u32 {
+    DEFAULT_ATTACHMENT_SESSION_MAX_FILES
+}
+
+fn default_attachment_session_max_mb() -> u32 {
+    DEFAULT_ATTACHMENT_SESSION_MAX_MB
+}
+
+/// 生效的单会话附件配额(读取设置并钳制到合法范围)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AttachmentQuota {
+    pub max_files: usize,
+    pub max_bytes: u64,
+}
+
+impl AttachmentQuota {
+    /// 容量配额的展示值(MB)
+    pub fn max_mb(&self) -> u64 {
+        self.max_bytes / (1024 * 1024)
+    }
+}
+
+/// 读取当前单会话附件配额(每次保存附件时读取,设置改完即时生效)。
+pub fn attachment_quota() -> AttachmentQuota {
+    let s = load();
+    let files = s
+        .attachment_session_max_files
+        .clamp(MIN_ATTACHMENT_SESSION_MAX_FILES, MAX_ATTACHMENT_SESSION_MAX_FILES);
+    let mb = s
+        .attachment_session_max_mb
+        .clamp(MIN_ATTACHMENT_SESSION_MAX_MB, MAX_ATTACHMENT_SESSION_MAX_MB);
+    AttachmentQuota {
+        max_files: files as usize,
+        max_bytes: mb as u64 * 1024 * 1024,
+    }
+}
+
+fn default_chat_timeout_minutes() -> u32 {
+    DEFAULT_CHAT_TIMEOUT_MINUTES
+}
+
+fn default_attachment_folder_limit() -> u32 {
+    10
 }
 
 fn default_context_window() -> u32 {
@@ -96,6 +175,11 @@ impl Default for AppSettings {
             workspace_root: None,
             default_workbench: default_workbench(),
             default_preset: default_preset(),
+            attachment_folder_limit: default_attachment_folder_limit(),
+            attachment_blocked_ext: Vec::new(),
+            attachment_session_max_files: default_attachment_session_max_files(),
+            attachment_session_max_mb: default_attachment_session_max_mb(),
+            chat_timeout_minutes: default_chat_timeout_minutes(),
         }
     }
 }
@@ -121,6 +205,14 @@ pub fn save(settings: &AppSettings) -> Result<(), String> {
     }
     let text = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     fs::write(&p, text).map_err(|e| format!("write {} failed: {e}", p.display()))
+}
+
+/// 生效的单次生成时长(分钟):读取设置并夹到 [1, 1440]。
+/// 每个请求开始时读取一次,设置改完即刻对下一次请求生效。
+pub fn chat_timeout_minutes() -> u32 {
+    load()
+        .chat_timeout_minutes
+        .clamp(MIN_CHAT_TIMEOUT_MINUTES, MAX_CHAT_TIMEOUT_MINUTES)
 }
 
 #[cfg(test)]
@@ -151,5 +243,69 @@ mod tests {
         assert!(back.summarize_model.is_none());
         assert!(back.selection_ask_enabled);
         assert!(!back.minimize_to_tray);
+        // 生成时长未配置时沿用旧版行为(10 分钟)
+        assert_eq!(back.chat_timeout_minutes, DEFAULT_CHAT_TIMEOUT_MINUTES);
+        // 附件配额未配置时使用默认值(200 个 / 1GB)
+        assert_eq!(
+            back.attachment_session_max_files,
+            DEFAULT_ATTACHMENT_SESSION_MAX_FILES
+        );
+        assert_eq!(
+            back.attachment_session_max_mb,
+            DEFAULT_ATTACHMENT_SESSION_MAX_MB
+        );
+    }
+
+    #[test]
+    fn attachment_quota_clamped_to_range() {
+        let mut s = AppSettings::default();
+        s.attachment_session_max_files = 0;
+        s.attachment_session_max_mb = 0;
+        let q = AttachmentQuota {
+            max_files: s
+                .attachment_session_max_files
+                .clamp(MIN_ATTACHMENT_SESSION_MAX_FILES, MAX_ATTACHMENT_SESSION_MAX_FILES)
+                as usize,
+            max_bytes: s
+                .attachment_session_max_mb
+                .clamp(MIN_ATTACHMENT_SESSION_MAX_MB, MAX_ATTACHMENT_SESSION_MAX_MB)
+                as u64
+                * 1024
+                * 1024,
+        };
+        assert_eq!(q.max_files, 1);
+        assert_eq!(q.max_bytes, 1024 * 1024);
+
+        s.attachment_session_max_files = u32::MAX;
+        s.attachment_session_max_mb = u32::MAX;
+        let text = serde_json::to_string(&s).unwrap();
+        let back: AppSettings = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            back.attachment_session_max_files.min(MAX_ATTACHMENT_SESSION_MAX_FILES),
+            MAX_ATTACHMENT_SESSION_MAX_FILES
+        );
+        assert_eq!(
+            back.attachment_session_max_mb.min(MAX_ATTACHMENT_SESSION_MAX_MB),
+            MAX_ATTACHMENT_SESSION_MAX_MB
+        );
+    }
+
+    #[test]
+    fn chat_timeout_minutes_clamped_to_range() {
+        let mut s = AppSettings::default();
+        s.chat_timeout_minutes = 0;
+        assert_eq!(
+            s.chat_timeout_minutes.clamp(MIN_CHAT_TIMEOUT_MINUTES, MAX_CHAT_TIMEOUT_MINUTES),
+            MIN_CHAT_TIMEOUT_MINUTES
+        );
+        s.chat_timeout_minutes = 99999;
+        assert_eq!(
+            s.chat_timeout_minutes.clamp(MIN_CHAT_TIMEOUT_MINUTES, MAX_CHAT_TIMEOUT_MINUTES),
+            MAX_CHAT_TIMEOUT_MINUTES
+        );
+        s.chat_timeout_minutes = 620;
+        let text = serde_json::to_string(&s).unwrap();
+        let back: AppSettings = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.chat_timeout_minutes, 620);
     }
 }
