@@ -149,12 +149,16 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   display:flex;align-items:center;gap:var(--space-2);
   min-height:var(--ctl-h);padding:0 var(--space-3);border:none;background:transparent;
   border-radius:var(--radius-s);cursor:pointer;
-  font-size:var(--font-sub);color:#000000;line-height:1.2;
+  border-left:2px solid transparent;     /* 选中指示线占位,与 .set-nav .it 同款 */
+  font-size:var(--font-sub);color:var(--text-1);line-height:1.2;
   font-family:var(--font);text-align:left;transition:.15s;
 }
-.nav-item:hover{background:var(--bg-hover);color:#000000}
-.nav-item.active{background:var(--bg-hover);color:#000000;font-weight:600}
-.nav-item.active svg{color:#000000}
+.nav-item:hover{background:var(--bg-hover);color:var(--text-1)}
+.nav-item.active{
+  background:var(--bg-active);color:var(--text-1);font-weight:600;
+  border-left-color:var(--brand);       /* 选中:品牌色指示线 */
+}
+.nav-item.active svg{color:var(--brand)}
 .nav-sep{height:1px;margin:var(--space-1) var(--space-2);background:var(--border)}
 
 /* 玻璃组件组(标题栏内):会话抽屉 / 全局搜索 / 新建对话 — 纯扁平无描边 */

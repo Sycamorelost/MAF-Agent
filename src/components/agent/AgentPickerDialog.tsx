@@ -134,6 +134,9 @@ export default function AgentPickerDialog({ currentAgentId, onSelect, onClose, s
       memory_write: t.memory_write,
       memory_sections: t.memory_sections.join('\n'),
       base_agent: t.base_agent ?? null,
+      storage: t.storage === 'decoupled' ? 'decoupled' : 'coupled',
+      prompt_file: t.prompt_file ?? '',
+      tools_file: t.tools_file ?? '',
     });
   };
   const onSubmitEditor = async (e: React.FormEvent) => {
@@ -166,6 +169,9 @@ export default function AgentPickerDialog({ currentAgentId, onSelect, onClose, s
         memory_sections: toLines(editor.memory_sections),
         base_agent: editor.base_agent,
         builtin: false,
+        storage: editor.storage,
+        prompt_file: editor.storage === 'decoupled' ? editor.prompt_file || null : null,
+        tools_file: editor.storage === 'decoupled' ? editor.tools_file || null : null,
       });
       setEditor(null);
       setApplyMsg(editor.mode === 'edit' ? '已保存修改' : '已创建智能体');

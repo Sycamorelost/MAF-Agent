@@ -27,7 +27,7 @@
 
 /* 页面左栏玻璃抽屉(布局统一改造):默认收起,标题栏「面板」按钮释放;
    与会话抽屉同为玻璃浮层,300px 定宽,不占布局列 */
-.pg-aside.drawer, .set-nav.drawer {
+.pg-aside.drawer, .set-nav.drawer, .notes-list.drawer {
   position: fixed; top: var(--titlebar-h); left: 10px; bottom: 10px; z-index: var(--z-drawer);
   width: var(--aside-w); max-width: none; flex-shrink: 0;
   background: var(--bg-surface);

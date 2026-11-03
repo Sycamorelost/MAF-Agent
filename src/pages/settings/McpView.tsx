@@ -3,6 +3,7 @@ import { AddServerDialog } from './AddServerDialog';
 import { ApprovalPolicyCard } from './ApprovalPolicyCard';
 import { McpServerCard } from './McpServerCard';
 import { ToolCapabilityCard } from './ToolCapabilityCard';
+import { RoleSettingsCard } from './RoleSettingsCard';
 import { MirrorCard } from './McpUtilityCards';
 import { WorkspaceSettingsCard } from './WorkspaceSettingsCard';
 import { useMcpSettings } from './useMcpSettings';
@@ -27,6 +28,7 @@ export function McpView() {
     onToggleTools,
     onToggleBareMode,
     onSetHumanVoice,
+    onSetCustomBasePrompt,
     onToggleBuiltin,
     onPickMode,
     onSaveAllowList,
@@ -68,6 +70,8 @@ export function McpView() {
         onToggleBareMode={onToggleBareMode}
         onSetHumanVoice={onSetHumanVoice}
       />
+
+      <RoleSettingsCard settings={settings} onSetCustomBasePrompt={onSetCustomBasePrompt} />
 
       <WorkspaceSettingsCard
         wsRoot={wsRoot}

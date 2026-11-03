@@ -214,12 +214,14 @@
    左列表窄栏(12px 内边距)+ 右编辑器主栏(16px 内边距),
    排版与设置页/记忆页保持一致;圆角与间距全部走全局 token */
 
-.notes-page { display: flex; height: 100%; min-height: 0; }
+.notes-page { display: block; height: 100%; min-height: 0; overflow: hidden; }
 
 .notes-list {
   width: var(--aside-w); flex-shrink: 0;
-  background: var(--bg-surface);
+  background: var(--bg-side);
   display: flex; flex-direction: column;
+  border-right: 1px solid var(--border);
+  box-sizing: border-box;
 }
 .notes-list-head {
   padding: var(--space-3) var(--pad-x-narrow);
@@ -249,15 +251,27 @@
 }
 
 .notes-list-body { flex: 1; overflow-y: auto; padding: var(--space-2) var(--pad-x-narrow); min-height: 0; }
-.notes-item { padding: var(--space-2) var(--space-3); border-radius: var(--radius-s); cursor: pointer; }
-.notes-item + .notes-item { margin-top: var(--space-1); }
+/* 行式条目:与设置页 .set-nav .it 同款(无卡片边框,border-left:2px 指示选中) */
+.notes-item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px var(--pad-x-narrow);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background .15s, border-color .15s;
+  box-sizing: border-box;
+}
+.notes-item + .notes-item { margin-top: 2px; }
 .notes-item:hover { background: var(--bg-hover); }
-.notes-item.active { background: var(--brand-soft); }
+.notes-item.active {
+  background: var(--bg-active);
+  border-left-color: var(--brand);
+}
 .notes-item-title {
   font-size: var(--font-sub); color: var(--text-1);
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
-.notes-item.active .notes-item-title { color: var(--brand-deep); font-weight: 600; }
+.notes-item.active .notes-item-title { color: var(--text-1); font-weight: 600; }
 .notes-item-meta {
   display: flex; gap: var(--space-2); margin-top: var(--space-1);
   min-width: 0; flex-wrap: wrap; row-gap: 2px;
@@ -295,8 +309,14 @@
   display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
-.notes-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-surface); }
+.notes-detail {
+  height: 100%;
+  display: flex; flex-direction: column;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
 .notes-head {
+  flex: none;
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-3) var(--pad-x);
 }
@@ -331,6 +351,7 @@
 .notes-head .icon-btn.danger:hover:not(:disabled) { color: var(--err); background: var(--bg-hover); }
 
 .notes-tags {
+  flex: none;
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--pad-x);
 }
@@ -341,7 +362,7 @@
   font-size: var(--font-caption); color: var(--text-1);
 }
 
-.notes-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.notes-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .notes-editor {
   flex: 1; min-height: 0; resize: none; border: none; outline: none;
   width: 100%;
@@ -350,6 +371,7 @@
   padding: var(--space-4) var(--pad-x);
   background: var(--bg-surface); color: var(--text-1);
   font-family: var(--font-mono); font-size: var(--font-sub); line-height: 1.75;
+  overflow-y: auto;
 }
 .notes-preview {
   flex: 1; min-height: 0; overflow-y: auto; overflow-wrap: anywhere;
@@ -360,6 +382,7 @@
   font-size: var(--font-body); line-height: 1.75; color: var(--text-1);
 }
 .notes-foot {
+  flex: none;
   display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--pad-x);
   border-top: 1px solid var(--border);
@@ -376,7 +399,7 @@
 
 /* ---------- 知识库落地页(侧栏默认收起时,中间直接展示最新 5 条 + 快速新建) ---------- */
 .notes-landing {
-  flex: 1; min-height: 0; overflow-y: auto; background: var(--bg-surface);
+  height: 100%; overflow-y: auto; background: var(--bg-surface);
   display: flex; justify-content: center;
 }
 .notes-landing-inner {
@@ -426,13 +449,15 @@
   display: flex; flex-direction: column; gap: var(--space-1);
   min-width: 0; text-align: left; cursor: pointer;
   padding: var(--space-3);
-  background: var(--bg-surface); border: 1px solid var(--composer-border);
-  border-radius: var(--radius-m); box-shadow: var(--shadow-card);
+  background: var(--bg-surface);
+  border: 1px solid var(--text-4);                /* ← 更清晰的边框 */
+  border-radius: var(--radius-m);
+  box-shadow: 0 2px 6px rgba(0,0,0,.08);          /* ← 增强阴影 */
   transition: border-color .15s, background .15s, box-shadow .15s;
 }
 .notes-card:hover {
-  border-color: var(--brand-line); background: var(--bg-hover);
-  box-shadow: var(--shadow-card-h);
+  border-color: var(--brand); background: var(--bg-hover);
+  box-shadow: 0 4px 12px rgba(0,0,0,.14);
 }
 .notes-card-title {
   font-size: var(--font-sub); font-weight: 600; color: var(--text-1);

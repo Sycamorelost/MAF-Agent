@@ -44,6 +44,12 @@ export interface EditorState {
   memory_sections: string;
   /** 编辑变体时保留基座 id,避免编辑后丢失「变体」属性 */
   base_agent: string | null;
+  /** 存储结构:coupled = 单文件;decoupled = 目录多文件 */
+  storage: 'coupled' | 'decoupled';
+  /** 解耦存储下关联的外部 prompt 文件绝对路径(空 = 使用内部 prompt.md) */
+  prompt_file: string;
+  /** 解耦存储下关联的外部 tools 文件绝对路径(空 = 使用内部 tools.json 或无) */
+  tools_file: string;
 }
 
 export function emptyEditor(): EditorState {
@@ -61,6 +67,9 @@ export function emptyEditor(): EditorState {
     memory_write: true,
     memory_sections: '会话摘要\n关键事实与结论\n待办',
     base_agent: null,
+    storage: 'coupled',
+    prompt_file: '',
+    tools_file: '',
   };
 }
 
@@ -182,10 +191,22 @@ interface EditorFormProps {
   onChange: (next: EditorState) => void;
   onCancel: () => void;
   onSubmit: (e: React.FormEvent) => void;
+  /** 简单模式只展示核心字段;高级模式展示全部。默认 true(向后兼容)。 */
+  advanced?: boolean;
+  /** 可选模型列表;提供时 recommended_model 用下拉,否则用输入框(向后兼容)。 */
+  availableModels?: string[];
 }
 
 /** 完整智能体编辑器(新建 / 编辑自定义模板)。 */
-export function AgentEditorForm({ editor, saving, onChange, onCancel, onSubmit }: EditorFormProps) {
+export function AgentEditorForm({
+  editor,
+  saving,
+  onChange,
+  onCancel,
+  onSubmit,
+  advanced = true,
+  availableModels,
+}: EditorFormProps) {
   return (
     <div style={{ marginTop: 'var(--space-4)', borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4)' }}>
       <div style={{ fontWeight: 700, marginBottom: 'var(--space-2)' }}>
@@ -234,12 +255,27 @@ export function AgentEditorForm({ editor, saving, onChange, onCancel, onSubmit }
           </div>
           <div>
             <label className="lbl">推荐模型</label>
-            <input
-              className="input"
-              value={editor.recommended_model}
-              onChange={(e) => onChange({ ...editor, recommended_model: e.target.value })}
-              placeholder="如 gpt-5.2"
-            />
+            {availableModels ? (
+              <select
+                className="input"
+                value={editor.recommended_model}
+                onChange={(e) => onChange({ ...editor, recommended_model: e.target.value })}
+              >
+                <option value="">跟随全局当前模型</option>
+                {availableModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="input"
+                value={editor.recommended_model}
+                onChange={(e) => onChange({ ...editor, recommended_model: e.target.value })}
+                placeholder="如 gpt-5.2"
+              />
+            )}
           </div>
         </div>
         <div>
@@ -275,35 +311,155 @@ export function AgentEditorForm({ editor, saving, onChange, onCancel, onSubmit }
             placeholder="角色 / 能力边界 / 输出格式 / 约束…(支持 {date} {model} {language} 变量)"
           />
         </div>
-        <div>
-          <label className="lbl">输入提示(一行一条)</label>
-          <textarea
-            className="input"
-            rows={3}
-            value={editor.input_hints}
-            onChange={(e) => onChange({ ...editor, input_hints: e.target.value })}
-            placeholder="帮我优化这段文字"
-          />
-        </div>
-        <label className="agent-check">
-          <input
-            type="checkbox"
-            checked={editor.memory_write}
-            disabled={editor.memory_strategy === 'none'}
-            onChange={(e) => onChange({ ...editor, memory_write: e.target.checked })}
-          />
-          参与记忆自动提炼(strategy=none 时不可选)
-        </label>
-        <div>
-          <label className="lbl">写入记忆的节(一行一节)</label>
-          <textarea
-            className="input"
-            rows={3}
-            value={editor.memory_sections}
-            onChange={(e) => onChange({ ...editor, memory_sections: e.target.value })}
-            placeholder="会话摘要"
-          />
-        </div>
+        {advanced && (
+          <>
+            <div>
+              <label className="lbl">输入提示(一行一条)</label>
+              <textarea
+                className="input"
+                rows={3}
+                value={editor.input_hints}
+                onChange={(e) => onChange({ ...editor, input_hints: e.target.value })}
+                placeholder="帮我优化这段文字"
+              />
+            </div>
+            <label className="agent-check">
+              <input
+                type="checkbox"
+                checked={editor.memory_write}
+                disabled={editor.memory_strategy === 'none'}
+                onChange={(e) => onChange({ ...editor, memory_write: e.target.checked })}
+              />
+              参与记忆自动提炼(strategy=none 时不可选)
+            </label>
+            <div>
+              <label className="lbl">写入记忆的节(一行一节)</label>
+              <textarea
+                className="input"
+                rows={3}
+                value={editor.memory_sections}
+                onChange={(e) => onChange({ ...editor, memory_sections: e.target.value })}
+                placeholder="会话摘要"
+              />
+            </div>
+            <div>
+              <label className="lbl">存储结构</label>
+              <select
+                className="input"
+                value={editor.storage}
+                onChange={(e) =>
+                  onChange({ ...editor, storage: e.target.value as 'coupled' | 'decoupled' })
+                }
+              >
+                <option value="coupled">耦合:单文件 agents.json</option>
+                <option value="decoupled">解耦:目录多文件(prompt.md / config.json / tools.json)</option>
+              </select>
+            </div>
+            {editor.storage === 'decoupled' ? (
+              <>
+                <div>
+                  <label className="lbl">关联 Prompt 文件(可选)</label>
+                  <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                    <input
+                      className="input"
+                      value={editor.prompt_file}
+                      onChange={(e) => onChange({ ...editor, prompt_file: e.target.value })}
+                      placeholder="选择一个 .md 文件作为 system_prompt 来源"
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="btn ghost micro"
+                      onClick={async () => {
+                        const p = await ipc.pickAgentFile('选择 Prompt 文件', 'Markdown', 'md');
+                        if (p) onChange({ ...editor, prompt_file: p });
+                      }}
+                    >
+                      浏览…
+                    </button>
+                    {editor.prompt_file && (
+                      <button
+                        type="button"
+                        className="btn ghost micro"
+                        onClick={() => onChange({ ...editor, prompt_file: '' })}
+                      >
+                        清除
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>
+                    关联后,保存时会把 system_prompt 写入该文件,加载时也从该文件读取。
+                  </div>
+                </div>
+                <div>
+                  <label className="lbl">关联 Tools 文件(可选)</label>
+                  <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                    <input
+                      className="input"
+                      value={editor.tools_file}
+                      onChange={(e) => onChange({ ...editor, tools_file: e.target.value })}
+                      placeholder="选择一个 .json 文件作为工具策略来源"
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="btn ghost micro"
+                      onClick={async () => {
+                        const p = await ipc.pickAgentFile('选择 Tools 文件', 'JSON', 'json');
+                        if (p) onChange({ ...editor, tools_file: p });
+                      }}
+                    >
+                      浏览…
+                    </button>
+                    {editor.tools_file && (
+                      <button
+                        type="button"
+                        className="btn ghost micro"
+                        onClick={() => onChange({ ...editor, tools_file: '' })}
+                      >
+                        清除
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>
+                    工具策略 JSON 数组,如 ["mcp__fs__read", "mcp__shell__exec"]。
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div>
+                <label className="lbl">导入 Prompt</label>
+                <div>
+                  <button
+                    type="button"
+                    className="btn ghost micro"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.md,.markdown,.txt';
+                      input.onchange = () => {
+                        const file = input.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const text = String(reader.result ?? '');
+                          onChange({ ...editor, system_prompt: text });
+                        };
+                        reader.readAsText(file);
+                      };
+                      input.click();
+                    }}
+                  >
+                    从文件导入 Prompt…
+                  </button>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>
+                  选择一个 .md / .txt 文件,将其内容填入上方 system_prompt。
+                </div>
+              </div>
+            )}
+          </>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
           <button type="button" className="btn ghost" onClick={onCancel}>取消</button>
           <button type="submit" className="btn primary" disabled={saving}>

@@ -18,6 +18,7 @@ import { NavMenuView } from './settings/NavMenuView';
 import { AppearanceView } from './settings/AppearanceView';
 import { PresetsView } from './settings/PresetsView';
 import { McpView } from './settings/McpView';
+import { AgentsView } from './settings/AgentsView';
 
 export default function SettingsPage() {
   const [searchParams] = useSearchParams();
@@ -238,6 +239,7 @@ export default function SettingsPage() {
     usage: usageView,
     storage: storageView,
     mcp: <McpView />,
+    agents: <AgentsView />,
     about: aboutView,
   };
 

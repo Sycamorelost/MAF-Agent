@@ -196,6 +196,10 @@ macro_rules! all_commands {
             crate::commands::agents::list_agent_templates,
             crate::commands::agents::save_agent_template,
             crate::commands::agents::delete_agent_template,
+            crate::commands::agents::export_agent_template,
+            crate::commands::agents::export_agent_to_file,
+            crate::commands::agents::pick_agent_file,
+            crate::commands::agents::import_agent_template,
             crate::commands::agents::set_session_agent,
             crate::commands::agents::apply_agent_prompt,
             // 教程卡(迭代 D7.2)

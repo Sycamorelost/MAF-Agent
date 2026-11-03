@@ -1,6 +1,6 @@
 import { type ComponentType } from 'react';
 import * as ipc from '../../lib/ipc';
-import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconTranslate, IconChart, IconPlus, IconFileText, IconGauge } from '../../components/icons';
+import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconTranslate, IconChart, IconPlus, IconFileText, IconGauge, IconSparkles } from '../../components/icons';
 
 export const ENGINES = [
   { id: 'bocha', name: '博查 Bocha' },
@@ -18,6 +18,7 @@ export const NAV: NavGroup[] = [
     grp: '模型',
     items: [
       { id: 'providers', label: '模型服务商', icon: IconBot },
+      { id: 'agents', label: '智能体管理', icon: IconSparkles },
       { id: 'memory', label: '记忆管理', icon: IconBrain },
     ],
   },

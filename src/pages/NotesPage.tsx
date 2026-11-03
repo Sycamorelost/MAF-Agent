@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import AsideDrawer from '../components/AsideDrawer';
 import * as ipc from '../lib/ipc';
 import NotePresetBadge, { displayTags } from '../components/NotePresetBadge';
 import { uiConfirm } from '../components/confirmService';
@@ -253,7 +254,9 @@ export default function NotesPage() {
 
   return (
     <div className="notes-page">
-      <div className="notes-list">
+      {/* 左:知识库侧栏(玻璃抽屉,标题栏「面板」按钮开合) */}
+      <AsideDrawer>
+      <div className="notes-list drawer">
         <div className="notes-list-head">
           <span className="t">知识库</span>
           <button
@@ -313,6 +316,7 @@ export default function NotesPage() {
           ))}
         </div>
       </div>
+      </AsideDrawer>
 
       <div className="notes-detail">
         {selId ? (

@@ -36,7 +36,7 @@ export function PresetsView({ current, onSelect, settings, onSave }: PresetsView
       <h2>运行时预设</h2>
       <p className="set-desc">
         预设决定「给模型多少工具、多少上下文、怎么检索」;与布局(工作台模式)和权限(审批档)互不干扰。
-        新建会话按此处默认档钉住,已有会话可在工作台顶栏的预设 chip 单独切换。
+        新建会话按此处默认档生效;如需单独调整某一会话的预设,请在此处修改后新建会话。
       </p>
 
       <div className="set-card">
@@ -118,7 +118,7 @@ export function PresetsView({ current, onSelect, settings, onSave }: PresetsView
         <IconGauge size={14} />
         <span>
           <b>三级生效:</b>
-          会话钉住 &gt; Agent 模板默认(代码类模板默认「代码」档)&gt; 此处全局默认;
+          Agent 模板默认(代码类模板默认「代码」档)&gt; 此处全局默认;
           「审批默认」只是建议值,实际审批始终以会话权限档(逐次 / 工作区 / 完全信任)为准。
         </span>
       </div>

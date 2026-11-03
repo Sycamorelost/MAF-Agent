@@ -55,6 +55,21 @@ pub struct AgentTemplate {
     /// 模板默认运行时预设(P5 / D19):None = 跟随全局默认;economy / standard / deep / code
     #[serde(default)]
     pub preset: Option<String>,
+    /// 存储结构:None / "coupled" = 单文件 agents.json 数组项;"decoupled" = 目录多文件(prompt.md/config.json/tools.json)。
+    /// 缺省为 coupled,旧数据自动兼容。
+    #[serde(default)]
+    pub storage: Option<String>,
+    /// 解耦存储下关联的外部 prompt 文件绝对路径(None = 使用内部 prompt.md)。
+    /// 由用户在编辑器中选择,保存时写入该文件,加载时从该文件读取。
+    #[serde(default)]
+    pub prompt_file: Option<String>,
+    /// 解耦存储下关联的外部 tools 文件绝对路径(None = 使用内部 tools.json 或无)。
+    #[serde(default)]
+    pub tools_file: Option<String>,
+    /// 运行时标记(不落盘语义):该自定义模板是否覆盖了同 id 的内置模板。
+    /// 由 list_all 填充,用于 UI 显示「恢复内置」。
+    #[serde(skip)]
+    pub overrides_builtin: bool,
 }
 
 /// 合法分类(R3 A3 扩展:生活/学习/工作/学术四大方向)。
@@ -86,6 +101,10 @@ pub(crate) fn v2_defaults() -> AgentTemplate {
         doc_pipeline: String::new(),
         triggers: Vec::new(),
         preset: None,
+        storage: None,
+        prompt_file: None,
+        tools_file: None,
+        overrides_builtin: false,
     }
 }
 

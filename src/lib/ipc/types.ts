@@ -76,6 +76,14 @@ export interface AgentTemplate {
   triggers?: string[];
   /** 模板默认运行时预设(P5 / D19;空 = 跟随全局默认) */
   preset?: string | null;
+  /** 存储结构:coupled = 单文件;decoupled = 目录多文件(缺省 coupled) */
+  storage?: 'coupled' | 'decoupled';
+  /** 解耦存储下关联的外部 prompt 文件绝对路径(空 = 使用内部 prompt.md) */
+  prompt_file?: string | null;
+  /** 解耦存储下关联的外部 tools 文件绝对路径(空 = 使用内部 tools.json 或无) */
+  tools_file?: string | null;
+  /** 运行时标记:该自定义模板是否覆盖了同 id 的内置模板(用于 UI 显示「恢复内置」) */
+  overrides_builtin?: boolean;
 }
 
 /** 记忆注入策略(与后端 INJECTION_STRATEGIES 对齐)。 */

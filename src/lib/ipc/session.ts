@@ -105,6 +105,20 @@ export const saveAgentTemplate = (agent: AgentTemplate) =>
 export const deleteAgentTemplate = (agentId: string) =>
   invoke<void>('delete_agent_template', { agentId });
 
+export const exportAgentTemplate = (agentId: string) =>
+  invoke<string>('export_agent_template', { agentId });
+
+/** 导出智能体并弹出原生「另存为」对话框;用户取消返回 null,成功返回实际写入路径。 */
+export const exportAgentToFile = (agentId: string) =>
+  invoke<string | null>('export_agent_to_file', { agentId });
+
+/** 弹出原生「打开文件」对话框,供用户选择关联的 prompt / tools 文件;取消返回 null。 */
+export const pickAgentFile = (title: string, filterName: string, filterExt: string) =>
+  invoke<string | null>('pick_agent_file', { title, filterName, filterExt });
+
+export const importAgentTemplate = (json: string) =>
+  invoke<void>('import_agent_template', { json });
+
 /** 绑定/解绑会话的 Agent(agentId=null 解绑;绑定时同步记忆注入策略 + 渲染写入 system_prompt)。 */
 export const setSessionAgent = (id: string, agentId: string | null) =>
   invoke<void>('set_session_agent', { id, agentId });

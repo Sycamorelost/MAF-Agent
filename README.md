@@ -6,11 +6,12 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 
 与云端 AI 助手不同，myAgent **不托管任何模型与数据**：你自备 API Key，数据全部存储在本机（SQLite + 纯文本文件），只与你的模型服务商直连。
 
-| 项目 | 说明 |
-|---|---|
-| **版本** | v2.3.1 Beta |
-| **许可证** | Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明） |
-| **平台** | Windows 10 / 11（64 位） |
+
+**版本** ：v2.4.1
+
+**许可证** ：Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明）
+
+**平台** ：Windows 10 / 11（64 位）
 
 ---
 
@@ -116,6 +117,16 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 - 混合检索:FTS5 trigram(3-gram OR 展开)+ 覆盖率打分两路 RRF 融合;黄金查询基准 Top-3 命中率 95% → 100%
 - 用户可在数据目录放 `presets.json` 覆盖同名内置档或追加新档
 
+### 智能体(Agent)
+
+- 内置多套智能体模板(日常 / 文档 / 开发 / 创作 / 运维 / 管理等),可一键绑定会话或仅应用为提示词
+- 内置智能体提示词可编辑:自定义覆盖同 id 内置模板,删除覆盖即恢复内置
+- 支持创建变体(基于基座模板追加后缀)与完全自定义模板
+- 存储结构可选:**耦合**(单文件 agents.json)或 **解耦**(目录多文件 config.json / prompt.md / tools.json),
+  解耦模式可关联外部 prompt.md / tools.json 文件,便于用外部编辑器维护
+- 智能体导入 / 导出走原生「另存为」对话框,可自选保存路径
+- 设置页「角色设置」可编辑全局自定义 base prompt(留空恢复默认)
+
 ---
 
 ## 技术架构
@@ -200,7 +211,7 @@ pnpm tauri build
 
 ```bash
 cd src-tauri
-cargo test        # Rust 单元测试(530 项)
+cargo test        # Rust 单元测试(约 560 项)
 cargo check       # 静态检查
 ```
 
@@ -263,7 +274,7 @@ data/
 ├── conversations/<id>/
 │   ├── memory.md               # 会话记忆(可直接编辑)
 │   └── memory.versions/        # 记忆版本快照
-├── notes/                      # 知识库 Markdown 笔记(含 8 条预置术语表/速查;preset_seeded.json 记录落盘状态,删除不复活)
+├── notes/                      # 知识库 Markdown 笔记(含 11 条预置笔记;preset_seeded.json 记录落盘状态,删除不复活)
 ├── translations/               # 翻译历史
 ├── attachments/                # 会话附件
 ├── images/                     # AI 绘画产物

@@ -384,11 +384,6 @@ export default function ChatPage() {
                 onCloseSwitch={() => setSwitchBanner(null)}
                 onCloseCompress={() => chat.setCompressNotice(null)}
               />
-              {/* 对话任务清单:工作台模式也仍显示在消息区 */}
-              <ChatTodos
-                sessionId={sessionId}
-                onNotice={chat.setCompressNotice}
-              />
               {messages.length === 0 && !hasStreaming && (
                 <ChatEmptyState agent={agent} onPickSuggestion={setComposerText} />
               )}
@@ -435,6 +430,8 @@ export default function ChatPage() {
               )}
             </div>
           </div>
+          {/* 任务清单:固定在输入框(Composer)正上方,与输入框同高,实时更新 */}
+          <ChatTodos sessionId={sessionId} onNotice={chat.setCompressNotice} />
           <Composer
             value={composerText}
             onChange={setComposerText}

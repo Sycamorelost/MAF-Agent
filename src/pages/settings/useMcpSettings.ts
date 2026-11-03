@@ -120,6 +120,16 @@ export function useMcpSettings() {
     setMsg(`文字质感${label}${level === 'off' ? '' : ',下次发送生效'}`);
   };
 
+  /** 设置自定义底层角色/物理契约(覆盖应用默认物理契约;空 = 恢复默认)。 */
+  const onSetCustomBasePrompt = async (text: string) => {
+    if (!settings) return;
+    const val = text.trim() || null;
+    const next = { ...settings, custom_base_prompt: val };
+    await ipc.saveSettings(next);
+    setSettings(next);
+    setMsg(val ? '自定义底层契约已保存,下次发送生效' : '已恢复应用默认底层契约');
+  };
+
   /** 切换内置工具开关(取时间 / 白名单 shell)。 */
   const onToggleBuiltin = async (checked: boolean) => {
     const newCfg: McpConfig = { ...cfg, builtin_tools: checked };
@@ -220,6 +230,7 @@ export function useMcpSettings() {
     onToggleTools,
     onToggleBareMode,
     onSetHumanVoice,
+    onSetCustomBasePrompt,
     onToggleBuiltin,
     onPickMode,
     onSaveAllowList,

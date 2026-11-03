@@ -151,60 +151,222 @@
   border-top: 1px solid var(--border);
 }
 
-/* ---------- harness 任务清单条(对话页,对齐 ui-design 03 · 任务卡) ---------- */
+/* ---------- harness 任务清单条(输入框正上方) ---------- */
 .chat-todos {
-  margin-bottom: var(--space-3);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
+  /* 严格等于输入框(chat-max-w)的 4/5,水平居中对齐 */
+  width: calc(4 * var(--chat-max-w) / 5);
+  max-width: 100%;
+  margin: 0 auto var(--space-2);
+  box-sizing: border-box;
+  position: relative; /* 悬浮抽屉的定位锚点 */
+  z-index: 10;        /* 高于消息区/Composer */
+  flex: none;
 }
+
+/* 紧凑触发头:始终占位(固定 28px),展开时只把底圆角拉平与抽屉无缝相连 */
 .chat-todos-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  padding: var(--space-2) var(--space-3);
+  height: var(--ctl-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--bg-surface);
+  font-family: var(--font);
+  font-size: var(--font-caption);
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color .15s, box-shadow .15s, background .15s, border-bottom-left-radius .15s, border-bottom-right-radius .15s;
+  position: relative;
+  flex: none;
+}
+.chat-todos-head:hover {
+  background: var(--bg-hover);
+  border-color: var(--brand-line, var(--border));
+}
+/* 展开态:紧凑头不变,drawer 从上方悬浮浮出 */
+.chat-todos.is-open .chat-todos-head {
+  /* 紧凑头保持原样,drawer 从上方浮出 */
+}
+.chat-todos-head svg { flex: none; color: var(--text-3); }
+.chat-todos-title {
+  font-weight: 600;
+  white-space: nowrap;
+  flex: none;
+}
+.chat-todos-count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-micro);
+  font-weight: 400;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.chat-todos-summary {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+  font-size: var(--font-caption);
+  font-weight: 400;
+  text-align: left;
+}
+.chat-todos-summary .dot-sep { color: var(--text-4); margin: 0 4px; }
+.chat-todos-summary .done-text { color: var(--ok); }
+.chat-todos-summary .summary-label {
+  display: inline-block;
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 3px;
+  margin-right: 4px;
+  flex: none;
+  font-weight: 500;
+}
+.chat-todos-summary .summary-label.is-ongoing {
+  background: var(--brand-soft, rgba(59,130,246,.12));
+  color: var(--brand, #3b82f6);
+}
+/* 统计徽章 */
+.todo-stat {
+  flex: none;
+  font-size: var(--font-mini);
+  padding: 0 6px;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.todo-stat.is-pending { background: rgba(120,120,120,.14); color: var(--text-3); }
+.todo-stat.is-cancelled { background: rgba(200,80,80,.12); color: #c85050; }
+
+/* === 抽屉面板:悬浮层,从紧凑头上方向上浮出,完全脱离文档流 === */
+.chat-todos-drawer {
+  position: absolute;
+  bottom: calc(var(--ctl-h) + 6px);  /* 紧凑头和抽屉间留 6px 间隙 */
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--bg-surface);
+  border: 1px solid var(--text-4);          /* 高亮30%:用最深灰代替默认边框 */
+  border-radius: var(--radius-m);
+  box-shadow: 0 8px 24px rgba(0,0,0,.22), 0 2px 6px rgba(0,0,0,.15); /* 增强阴影 */
+  overflow: hidden;
+  animation: todos-drawer-pop .18s ease-out;
+  transform-origin: bottom center;
+  outline: 1px solid rgba(255,255,255,.06);  /* 内侧亮描边,增强悬浮感 */
+}
+@keyframes todos-drawer-pop {
+  from { transform: translateY(6px) scaleY(.94); opacity: 0; }
+  to   { transform: translateY(0)    scaleY(1);   opacity: 1; }
+}
+.chat-todos-drawer.is-closing {
+  animation: todos-drawer-pop-rev .18s ease-in forwards;
+}
+@keyframes todos-drawer-pop-rev {
+  from { transform: translateY(0)    scaleY(1);   opacity: 1; }
+  to   { transform: translateY(6px) scaleY(.94); opacity: 0; }
+}
+.chat-todos-drawer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 36px;                    /* 行高加大,宽松感 */
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--text-4);  /* 高亮30% */
+  box-sizing: border-box;
+  flex: none;
+  background: var(--bg-surface);
+  line-height: 1.6;
+}
+.chat-todos-drawer-head-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 100%;
+  padding: 0;
   border: none;
   background: transparent;
   font-family: var(--font);
   font-size: var(--font-caption);
   color: var(--text-1);
   text-align: left;
-  cursor: pointer;
+  cursor: default;           /* 只读:箭头变默认 */
+  min-width: 0;
+  pointer-events: none;      /* 禁止点击 */
+  user-select: none;
 }
-.chat-todos-head:hover { background: var(--bg-hover); }
-.chat-todos-head svg { flex: none; color: var(--text-3); }
-.chat-todos-title { font-weight: 600; }
-.chat-todos-count {
-  flex: 1;
-  font-family: var(--font-mono);
-  font-size: var(--font-micro);
-  font-weight: 400;
-  color: var(--text-4);
-  font-variant-numeric: tabular-nums;
+.chat-todos-drawer-head-main .chat-todos-title { flex: none; }
+.chat-todos-drawer-head-main .chat-todos-count { flex: none; }
+.chat-todos-refresh,
+.chat-todos-close {
+  flex: none;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, color .15s;
+}
+.chat-todos-refresh:hover,
+.chat-todos-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.chat-todos-refresh:active svg { animation: todos-spin .4s linear; }
+@keyframes todos-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 .chat-todos-list {
   list-style: none;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);  /* 四周加大内边距,宽松 */
   margin: 0;
-  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);                       /* 任务间间距放大(原 space-2) */
+  max-height: 280px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  scrollbar-width: thin;
 }
 .chat-todo {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);                       /* 元素间间距放大 */
   font-size: var(--font-caption);
   color: var(--text-2);
-  line-height: 1.5;
+  line-height: 1.75;                         /* 行高放宽(原 1.5) */
+  padding: var(--space-1) 0;                 /* 每项上下留白 */
 }
-.chat-todo.is-completed { color: var(--text-4); }
-.chat-todo.is-completed .chat-todo-text { text-decoration: line-through; }
+.chat-todo-text { flex: 1; min-width: 0; }
+.chat-todo-status {
+  flex: none;
+  font-size: var(--font-mini);
+  padding: 0 6px;
+  border-radius: 3px;
+  background: rgba(120,120,120,.14);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.chat-todo.is-completed .chat-todo-text { text-decoration: line-through; color: var(--text-4); }
+.chat-todo.is-completed .chat-todo-status { background: rgba(34,197,94,.12); color: var(--ok); }
+.chat-todo.is-in_progress .chat-todo-status { background: var(--brand-soft, rgba(59,130,246,.12)); color: var(--brand, #3b82f6); }
 .chat-todo.is-cancelled { color: var(--text-4); opacity: .7; }
+.chat-todo.is-cancelled .chat-todo-status { background: rgba(200,80,80,.12); color: #c85050; }
 .todo-dot {
   width: 8px;
   height: 8px;
@@ -215,7 +377,6 @@
 .todo-dot.is-in_progress { border-color: var(--brand); background: var(--brand-soft); }
 .todo-dot.is-completed { border-color: var(--ok); background: var(--ok); }
 .todo-dot.is-cancelled { border-color: var(--text-4); background: var(--text-4); opacity: .5; }
-.chat-todo-text { flex: 1; min-width: 0; }
 .chat-todo-prio {
   flex: none;
   font-size: var(--font-mini);
