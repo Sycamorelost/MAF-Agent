@@ -6,7 +6,8 @@
 use serde_json::Value;
 
 /// 执行 shell_exec。返回 (给模型的内容, 是否成功)。
-pub(super) async fn exec(args: &Value, trust_shell: bool) -> (String, bool) {
+/// `session_id` 用于把缺省 cwd 解析成会话绑定的项目目录。
+pub(super) async fn exec(args: &Value, trust_shell: bool, session_id: Option<&str>) -> (String, bool) {
     let cmd = args
         .get("command")
         .and_then(|v| v.as_str())
@@ -26,9 +27,9 @@ pub(super) async fn exec(args: &Value, trust_shell: bool) -> (String, bool) {
         .map(str::trim)
         .filter(|s| !s.is_empty());
     let r = if trust_shell {
-        crate::mcp::shell::run_unrestricted(cmd, &argv, cwd).await
+        crate::mcp::shell::run_unrestricted(cmd, &argv, cwd, session_id).await
     } else {
-        crate::mcp::shell::run(cmd, &argv, cwd).await
+        crate::mcp::shell::run(cmd, &argv, cwd, session_id).await
     };
     match r {
         Ok(out) => {
@@ -51,7 +52,7 @@ mod tests {
     #[tokio::test]
     async fn shell_exec_rejects_non_whitelisted_command() {
         // 未通过白名单 → 必须返回失败,且不产生任何执行
-        let (content, ok) = exec(&json!({ "command": "rm" }), false).await;
+        let (content, ok) = exec(&json!({ "command": "rm" }), false, None).await;
         assert!(!ok);
         assert!(content.contains("白名单") || content.contains("拒绝"));
     }
@@ -62,6 +63,7 @@ mod tests {
         let (content, ok) = exec(
             &json!({ "command": "python", "args": ["-c", "print(1)"] }),
             false,
+            None,
         )
         .await;
         assert!(!ok);
@@ -70,7 +72,7 @@ mod tests {
 
     #[tokio::test]
     async fn shell_exec_requires_command_argument() {
-        let (content, ok) = exec(&json!({}), false).await;
+        let (content, ok) = exec(&json!({}), false, None).await;
         assert!(!ok);
         assert!(content.contains("command"));
     }
@@ -81,6 +83,7 @@ mod tests {
         let (_content, ok) = exec(
             &json!({ "command": "git", "args": ["commit", "-m", "x"] }),
             false,
+            None,
         )
         .await;
         assert!(!ok);
@@ -89,7 +92,7 @@ mod tests {
     /// 命令行控制:白名单只读命令应真实执行并返回回显。
     #[tokio::test]
     async fn shell_exec_runs_whitelisted_echo() {
-        let (content, ok) = exec(&json!({ "command": "echo", "args": ["mcp-ok"] }), false).await;
+        let (content, ok) = exec(&json!({ "command": "echo", "args": ["mcp-ok"] }), false, None).await;
         assert!(ok, "echo 应执行成功,实际:{content}");
         assert!(content.contains("mcp-ok"), "应包含命令输出,实际:{content}");
     }

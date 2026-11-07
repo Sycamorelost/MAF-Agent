@@ -1,9 +1,14 @@
-import type { McpServerConfig, McpToolInfo } from '../../lib/ipc/mcp';
+import type { McpDoctorResult, McpServerConfig, McpToolInfo } from '../../lib/ipc/mcp';
 import { serverDesc, toolDesc } from '../../lib/mcpCatalog';
 import { IconX } from '../../components/icons';
 
-/** 单个 server 的运行状态(running + 最近一次工具列表)。 */
-export type McpServerStatus = { running: boolean; tools?: McpToolInfo[] };
+/** 单个 server 的运行状态(running + 最近一次工具列表 + C2 诊断结果)。 */
+export type McpServerStatus = {
+  running: boolean;
+  tools?: McpToolInfo[];
+  /** C2:诊断结果,由 useMcpSettings.onDiagnose 注入 */
+  doctor?: McpDoctorResult;
+};
 
 /** MCP server 卡片:状态、启停、允许目录与工具列表。 */
 export function McpServerCard({
@@ -99,6 +104,43 @@ export function McpServerCard({
               </button>
             </span>
           ))}
+        </div>
+      )}
+      {/* C2 诊断状态 —— 仅在执行过诊断后显示 */}
+      {st?.doctor && (
+        <div style={{ marginTop: 'var(--space-1)', fontSize: 'var(--font-caption)', lineHeight: 1.6 }}>
+          {st.doctor.disabled_by_failure && (
+            <div className="mcp-warn" style={{ color: 'var(--err)' }}>
+              该服务连续多次启动失败，已自动停用
+              <button
+                className="btn btn-xs btn-ghost"
+                style={{ marginLeft: '6px', padding: '0 6px' }}
+                onClick={() => onStart(s)}
+              >
+                手动重试
+              </button>
+            </div>
+          )}
+          {!st.doctor.disabled_by_failure && !st.doctor.command_resolved && (
+            <div className="mcp-warn" style={{ color: 'var(--err)' }}>
+              找不到启动命令 <code style={{ margin: '0 2px' }}>{s.command}</code>
+              ，请确认已安装 Node.js 或 uvx，并加入系统 PATH
+            </div>
+          )}
+          {st.doctor.is_running && !st.doctor.peek_ok && !st.doctor.disabled_by_failure && st.doctor.transport !== "http" && (
+            <div className="mcp-warn" style={{ color: 'var(--warn)' }}>
+              已启动但没响应，可能还在加载或已卡死
+            </div>
+          )}
+          {!st.doctor.disabled_by_failure && st.doctor.is_running && (st.doctor.peek_ok || st.doctor.transport === "http") && (
+            <div className="mcp-warn" style={{ color: 'var(--text-3)' }}>
+              运行正常
+              {st.doctor.is_preset && <span style={{ marginLeft: '4px', opacity: 0.7 }}>· 官方</span>}
+              {st.doctor.backend !== "http" && (
+                <span style={{ marginLeft: '4px', opacity: 0.7 }}>· {st.doctor.backend}</span>
+              )}
+            </div>
+          )}
         </div>
       )}
       {st?.tools && (

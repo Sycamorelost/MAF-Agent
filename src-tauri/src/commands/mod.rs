@@ -1,19 +1,20 @@
 //! Tauri commands 集合。
 
 pub mod agents;
-pub mod aiflavor;
 pub mod attachment;
 pub mod attachment_center;
 pub mod attachment_quota;
 pub mod attachment_rejects;
 pub mod capability;
 pub mod datadir;
+pub mod deliverable;
 pub mod diagnostics;
 pub mod doc;
 pub mod export;
 pub mod fs;
 pub mod gui;
 pub mod mcp;
+pub mod mcp_diagnosis;
 pub mod memory;
 pub mod notes;
 pub mod provider;
@@ -21,9 +22,7 @@ pub mod projects;
 pub mod presets;
 pub mod search;
 pub mod settings;
-pub mod study;
 pub mod tasks;
-pub mod translate;
 pub mod tutorial;
 pub mod websearch;
 
@@ -33,13 +32,6 @@ pub mod websearch;
 macro_rules! all_commands {
     () => {
         tauri::generate_handler![
-            // R3 B2:去 AI 味 · AI 生成概率分析
-            crate::commands::aiflavor::aiflavor_analyze,
-            crate::commands::aiflavor::aiflavor_reports_list,
-            crate::commands::aiflavor::aiflavor_report_get,
-            crate::commands::aiflavor::aiflavor_report_delete,
-            crate::commands::aiflavor::aiflavor_rewrite_save,
-            crate::commands::aiflavor::aiflavor_export_report,
             // session
             crate::commands::memory::crud::create_session,
             crate::commands::memory::crud::list_sessions,
@@ -64,6 +56,8 @@ macro_rules! all_commands {
             crate::commands::memory::crud::delete_message,
             crate::commands::memory::crud::delete_messages_from,
             crate::commands::memory::crud::update_message,
+            // 产物(交付卡)
+            crate::commands::deliverable::list_deliverables,
             // 会话分支树(B6 / F4)
             crate::commands::memory::crud::list_branches,
             crate::commands::memory::crud::fork_branch,
@@ -121,12 +115,9 @@ macro_rules! all_commands {
             crate::commands::provider::chat::command::chat_stream,
             crate::commands::provider::stream::cancel_stream,
             crate::commands::provider::image::generate_image,
-            crate::commands::provider::image::compose_draw_prompt,
             crate::commands::provider::image::list_images,
             crate::commands::provider::image::read_image,
             crate::commands::provider::image::save_image_as,
-            crate::commands::provider::image::image_to_session,
-            crate::commands::provider::translate::translate_stream,
             crate::commands::provider::models::fetch_provider_models,
             crate::commands::provider::models::list_model_cards,
             crate::commands::provider::models::save_model_card,
@@ -148,13 +139,6 @@ macro_rules! all_commands {
             crate::commands::provider::usage::usage_key_health,
             crate::commands::provider::usage::usage_hourly,
             crate::commands::provider::usage::usage_recalc,
-            // 翻译增强(迭代 D6)
-            crate::commands::translate::glossary_list,
-            crate::commands::translate::glossary_save,
-            crate::commands::translate::glossary_import_presets,
-            crate::commands::translate::save_translation,
-            crate::commands::translate::list_translations,
-            crate::commands::translate::delete_translation,
             // 项目(P8.1 项目化升级)
             crate::commands::projects::project_list,
             crate::commands::projects::project_create,
@@ -184,6 +168,7 @@ macro_rules! all_commands {
             // 通用导出(另存为令牌 / 打印导出 PDF)
             crate::commands::export::pick_save_path,
             crate::commands::export::export_pdf,
+            crate::commands::export::export_file_pdf,
             // 全局搜索
             crate::commands::search::search_all,
             // 知识库 / 笔记库(迭代 D8)
@@ -204,42 +189,6 @@ macro_rules! all_commands {
             crate::commands::agents::apply_agent_prompt,
             // 教程卡(迭代 D7.2)
             crate::commands::tutorial::list_tutorials,
-            // 学习规划(板块 P0);命令注册使用子模块原始路径。
-            crate::commands::study::plan::study_preflight,
-            crate::commands::study::plan::study_start,
-            crate::commands::study::plan::study_cancel,
-            crate::commands::study::plan::study_pause,
-            crate::commands::study::plan::study_resume,
-            crate::commands::study::query::study_list,
-            crate::commands::study::query::study_get,
-            crate::commands::study::query::study_delete,
-            crate::commands::study::query::study_deep_dig,
-            crate::commands::study::query::study_export_markdown,
-            crate::commands::study::learn_cmds::study_nodes,
-            crate::commands::study::learn_cmds::study_unit_generate,
-            crate::commands::study::learn_cmds::study_quiz_new,
-            crate::commands::study::learn_cmds::study_quiz_submit,
-            crate::commands::study::learn_cmds::study_mastery_set,
-            crate::commands::study::learn_cmds::study_node_done,
-            crate::commands::study::learn_cmds::study_review_queue,
-            crate::commands::study::learn_cmds::study_review_done,
-            crate::commands::study::learn_cmds::study_today,
-            crate::commands::study::learn_cmds::study_tasks_today,
-            crate::commands::study::learn_cmds::study_task_done,
-            crate::commands::study::learn_cmds::study_focus_log,
-            crate::commands::study::learn_cmds::study_stats,
-            crate::commands::study::learn_cmds::study_memory_digest,
-            crate::commands::study::exam::study_bank_list,
-            crate::commands::study::exam::study_bank_add,
-            crate::commands::study::exam::study_bank_update,
-            crate::commands::study::exam::study_bank_delete,
-            crate::commands::study::exam::study_paper_list,
-            crate::commands::study::exam::study_paper_get,
-            crate::commands::study::exam::study_paper_create,
-            crate::commands::study::exam::study_paper_auto,
-            crate::commands::study::exam::study_paper_submit,
-            crate::commands::study::exam::study_paper_delete,
-            crate::commands::study::exam::study_question_grade,
             // MCP 工具(Phase 4:配置管理 + 内置时间;Phase 5:运行时 + HITL 审批)
             crate::commands::mcp::mcp_load_config,
             crate::commands::mcp::get_bootstrap_state,
@@ -261,6 +210,8 @@ macro_rules! all_commands {
             crate::commands::mcp::mcp_set_approval_policy,
             // Phase 6:白名单 shell 命令(直接 Rust,极简安全)
             crate::commands::mcp::shell_whitelist_exec,
+            // C2:P0a 稳定性保底 —— mcp_doctor 诊断命令(二进制存在/版本/能否启动/失败原因)
+            crate::commands::mcp_diagnosis::mcp_doctor,
             // P2:能力令牌(预授权,仅内存)
             crate::commands::capability::mcp_issue_capability,
             crate::commands::capability::mcp_list_capabilities,
@@ -290,6 +241,7 @@ macro_rules! all_commands {
             crate::commands::fs::fs_open_backups,
             crate::commands::fs::fs_open,
             crate::commands::fs::fs_reveal,
+            crate::commands::fs::fs_read_data_url,
         ]
     };
 }

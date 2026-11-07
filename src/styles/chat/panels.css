@@ -72,7 +72,7 @@
 .mempanel {
   width: var(--mempanel-w);
   border-left: none;
-  background: color-mix(in srgb, var(--bg-hover) 36%, var(--bg-main));
+  background: var(--bg-surface);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -104,7 +104,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  background: color-mix(in srgb, var(--bg-hover) 55%, var(--bg-main));
+  background: var(--bg-surface);
 }
 .mem-frontmatter .k { color: var(--text-4); margin-right: var(--space-2); }
 .mem-view {
@@ -116,13 +116,15 @@
   line-height: 1.65;
   white-space: pre-wrap;
   word-wrap: break-word;
-  color: var(--text-2); min-height: 0; }
+  color: var(--text-2); min-height: 0;
+  background: var(--bg-surface);
+}
 .mem-view.edit {
   font-family: var(--font);
   resize: none;
   border: none;
   outline: none;
-  background: var(--bg-main);
+  background: var(--bg-surface);
   width: 100%;
   color: var(--text-1);
   font-size: var(--font-body);

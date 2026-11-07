@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import MemPanel from '../components/MemPanel';
 import { LongTermMemoryPanel } from '../components/LongTermMemoryPanel';
 import { IconBrain } from '../components/icons';
@@ -9,17 +9,35 @@ import { sessionPath } from '../lib/workbench';
 type Tab = 'native' | 'longterm';
 
 /**
- * 记忆管理页(/memory):原生记忆(左会话列表 + 右 memory.md)与长期记忆(知识图谱)双视图。
+ * 记忆库统一入口(/memory):原生记忆(会话记忆)、长期记忆(知识图谱)两个分区。
+ * 会话列表由主侧栏承担(点击写入 ?session=),本页不再内嵌列表,避免嵌套侧栏。
+ * 旧深链兼容:/memory?tab=notes 与 ?id=xx 一律跳转知识库 /knowledge。
  */
 export default function MemoryPage() {
   const nav = useNavigate();
+  const [params] = useSearchParams();
   const { sessions, refresh } = useSessionsStore();
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('native');
+  const tab: Tab = params.get('tab') === 'longterm' ? 'longterm' : 'native';
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // 旧深链:?tab=notes 或 ?id=xx → 知识库(保留 id 定位)
+  useEffect(() => {
+    const t = params.get('tab');
+    const id = params.get('id');
+    if (t === 'notes' || id) {
+      nav(id ? `/knowledge?id=${id}` : '/knowledge', { replace: true });
+    }
+  }, [params, nav]);
+
+  /** 侧栏「记忆库」点选会话时,通过 ?session= 直接定位到对应记忆。 */
+  useEffect(() => {
+    const sid = params.get('session');
+    if (sid) setSelected(sid);
+  }, [params]);
 
   useEffect(() => {
     if (!selected && sessions.length > 0) {
@@ -27,20 +45,25 @@ export default function MemoryPage() {
     }
   }, [sessions, selected]);
 
+  /** 切换分区时同步地址,保证侧栏「记忆库」高亮与当前分区一致。 */
+  const selectTab = (next: Tab) => {
+    nav(`/memory?tab=${next}`, { replace: true });
+  };
+
   return (
     <div className="memory-page-wrap">
       <div className="memory-tabs">
         <button
           type="button"
           className={`memory-tab${tab === 'native' ? ' on' : ''}`}
-          onClick={() => setTab('native')}
+          onClick={() => selectTab('native')}
         >
           原生记忆
         </button>
         <button
           type="button"
           className={`memory-tab${tab === 'longterm' ? ' on' : ''}`}
-          onClick={() => setTab('longterm')}
+          onClick={() => selectTab('longterm')}
         >
           长期记忆
         </button>
@@ -48,31 +71,6 @@ export default function MemoryPage() {
 
       {tab === 'native' ? (
         <div className="memory-page">
-          <div className="memory-list">
-            <div className="memory-list-head">
-              <span className="t">全部会话记忆</span>
-            </div>
-            <div className="memory-list-body">
-              {sessions.length === 0 && (
-                <div className="memory-empty">
-                  <IconBrain size={32} strokeWidth={1} />
-                  <span>还没有会话,先去对话页聊一句吧</span>
-                </div>
-              )}
-              {sessions.map((s) => (
-                <div
-                  key={s.id}
-                  className={`memory-item ${selected === s.id ? 'active' : ''}`}
-                  onClick={() => setSelected(s.id)}
-                >
-                  <div className="memory-item-title">{s.title || '(未命名会话)'}</div>
-                  <div className="memory-item-meta">
-                    v{s.memory_version} · {new Date(s.updated).toLocaleDateString('zh-CN')}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
           <div className="memory-detail">
             {selected ? (
               <MemPanel sessionId={selected} />

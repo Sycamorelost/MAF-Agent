@@ -1,15 +1,16 @@
-import { IconChevronRight, IconFolder, IconFolderOpen } from '../icons';
+import { IconChevronRight, IconFolder, IconFolderOpen, IconMore } from '../icons';
 import type { ProjectGroup } from './types';
 import type { ProjectRow, SessionRow } from '../../lib/ipc';
 import { SessionRowItem } from './SessionRow';
 
-/** 按项目视图:项目分组 + 未分类会话 */
+/** 项目区块:每个项目绑定一个本地工作文件夹,项目与其会话均可折叠。 */
 interface Props {
   projectGroups: ProjectGroup[];
-  uncatItems: SessionRow[];
-  allProjects: ProjectRow[];
   collapsed: Record<string, boolean>;
+  emptyText?: string;
   activeId: string | undefined;
+  /** 当前会话所属项目,用于高亮 */
+  activeProjectId?: string | null;
   editingId: string | null;
   editingText: string;
   onToggleCollapsed: (projectId: string) => void;
@@ -25,9 +26,10 @@ interface Props {
 
 export function ProjectListView({
   projectGroups,
-  uncatItems,
   collapsed,
+  emptyText = '没有匹配的项目或会话。',
   activeId,
+  activeProjectId = null,
   editingId,
   editingText,
   onToggleCollapsed,
@@ -40,31 +42,39 @@ export function ProjectListView({
   onCancelRename,
   onSessionContextMenu,
 }: Props) {
-  const hasProject = projectGroups.length > 0;
-  const hasUncat = uncatItems.length > 0;
-  const total = projectGroups.reduce((n, g) => n + g.items.length, 0) + uncatItems.length;
-
-  if (total === 0) {
-    return <div className="side-empty">还没有会话,点上方「+」开始。</div>;
+  if (projectGroups.length === 0) {
+    return <div className="side-empty">{emptyText}</div>;
   }
 
   return (
     <>
-      {/* 项目分组 */}
       {projectGroups.map((g) => {
         const isCollapsed = collapsed[g.project.id] ?? false;
+        const active = g.project.id === activeProjectId;
         return (
           <div key={g.project.id} className="side-proj-group">
             <div
-              className="side-proj-head"
+              className={`side-proj-head${active ? ' on' : ''}`}
               onClick={() => onToggleCollapsed(g.project.id)}
               onContextMenu={(e) => onProjectContextMenu(e, g.project)}
-              title={`${g.project.path}\n右键:重命名 / 删除项目`}
+              title={g.project.path}
             >
               {isCollapsed ? <IconFolder size={14} /> : <IconFolderOpen size={14} />}
-              <span className="proj-name" title={g.project.path}>
-                {g.project.name || '(未命名项目)'}
+              <span className="proj-main">
+                <span className="proj-name">{g.project.name || '(未命名项目)'}</span>
               </span>
+              <button
+                type="button"
+                className="proj-more"
+                title="项目操作"
+                aria-label={`「${g.project.name}」项目操作`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onProjectContextMenu(e, g.project);
+                }}
+              >
+                <IconMore size={13} />
+              </button>
               <IconChevronRight
                 size={12}
                 className={`chevron${!isCollapsed ? ' down' : ''}`}
@@ -104,29 +114,6 @@ export function ProjectListView({
           </div>
         );
       })}
-
-      {/* 未分类(缩进与项目名同级) */}
-      {hasUncat && (
-        <>
-          {hasProject && <div className="side-uncat-divider" />}
-          {uncatItems.map((s) => (
-            <SessionRowItem
-              key={s.id}
-              session={s}
-              indentClass="side-uncat-item"
-              activeId={activeId}
-              editingId={editingId}
-              editingText={editingText}
-              onNavigate={onSessionNavigate}
-              onStartRename={onSessionStartRename}
-              onEditingTextChange={onEditingTextChange}
-              onCommitRename={onCommitRename}
-              onCancelRename={onCancelRename}
-              onContextMenu={onSessionContextMenu}
-            />
-          ))}
-        </>
-      )}
     </>
   );
 }

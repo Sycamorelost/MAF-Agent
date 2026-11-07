@@ -245,19 +245,6 @@ pub struct ImageResponse {
     pub revised_prompt: Option<String>,
 }
 
-/// 构造翻译用 system prompt:约束模型只输出译文、保留原文格式。命令层流式翻译使用。
-pub fn translate_system_prompt(source_lang: Option<&str>, target_lang: &str) -> String {
-    let src = source_lang
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("auto-detected language");
-    format!(
-        "You are a professional translation engine. Translate the user's text from {src} into {target_lang}. \
-         Output ONLY the translated text. Preserve the original formatting (line breaks, lists, markdown). \
-         Do not add explanations, notes, or extra quotation marks."
-    )
-}
-
 /// Provider 错误分类,便于前端区分处理。
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
@@ -339,27 +326,5 @@ impl SubLlm {
             }
         }
         Ok(out)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::translate_system_prompt;
-
-    #[test]
-    fn translate_prompt_with_source() {
-        let p = translate_system_prompt(Some("Chinese"), "English");
-        assert!(p.contains("from Chinese into English"));
-        assert!(p.contains("ONLY the translated text"));
-    }
-
-    #[test]
-    fn translate_prompt_auto_detect() {
-        let p = translate_system_prompt(None, "Japanese");
-        assert!(p.contains("auto-detected language"));
-        assert!(p.contains("into Japanese"));
-        // 空白源语言等同自动检测
-        let p2 = translate_system_prompt(Some("  "), "French");
-        assert!(p2.contains("auto-detected language"));
     }
 }

@@ -20,6 +20,7 @@ import { useMessagesStore } from '../../stores/messages';
 import { useSessionsStore } from '../../stores/sessions';
 import { useProvidersStore } from '../../stores/providers';
 import { useMemoryStore } from '../../stores/memory';
+import { useDeliverablesStore } from '../../stores/deliverables';
 import { useAgentsStore } from '../../stores/agents';
 import { useThinkingStore, DEFAULT_THINKING_LEVEL, agentThinking } from '../../stores/thinking';
 import type { AttachmentMeta, MessageRow } from '../../lib/ipc';
@@ -56,6 +57,7 @@ export default function ChatPage() {
   const loadModelConfig = useProvidersStore((s) => s.loadModelConfig);
   const memoryDto = useMemoryStore((s) => (sessionId ? s.bySession[sessionId] : undefined));
   const loadMemory = useMemoryStore((s) => s.load);
+  const loadDeliverables = useDeliverablesStore((s) => s.load);
   const { templates: agentTemplates, load: loadAgents } = useAgentsStore();
   const initThinking = useThinkingStore((s) => s.init);
   const setThinking = useThinkingStore((s) => s.set);
@@ -245,6 +247,7 @@ export default function ChatPage() {
     if (!sessionId) return;
     load(sessionId);
     loadMemory(sessionId);
+    void loadDeliverables(sessionId);
     // 离开会话时:空对话默认不保留(后端按真实消息数判断,流式中/已有内容的会话不受影响)
     // 同时清空 MCP「始终允许」会话缓存,避免跨会话静默放行(Phase 5e 安全要求)
     return () => {
@@ -257,6 +260,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!sessionId) return;
     void load(sessionId, true);
+    void loadDeliverables(sessionId, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, activeBranch]);
 
@@ -353,7 +357,7 @@ export default function ChatPage() {
   return (
     <WorkbenchChromeContext.Provider value={chromeValue}>
       {/* 作为 .wb-main / .main 的 flex 项:必须 minWidth:0,否则长代码行等内容的最小内容宽度会撑破中栏 */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, minWidth: 0 }}>
+      <div className="chat-root">
         <div
           style={{
             flex: 1,
@@ -402,7 +406,6 @@ export default function ChatPage() {
                   startMargin={listMargin}
                   lastAssistantId={lastAssistantId}
                   onQuote={handleQuote}
-                  onTranslate={chat.onTranslate}
                   onEditResend={chat.onEditResend}
                   onDelete={chat.onDelete}
                   onRegenerate={chat.onRegenerate}

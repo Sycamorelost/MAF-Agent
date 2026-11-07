@@ -10,17 +10,16 @@
 
 mod agents;
 mod agents_prompts;
-mod aiflavor;
 mod attachment;
 mod attachment_guard;
 mod commands;
 mod db;
+mod deliverables;
 mod diagnostics;
 mod doc;
 mod draw_prompt;
 mod export;
 mod fs;
-mod glossary_presets;
 mod gui;
 mod mcp;
 mod memory;
@@ -32,7 +31,6 @@ mod project_rules;
 mod provider;
 mod retrieval;
 mod settings;
-mod study;
 mod sys;
 mod tasks;
 mod websearch;
@@ -97,7 +95,6 @@ pub fn run() {
         // M-15:顶级导航白名单(必须在静态 main 窗口创建前的 Builder 阶段注册)
         .plugin(navguard::init())
         .manage(memory::watcher::WatcherState::default())
-        .manage(commands::study::StudyRegistry::default())
         .manage(provider::rotation::RotationState::default())
         .manage(commands::provider::StreamCancelState::default())
         .manage(export::path::ExportPathTokens::default())
@@ -153,7 +150,7 @@ pub fn run() {
                     let rt = handle.state::<mcp::McpRuntime>();
                     for s in servers {
                         let name = s.name.clone();
-                        if let Err(e) = rt.start_from_config(&s, &data).await {
+                        if let Err(e) = rt.start_from_config(&s, &data, false).await {
                             log::warn!("MCP server `{name}` 自动启动失败: {e}");
                         } else {
                             log::info!("MCP server `{name}` 已随应用启动");
@@ -169,27 +166,11 @@ pub fn run() {
                 });
             }
 
-            // 解析内置 AI 味资源目录(未命中打包资源时回退源码树,注入层静默降级)
-            aiflavor::init_resource(app.handle());
-
             // Phase 1 §3.1:SQLite 初始化(建目录 + 打开 + 迁移)
             db::init().map_err(|e| {
                 log::error!("db init failed: {e}");
                 std::io::Error::other(e)
             })?;
-
-            // 学习规划:generating 中的计划属进程内任务,重启后无法恢复,统一标记为中断
-            match db::conn().lock() {
-                Ok(conn) => {
-                    if let Err(e) = study::store::mark_interrupted(&conn) {
-                        log::error!("mark interrupted plans failed: {e}");
-                    }
-                }
-                Err(e) => log::error!("db lock failed: {e}"),
-            }
-
-            // 学习中心目录迁移:data/study/* → learningcenter/*(幂等;目标已存在则并集合并,不覆盖)
-            study::lc::migrate_legacy_dirs();
 
             // 预置知识库:首次启动落盘术语表/表格速查(用户可编辑/删除,删除不复活);
             // 失败仅记日志,不阻断启动。

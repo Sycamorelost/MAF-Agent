@@ -7,16 +7,6 @@
 .pg { flex: 1; display: flex; min-height: 0; }
 .pg-col { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
-/* 左配置栏:白底圆角,与会话主窗统一 */
-.pg-aside {
-  width: calc(300px * var(--ui-scale)); flex-shrink: 0;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-surface);
-  display: flex; flex-direction: column;
-  overflow-y: auto;
-}
-
 /* 侧栏宽度拖拽把手(布局统一改造) */
 .resize-handle {
   width: calc(5px * var(--ui-scale)); flex-shrink: 0; cursor: col-resize;
@@ -25,49 +15,9 @@
 }
 .resize-handle:hover, .resize-handle.dragging { background: var(--brand-line); }
 
-/* 页面左栏玻璃抽屉(布局统一改造):默认收起,标题栏「面板」按钮释放;
-   与会话抽屉同为玻璃浮层,300px 定宽,不占布局列 */
-.pg-aside.drawer, .set-nav.drawer, .notes-list.drawer {
-  position: fixed; top: var(--titlebar-h); left: 10px; bottom: 10px; z-index: var(--z-drawer);
-  width: var(--aside-w); max-width: none; flex-shrink: 0;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow-card-h);
-}
-
-/* 记忆页列表:窄档字体降档与换行跟随(会话抽屉已改定宽浮层,无窄档) */
-.memory-list[data-narrow="true"] .memory-item-title {
-  font-size: var(--font-caption); white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
-}
-.memory-list[data-narrow="true"] .memory-list-head { font-size: var(--font-body-em); }
-
-/* 窄档自适应:字号降档 + 换行跟随 */
-.pg-aside[data-narrow="true"] .pg-aside-head h2 { font-size: var(--font-h3); }
-.pg-aside[data-narrow="true"] .pg-aside-head p { font-size: var(--font-micro); }
-.pg-aside[data-narrow="true"] .pg-lab { font-size: var(--font-micro); }
-.pg-aside[data-narrow="true"] .pg-field { font-size: var(--font-caption); }
-.pg-aside[data-narrow="true"] .pg-row { flex-wrap: wrap; }
-.pg-aside > .tutorial-list { margin: 0 var(--pad-x) var(--space-3); }
-.pg-aside .pg-aside-head p { overflow-wrap: anywhere; }
-.set-nav[data-narrow="true"] .it { font-size: var(--font-micro); }
-.set-nav[data-narrow="true"] .grp { font-size: var(--font-micro); }
+/* 记忆面板窄档:字号降档 + 换行跟随 */
 .mempanel[data-narrow="true"] .mem-view.edit { font-size: var(--font-caption); }
 .mempanel .mem-view, .mempanel .mem-preview { overflow-wrap: anywhere; }
-.pg-aside-head {
-  padding: var(--space-4) var(--pad-x) var(--space-2);
-  background: transparent;
-}
-.pg-aside-head h2 {
-  font-size: var(--font-h2); font-weight: 650;
-  display: flex; align-items: center; gap: var(--space-2);
-  color: var(--text-1);
-}
-.pg-aside-head h2 svg { color: var(--brand); flex-shrink: 0; }
-.pg-aside-head p {
-  font-size: var(--font-caption); color: var(--text-3);
-  margin-top: var(--space-1); line-height: 1.6;
-}
 .pg-sec {
   padding: var(--space-3);
   margin: 0 var(--pad-x) var(--space-3);
@@ -201,10 +151,11 @@
   font-size: var(--font-h3); font-weight: 650; color: var(--text-1);
   flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* 翻译页顶栏:语言方向选择器(自动检测 · swap · 目标语言) */
+/* 弹性占位:全应用 .sp 均为 flex 占位 */
+.sp { flex: 1; min-width: 0; }
+/* 数字输入:不定死全宽 */
+.pg-field.num { width: calc(96px * var(--ui-scale)); flex: none; }
 .pg-main-head .sp { flex: 1; }
-.tr-dir { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
-.tr-dir .pg-field { width: calc(112px * var(--ui-scale)); }
 .pg-main-head .cost { font-size: var(--font-micro); color: var(--text-3); flex-shrink: 0; }
 .pg-main-head .cost b { color: var(--brand-deep); font-family: var(--font-mono); }
 .pg-main-head button:not(.icon-btn) {

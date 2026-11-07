@@ -1,10 +1,11 @@
-﻿﻿import { useEffect, useState } from 'react';
+﻿﻿﻿﻿﻿﻿﻿﻿import { useEffect, useState } from 'react';
 import {
   mcpLoadConfig,
   mcpSaveConfig,
   mcpAddServer,
   mcpGetApprovalPolicy,
   mcpSetApprovalPolicy,
+  mcpDoctor,
   type ApprovalMode,
   type ApprovalPolicy,
   type McpConfig,
@@ -175,6 +176,47 @@ export function useMcpSettings() {
     setMsg("");
   };
 
+  /** C2:批量诊断所有 server,把结果 merge 到每张卡片的 status 里(精确保留已有 doctor)。 */
+  const onDiagnose = async () => {
+    setMsg("正在检查所有服务的运行状态…");
+    try {
+      const results = await mcpDoctor();
+      setStatus((prev) => {
+        const next = { ...prev };
+        for (const dr of results) {
+          const old = next[dr.name];
+          next[dr.name] = {
+            // 诊断结果是真实状态(is_running 来自 runtime handle),优先于前端旧值,
+            // 否则进程已死时卡片仍显示「运行中」。
+            running: dr.is_running,
+            tools: old?.tools,
+            doctor: dr,
+          };
+        }
+        return next;
+      });
+      const bad = results.filter(
+        (r) =>
+          r.disabled_by_failure ||
+          !r.command_resolved ||
+          (r.is_running && !r.peek_ok && r.transport !== "http"),
+      ).length;
+      const ok = results.filter(
+        (r) =>
+          r.is_running &&
+          r.command_resolved &&
+          (r.peek_ok || r.transport === "http"),
+      ).length;
+      setMsg(
+        bad > 0
+          ? `检查完成:${results.length} 个服务中 ${ok} 正常,${bad} 个有问题(见卡片提示)`
+          : `检查完成:全部 ${results.length} 个服务运行正常`,
+      );
+    } catch (e: any) {
+      setMsg(`检查失败: ${e}`);
+    }
+  };
+
   const serverActions = useMcpServerActions({ cfg, setCfg, setStatus, setMsg, refresh });
 
   /** 添加 server:写入配置后重新加载列表并关闭对话框。 */
@@ -239,6 +281,7 @@ export function useMcpSettings() {
     onResetWorkspace,
     onOpenWorkspace,
     onOpenBackups,
+    onDiagnose,
     ...serverActions,
   };
 }

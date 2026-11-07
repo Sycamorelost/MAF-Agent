@@ -1,5 +1,13 @@
 /* ============ D3.3 版本列表 + diff ============ */
 /* ============ 设置(模板 06) ============ */
+/* 设置页根容器:灰底 + 圆角裁切;右侧主面板单独做成白色圆角卡,四角与会话页主面板同款弧边 */
+.pg-settings {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-main);
+  border-radius: 12px;
+  overflow: hidden;
+}
 .set-nav {
   width: calc(200px * var(--ui-scale)); flex-shrink: 0;
   background: var(--bg-side); border-right: 1px solid var(--border);
@@ -24,8 +32,14 @@
 
 .set-content {
   flex: 1; overflow-y: auto; min-width: 0;
+  margin: 10px 10px 10px 0;
   padding: var(--space-5) var(--pad-x);
-  background: var(--bg-surface); min-height: 0; }
+  background: var(--bg-surface);
+  border-radius: 12px;
+  min-height: 0; }
+
+/* 设置分区切换:复用主面板同一套抽屉动画(同一时长/缓动) */
+.set-view { animation: drawer-in-right var(--drawer-dur) var(--drawer-ease); }
 .set-content h2 { font-size: var(--font-h2); font-weight: 650; color: var(--text-1); line-height: 1.4; }
 .set-desc { font-size: var(--font-caption); color: var(--text-3); margin: var(--space-1) 0 var(--space-4); line-height: 1.7; }
 

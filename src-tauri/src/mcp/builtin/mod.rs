@@ -151,7 +151,15 @@ pub(crate) async fn execute_builtin(
             )
         }
         "delegate" => delegate::exec(args, sub_llm).await,
-        "shell_exec" => shell::exec(args, trust_shell).await,
+        "present" => crate::deliverables::present(session_id, args),
+        "fs_to_pdf" => {
+            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+            match crate::fs::convert::convert_in_workspace(session_id, path) {
+                Ok(p) => (format!("已生成 PDF:{}", p.display()), true),
+                Err(e) => (format!("转换 PDF 失败:{e}"), false),
+            }
+        }
+        "shell_exec" => shell::exec(args, trust_shell, session_id).await,
         _ => ("未知内置工具".into(), false),
     }
 }

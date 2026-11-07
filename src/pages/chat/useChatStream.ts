@@ -3,6 +3,7 @@ import type { AgentTemplate, ReasoningCapability, SourceItem } from '../../lib/i
 import * as ipc from '../../lib/ipc';
 import type { ThinkingSelection } from '../../stores/thinking';
 import { useMessagesStore } from '../../stores/messages';
+import { useDeliverablesStore } from '../../stores/deliverables';
 import { runningTask, useTasksStore } from '../../stores/tasks';
 import { maybeAutoSummarize } from './memoryContext';
 import { collectSessionTools, resolveReasoningEffort } from './chatTools';
@@ -126,6 +127,8 @@ export function useChatStream({
       } finally {
         setSending(false);
         cancelRef.current = null;
+        // M2:助手消息落库后刷新产物(本轮 present 登记的交付物已绑定到该消息)
+        void useDeliverablesStore.getState().load(sessionId, true);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

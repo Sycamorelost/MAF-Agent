@@ -8,9 +8,10 @@ import { MemoMarkdown, CodeBlock } from './MemoMarkdown';
 import ReasoningBlock from './ReasoningBlock';
 import { ToolTrace, ToolTraceGroup } from './ToolTrace';
 import { AttachmentCards } from './bubble/AttachmentCards';
+import { OutputCards } from './bubble/OutputCards';
 import { SourceCards } from './bubble/SourceCards';
 import { groupTraceSegments, splitTraceSegments } from '../lib/toolTrace';
-import { IconCheck, IconCopy, IconEdit, IconMore, IconPin, IconQuote, IconRefresh, IconSwap, IconTranslate, IconTrash } from './icons';
+import { IconCheck, IconCopy, IconEdit, IconMore, IconPin, IconQuote, IconRefresh, IconSwap, IconTrash } from './icons';
 
 /** 记忆 6 个标准节(与后端 KNOWN_SECTIONS 严格一致)。 */
 export const MEMORY_SECTIONS = [
@@ -39,6 +40,8 @@ export type BubbleMessage = Pick<
 
 interface Props {
   msg: BubbleMessage;
+  /** 所属会话(产物卡按该会话工作区解析相对路径;流式气泡可为空) */
+  sessionId?: string;
   /** 是否为最后一条 AI 回复(决定显示「重新生成」) */
   isLastAssistant?: boolean;
   /** 引用:message 级别摘要,完整原文由外层保存(选区优先在调用方处理) */
@@ -50,8 +53,6 @@ interface Props {
   onRetryModel?: () => void;
   /** 「存入记忆」:把来源列表写入 memory.md 资料节 */
   onSaveSources?: (sources: SourceItem[]) => void;
-  /** 「翻译」:把消息正文带到翻译页(附来源信息,不复制 Markdown 进输入框) */
-  onTranslate?: (content: string, meta?: { role?: string; createdAt?: string }) => void;
   /** 「钉入记忆」:把消息正文写入 memory.md 指定节(F8) */
   onPin?: (content: string, section: string) => void;
 }
@@ -113,6 +114,7 @@ function cutSegments(
 
 function MessageBubbleInner({
   msg,
+  sessionId,
   isLastAssistant,
   onQuote,
   onEditResend,
@@ -120,7 +122,6 @@ function MessageBubbleInner({
   onRegenerate,
   onRetryModel,
   onSaveSources,
-  onTranslate,
   onPin,
 }: Props) {
   const isUser = msg.role === 'user';
@@ -144,7 +145,7 @@ function MessageBubbleInner({
   };
 
   const hasActions =
-    onQuote || onEditResend || onDelete || onRegenerate || onRetryModel || onTranslate || onPin;
+    onQuote || onEditResend || onDelete || onRegenerate || onRetryModel || onPin;
 
   // 工具块提到气泡外(对齐设计稿:思考块 / 工具行 / 子任务卡片与正文平级);相邻工具块成组折叠
   const allSegments = useMemo(
@@ -204,6 +205,9 @@ function MessageBubbleInner({
           </div>
         )}
         <SourceCards raw={msg.sources ?? null} onSaveSources={onSaveSources} />
+        {!isUser && (
+          <OutputCards content={msg.content} sessionId={sessionId} messageId={msg.id} />
+        )}
         <div className="msg-meta">
           {msg.model_id && <span>{msg.model_id}</span>}
           {msg.model_id && msg.created && ' · '}
@@ -235,11 +239,6 @@ function MessageBubbleInner({
                       {onQuote && (
                         <button type="button" onClick={() => { closeMenus(); onQuote(msg.content, { role: msg.role, createdAt: msg.created }); }}>
                           <IconQuote size={13} /><span>引用</span>
-                        </button>
-                      )}
-                      {onTranslate && msg.content && (
-                        <button type="button" onClick={() => { closeMenus(); onTranslate(msg.content, { role: msg.role, createdAt: msg.created }); }}>
-                          <IconTranslate size={13} /><span>翻译</span>
                         </button>
                       )}
                       {onPin && msg.content && (

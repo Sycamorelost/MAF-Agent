@@ -1,13 +1,16 @@
 import { create } from 'zustand';
+import { clampSidebarWidth, SIDEBAR_W_DEFAULT } from '../components/sidebar/utils';
 
 const LS_SIDEBAR = 'metaagent.sidebar';
-const LS_ASIDE = 'metaagent.aside';
+const LS_SIDEBAR_W = 'metaagent.sidebar.width';
 
-const readFlag = (key: string) => {
+/** 布尔持久化:键不存在时取 fallback(侧栏默认展开,避免老用户升级后无侧栏)。 */
+const readFlag = (key: string, fallback: boolean) => {
   try {
-    return localStorage.getItem(key) === '1';
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === '1';
   } catch {
-    return false;
+    return fallback;
   }
 };
 
@@ -19,29 +22,44 @@ const writeFlag = (key: string, v: boolean) => {
   }
 };
 
-/** 全局 UI 状态(标题栏玻璃组件 ↔ 会话抽屉/页面抽屉联动)。 */
+const readWidth = () => {
+  try {
+    const raw = localStorage.getItem(LS_SIDEBAR_W);
+    if (raw === null) return SIDEBAR_W_DEFAULT;
+    return clampSidebarWidth(Number(raw));
+  } catch {
+    return SIDEBAR_W_DEFAULT;
+  }
+};
+
+/** 全局 UI 状态(标题栏 ↔ 侧栏/页面抽屉联动)。 */
 interface UiState {
-  /** 会话历史抽屉是否展开(玻璃侧栏,从标题栏 pill 开关;持久化到 localStorage) */
+  /** 侧栏是否展开(false = 折叠为 56px 图标轨;持久化到 localStorage) */
   sidebarOpen: boolean;
   setSidebarOpen: (v: boolean) => void;
-  /** 页面左栏抽屉是否展开(研究/绘图/翻译/记忆/知识库/设置,标题栏「面板」按钮开关;持久化) */
-  asideOpen: boolean;
-  setAsideOpen: (v: boolean) => void;
+  /** 侧栏展开态宽度(200–320px,拖拽调整;持久化) */
+  sidebarWidth: number;
+  setSidebarWidth: (v: number) => void;
 }
 
 /**
- * 抽屉状态持久化:打开后保持,直到用户再次点击 pill 按钮或抽屉 × 才关闭;
+ * 侧栏状态持久化:展开后保持,直到用户再次点击折叠或 Esc;
  * 路由切换 / 应用重启均不复位。
  */
 export const useUiStore = create<UiState>((set) => ({
-  sidebarOpen: readFlag(LS_SIDEBAR),
+  sidebarOpen: readFlag(LS_SIDEBAR, true),
   setSidebarOpen: (v) => {
     writeFlag(LS_SIDEBAR, v);
     set({ sidebarOpen: v });
   },
-  asideOpen: readFlag(LS_ASIDE),
-  setAsideOpen: (v) => {
-    writeFlag(LS_ASIDE, v);
-    set({ asideOpen: v });
+  sidebarWidth: readWidth(),
+  setSidebarWidth: (v) => {
+    const w = clampSidebarWidth(v);
+    try {
+      localStorage.setItem(LS_SIDEBAR_W, String(w));
+    } catch {
+      // 忽略隐私模式等存储异常
+    }
+    set({ sidebarWidth: w });
   },
 }));

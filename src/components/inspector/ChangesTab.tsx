@@ -21,7 +21,7 @@ function fmtTime(created: string): string {
 }
 
 export function ChangesTab({ data }: { data: WorkbenchData }) {
-  const { backups, refreshBackups } = data;
+  const { backups, refreshBackups, sessionId } = data;
   const [diff, setDiff] = useState<DiffState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,9 @@ export function ChangesTab({ data }: { data: WorkbenchData }) {
     try {
       const [oldText, newText] = await Promise.all([
         fsBackupRead(b.id),
-        fsReadText(b.rel).catch(() => '(当前文件不存在或不可读)'),
+        fsReadText(b.rel, undefined, undefined, sessionId).catch(
+          () => '(当前文件不存在或不可读)',
+        ),
       ]);
       setDiff({ rel: b.rel, backupId: b.id, rows: diffLines(oldText, newText) });
     } catch (e) {
@@ -69,7 +71,7 @@ export function ChangesTab({ data }: { data: WorkbenchData }) {
     setBusy(true);
     setError(null);
     try {
-      await fsRestore(b.id);
+      await fsRestore(b.id, sessionId);
       await refreshBackups();
       setDiff(null);
     } catch (e) {

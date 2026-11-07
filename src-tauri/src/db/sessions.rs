@@ -344,6 +344,8 @@ pub fn delete(id: &str) -> Result<(), String> {
     );
     // D7:事件日志无外键级联,随会话一起清理
     let _ = conn.execute("DELETE FROM session_events WHERE session_id=?1", [id]);
+    // M2:产物记录同样无外键,随会话清理
+    let _ = conn.execute("DELETE FROM deliverables WHERE session_id=?1", [id]);
     conn.execute("DELETE FROM sessions WHERE id=?1", [id])
         .map_err(|e| e.to_string())?;
     Ok(())

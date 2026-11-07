@@ -57,6 +57,10 @@
   /* 全屏打印/导出遮罩:必须凌驾于一切之上(含灯箱/Toast),使用 int32 最大值 */
   --z-print: 2147483647;
 
+  /* ---- 动效:全应用统一一套抽屉动画(侧栏开合、主面板切换共用) ---- */
+  --drawer-dur:  .24s;
+  --drawer-ease: cubic-bezier(.22,.61,.36,1);
+
   /* ---- 字号阶梯(全部乘以 --ui-scale:设置页「字体大小」等比缩放字号/间距/圆角) ---- */
   --ui-scale: 1;
   --font-hero: calc(26px * var(--ui-scale));
@@ -86,7 +90,7 @@
   --bg-main-rgb:  245,245,245;          /* 数字组,供 rgba(var(--bg-main-rgb), alpha) 拼接 */
   --bg-surface:   #FFFFFF;            /* 卡片/composer/dialog/pill/tool-chip/md 等表面底 */
   --bg-surface-rgb: 255,255,255;      /* 表面色数字组,供顶层弹窗拼 solid 背景(避免与壁纸透明变量叠加) */
-  --bg-side:      #FFFFFF;
+  --bg-side:      #F5F5F5;            /* 侧栏/左抽屉等非主对话区域 */
   --bg-hover:     #E8E8E8;
   --bg-active:    #DADADA;
 
@@ -141,18 +145,18 @@
   --ctl-pad: calc(10px * var(--ui-scale));
 
   /* ---- 字体栈 ---- */
-  --font:  "Inter","PingFang SC","Microsoft YaHei","Segoe UI","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;
+  --font:  "Inter","PingFang SC","Microsoft YaHei","Noto Sans CJK SC","Source Han Sans SC","Segoe UI","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;
   --font-mono: "JetBrains Mono","Cascadia Code","Consolas","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",monospace;
 
   /* ---- 布局（跨页面硬约束；栏宽/栏高随 --ui-scale 等比,避免字大栏窄） ---- */
   --mempanel-w:   calc(320px * var(--ui-scale));
-  --sidebar-w:    calc(280px * var(--ui-scale));   /* 会话抽屉宽度(窄窗降档) */
-  --aside-w:      calc(300px * var(--ui-scale));   /* 页面左栏抽屉宽度(窄窗降档) */
+  --sidebar-w:    calc(280px * var(--ui-scale));   /* 侧栏展开态宽度(可拖拽 200–320) */
   --titlebar-h:   calc(38px * var(--ui-scale));
-  /* 对话页内容宽度:正文 720px ≈ 15px 中文 48 字/行(40–50 舒适区);
-     输入卡与正文同轴同宽,形成一列阅读区。 */
-  --chat-max-w:      clamp(320px, 100%, calc(720px * var(--ui-scale)));
-  --composer-max-w:  clamp(340px, 100%, calc(720px * var(--ui-scale)));
+  /* 对话页内容宽度:正文基准宽 ≈ 15px 中文 48 字/行(40–50 舒适区);
+     输入卡与正文同轴同宽,共用 --content-w(设置 → 外观与首页可调)。 */
+  --content-w:       720px;
+  --chat-max-w:      clamp(320px, 100%, calc(var(--content-w) * var(--ui-scale)));
+  --composer-max-w:  clamp(340px, 100%, calc(var(--content-w) * var(--ui-scale)));
 
   /* ---- 水平间距系统（v3 · 所有栏/块/版统一约束） ----
      --pad-x:         主内容栏内水平 padding（主区、记忆面板、弹窗主区）

@@ -34,21 +34,15 @@ export async function maybeAutoSummarize(
   }
 }
 
-/** 用记忆正文 + 注入策略组装 system(学习进度块与记忆正文并列追加)。 */
+/** 用记忆正文 + 注入策略组装 system。 */
 export function composeSystemPrompt(
-  base: string, memBody: string, strategy: MemoryStrategy, studyDigest: string | null,
+  base: string, memBody: string, strategy: MemoryStrategy,
 ): string {
   const injected = injectByStrategy(memBody, strategy);
-  // 学习进度块:与记忆正文并列追加,超预算时同样受护栏约束
-  const studyBlock = studyDigest
-    ? `\n\n以下是用户当前的学习进度(来自学习规划板块),回答学习相关问题时请参考:\n${studyDigest}`
-    : '';
-  if (!injected && !studyBlock) return base;
-  if (!injected) return `${base}${studyBlock}`;
+  if (!injected) return base;
   // D3.5 注入预算护栏:超限硬截断兜底(正常路径已在发送前自动压缩)
   const memText = enforceBudget(injected);
-  const head = `${base}\n\n以下是关于当前会话的记忆(memory.md),请在回答时参考:\n\n${memText}`;
-  return studyBlock ? `${head}${studyBlock}` : head;
+  return `${base}\n\n以下是关于当前会话的记忆(memory.md),请在回答时参考:\n\n${memText}`;
 }
 
 /** D3.5:记忆预算护栏(发送前检测,超限自动压缩),返回压缩提示(无提示时 null)。 */

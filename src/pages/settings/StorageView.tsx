@@ -129,14 +129,6 @@ export function StorageView({
                 <td className="mn">data/images/</td>
               </tr>
               <tr>
-                <td>翻译历史</td>
-                <td className="mn">data/translations/</td>
-              </tr>
-              <tr>
-                <td>术语表</td>
-                <td className="mn">data/glossary.json</td>
-              </tr>
-              <tr>
                 <td>模型卡覆盖</td>
                 <td className="mn">data/model_cards.json</td>
               </tr>

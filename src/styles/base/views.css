@@ -3,12 +3,12 @@
   display: flex;
   flex-direction: column;
 }
-/* 项目头:folder 图标 + 项目名 + 最右 chevron */
+/* 项目头:folder 图标与项目名单行同高;工作文件夹地址仅悬停时以 title 提示 */
 .side-proj-head {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-2);
   font-size: var(--font-sub);
   font-weight: 600;
   color: var(--text-1);
@@ -18,17 +18,44 @@
   transition: background .12s;
 }
 .side-proj-head:hover { background: var(--bg-hover); }
-.side-proj-head svg { color: var(--text-2); flex: none; }
-.side-proj-head .proj-name {
+.side-proj-head.on { background: var(--brand-soft); }
+.side-proj-head.on .proj-name { color: var(--brand-deep); }
+.side-proj-head.on > svg { color: var(--brand); }
+.side-proj-head > svg { color: var(--text-2); flex: none; }
+.side-proj-head .proj-main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.side-proj-head .proj-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.35;
 }
+/* 项目操作入口:悬停/选中时出现,保持界面简洁 */
+.side-proj-head .proj-more {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s, background .12s, color .12s;
+}
+.side-proj-head:hover .proj-more,
+.side-proj-head.on .proj-more { opacity: 1; }
+.side-proj-head .proj-more:hover { background: var(--bg-active); color: var(--text-1); }
 /* 折叠箭头:默认朝右(折叠态),展开态向下 */
 .side-proj-head .chevron {
-  margin-left: auto;
   flex: none;
   color: var(--text-4);
   transition: transform .15s;
@@ -40,20 +67,22 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-height: calc(32px * var(--ui-scale));
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-s);
   font-size: var(--font-sub);
   color: var(--text-2);
   cursor: pointer;
-  transition: .12s;
+  transition: background .12s, color .12s;
   white-space: nowrap;
   overflow: hidden;
 }
 .side-item:hover { background: var(--bg-hover); color: var(--text-1); }
+/* 选中态:浅品牌底 + 深品牌字,与一级导航保持一致 */
 .side-item.on {
-  background: var(--text-4);
-  color: #000000;
-  font-weight: 700;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 600;
 }
 .side-item.on .md-dot {
   background: var(--brand);
@@ -61,8 +90,8 @@
   border-color: var(--brand);
 }
 .side-item.on .when {
-  color: #000000;
-  opacity: 0.7;
+  color: var(--brand);
+  opacity: .75;
 }
 .side-item .txt { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
 .side-item .when { font-size: var(--font-mini); color: var(--text-4); flex: none; }
@@ -89,20 +118,9 @@
   padding: 3px 6px; outline: none;
 }
 
-/* 缩进层级:项目头和无项目会话同级(padding-left = space-2 ≈ 12px)
-   项目内会话多一级缩进(space-2 + 14px folder + 4px gap) */
-.side-uncat-item {
-  padding-left: var(--space-2);
-}
+/* 缩进层级:项目内会话多一级缩进(space-2 + 14px folder + 4px gap) */
 .side-proj-item {
   padding-left: calc(var(--space-2) + 14px + var(--space-1));
-}
-
-/* 未分类分隔线 */
-.side-uncat-divider {
-  height: 1px;
-  background: var(--border);
-  margin: var(--space-2) var(--space-2);
 }
 
 /* 空状态 */
@@ -130,21 +148,23 @@
 }
 .link-btn:hover { color: var(--brand-deep); }
 
-/* ====== 按时间扁平视图 ====== */
-.side-flat-row {
+/* ====== 按时间分组视图(今天/昨天/7 天内/30 天内/更早) ====== */
+.side-time-group {
   display: flex;
   flex-direction: column;
 }
-.side-flat-tag {
+.side-group-label {
+  padding: var(--space-2) var(--space-2) var(--space-1);
   font-size: var(--font-micro);
+  font-weight: 600;
   color: var(--text-4);
-  padding: var(--space-1) var(--space-2) 0;
-  font-weight: 500;
+  letter-spacing: .02em;
 }
 .side-flat-item {
   padding-left: var(--space-2);
 }
-/* Main(聊天主区):与 window 外框同半径圆角,白色画布四个角 */
+/* Main:整个内容区统一使用会话画布底色(--bg-frame,默认主题下即 #FFFFFF),
+   切换页面(记忆/知识库/附件/设置)时底色保持不变,不再退回灰色 --bg-main */
 .main {
   flex: 1;
   display: flex;
@@ -153,6 +173,26 @@
   background: var(--bg-frame);
   border-radius: 12px;
   overflow: hidden;
+}
+
+/* 主面板视图:一级路由切换时以统一下拉/右滑抽屉动画进场(与侧栏同一套时长/缓动) */
+.main-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  animation: drawer-in-right var(--drawer-dur) var(--drawer-ease);
+}
+
+/* 对话页内部画布:与 .main 同色,由内容自身分区,不再另铺灰底 */
+.chat-root {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg-frame);
+  border-radius: 12px;
 }
 .main-empty {
   flex: 1;
@@ -177,16 +217,16 @@
 }
 .main-empty-sug:hover { border-color: var(--brand); color: var(--brand); }
 
-/* 消息滚动容器 */
+/* 消息滚动容器:滚动条隐藏,保证正文列宽与输入卡严格等宽(不再被滚动条占位挤窄) */
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
-  /* 恒为滚动条预留空间,内容高度变化(如 mermaid 渲染)时不再横向抖动 */
-  scrollbar-gutter: stable;
+  scrollbar-width: none;
   padding: var(--space-4) var(--pad-x);
   display: flex;
   flex-direction: column;
   gap: var(--space-4); min-height: 0; }
+.chat-scroll::-webkit-scrollbar { width: 0; height: 0; }
 .chat-inner {
   max-width: var(--chat-max-w);
   margin: 0 auto;

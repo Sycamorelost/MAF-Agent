@@ -1,10 +1,8 @@
 import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { BubbleMessage } from '../../components/MessageBubble';
 import { useMessagesStore } from '../../stores/messages';
 import { useMemoryStore } from '../../stores/memory';
-import { useSessionsStore } from '../../stores/sessions';
 import * as ipc from '../../lib/ipc';
 import type { AttachmentMeta } from '../../lib/ipc';
 import { useEditResend } from './attachments';
@@ -25,40 +23,15 @@ interface MessageActionsParams {
   setRetryTarget: Dispatch<SetStateAction<BubbleMessage | null>>;
 }
 
-/** 消息操作(翻译/引用/编辑重发/删除/重新生成/换模型重试)与来源/钉入记忆的写入动作。 */
+/** 消息操作(引用/编辑重发/删除/重新生成/换模型重试)与来源/钉入记忆的写入动作。 */
 export function useMessageActions({
   sessionId, setComposerText, setPendingAttachments, setPendingImages,
   setError, showToast, forkAndReload, runStream, rebuildHistory, retryTarget, setRetryTarget,
 }: MessageActionsParams) {
-  const nav = useNavigate();
   const remove = useMessagesStore((s) => s.remove);
   const loadMemory = useMemoryStore((s) => s.load);
 
   // ---------- 消息操作(useCallback 稳定引用,配合 MessageList memo) ----------
-  /** 「翻译」:把纯文本 + 来源信息写入草稿并跳翻译页(不在输入框复制整条 Markdown)。 */
-  const onTranslate = useCallback(
-    (content: string, meta?: { role?: string; createdAt?: string }) => {
-      const title =
-        useSessionsStore.getState().sessions.find((s) => s.id === sessionId)?.title ?? '未命名会话';
-      const role = meta?.role === 'user' ? '用户' : '助手';
-      const time = meta?.createdAt
-        ? new Date(meta.createdAt).toLocaleString('zh-CN', {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        : '';
-      const source = [title, role, time].filter(Boolean).join(' · ');
-      try {
-        sessionStorage.setItem('translate_draft', JSON.stringify({ text: content, source }));
-      } catch {
-        // 存储失败不阻塞跳转
-      }
-      nav('/translate');
-    },
-    [nav, sessionId],
-  );
   const onEditResend = useEditResend({
     sessionId, setComposerText, setPendingAttachments, setPendingImages, forkAndReload,
   });
@@ -135,7 +108,7 @@ export function useMessageActions({
     [sessionId, loadMemory, showToast],
   );
   return {
-    onTranslate, onEditResend, onDelete, onRegenerate, onPickRetryModel,
+    onEditResend, onDelete, onRegenerate, onPickRetryModel,
     onSaveSources, onPin,
   };
 }

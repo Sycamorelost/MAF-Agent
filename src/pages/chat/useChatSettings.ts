@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import * as ipc from '../../lib/ipc';
-import { studyMemoryDigest } from '../../lib/ipc/study';
 import { parseHumanVoiceLevel, type HumanVoiceLevel } from '../../lib/humanVoice';
 
-/** 当前模型与发送流程相关的全局设置探测:全裸模式、物理契约、文字质感、思考能力、学习进度摘要。 */
+/** 当前模型与发送流程相关的全局设置探测:全裸模式、物理契约、文字质感、思考能力。 */
 export function useChatSettings(current: { providerId: string; model: string } | null) {
   // 当前模型的思考能力(手动修正 > 内置规则表推断;查询失败按不支持处理,控件整体隐藏)
   const [thinkCap, setThinkCap] = useState<ipc.ReasoningCapability | null>(null);
@@ -21,15 +20,6 @@ export function useChatSettings(current: { providerId: string; model: string } |
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.providerId, current?.model]);
-  // 学习进度摘要(P2 记忆注入):进页取一次,失败静默(学习板块为空时后端返回 null)
-  const [studyDigest, setStudyDigest] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    studyMemoryDigest().then((d) => alive && setStudyDigest(d)).catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
   /** 全裸模式(R3 A1):true = system 不追加身份锚,仅保留物理契约(人格全交智能体/中转模型) */
   const [bareMode, setBareMode] = useState(false);
   /** 用户自定义底层物理契约(空 = 内置默认) */
@@ -51,5 +41,5 @@ export function useChatSettings(current: { providerId: string; model: string } |
       alive = false;
     };
   }, []);
-  return { bareMode, customContract, humanVoiceLevel, thinkCap, studyDigest };
+  return { bareMode, customContract, humanVoiceLevel, thinkCap };
 }

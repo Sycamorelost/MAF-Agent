@@ -89,6 +89,20 @@ pub fn append_on_partial(
     .map_err(|e| e.to_string())?;
     let id = tx.last_insert_rowid();
 
+    // M2:助手消息落库时,把本轮 present 登记的暂存产物绑定到这条消息
+    // (交付卡按 message_id 回读;绑定失败不阻塞消息本身,产物随后仍可按会话列出)
+    if role == "assistant"
+        && let Err(e) = crate::deliverables::bind_pending_on(&tx, session_id, id)
+    {
+        log::warn!("deliverables 绑定失败(message_id={id}): {e}");
+    }
+    // 新一轮用户消息:上一轮被取消/中断时遗留的暂存产物已无消息可绑定,直接清掉
+    if role == "user"
+        && let Err(e) = crate::deliverables::clear_pending_on(&tx, session_id)
+    {
+        log::warn!("deliverables 暂存清理失败: {e}");
+    }
+
     // 同时刷新 sessions.updated
     tx.execute(
         "UPDATE sessions SET updated=?1 WHERE id=?2",
@@ -217,6 +231,8 @@ pub fn delete_one_on(conn: &Connection, id: i64) -> Result<(), String> {
     if let Err(e) = tx.execute("DELETE FROM messages_fts WHERE rowid=?1", [id]) {
         log::warn!("messages_fts 删除失败(rowid={id}): {e}");
     }
+    // M2:产物随消息删除,避免交付卡指向已不存在的回答
+    let _ = crate::deliverables::delete_by_message_on(&tx, id);
     tx.execute("DELETE FROM messages WHERE id=?1", [id])
         .map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
@@ -265,6 +281,12 @@ pub fn delete_from_on(
     ) {
         log::warn!("messages_fts 区段删除失败: {e}");
     }
+    // M2:被删区段的产物一并清理(按 message_id 关联;须在消息删除前执行)
+    let _ = tx.execute(
+        "DELETE FROM deliverables WHERE message_id IN (
+           SELECT id FROM messages WHERE session_id=?1 AND branch_id=?2 AND id>=?3)",
+        rusqlite::params![session_id, branch_id, from_id],
+    );
     let n = tx
         .execute(
             "DELETE FROM messages WHERE session_id=?1 AND branch_id=?2 AND id>=?3",
@@ -335,6 +357,12 @@ pub fn clear_on(conn: &Connection, session_id: &str, branch_id: &str) -> Result<
     ) {
         log::warn!("messages_fts 清空失败: {e}");
     }
+    // M2:本分支消息的产物一并清理(须在消息删除前执行)
+    let _ = tx.execute(
+        "DELETE FROM deliverables WHERE message_id IN (
+           SELECT id FROM messages WHERE session_id=?1 AND branch_id=?2)",
+        rusqlite::params![session_id, branch_id],
+    );
     tx.execute(
         "DELETE FROM messages WHERE session_id=?1 AND branch_id=?2",
         rusqlite::params![session_id, branch_id],

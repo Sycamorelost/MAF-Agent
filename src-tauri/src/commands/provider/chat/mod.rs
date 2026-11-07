@@ -5,9 +5,7 @@
 //! - `reasoning.rs`:思考档位解析与合并;
 //! - `failover.rs`:多 Key 轮换/故障转移的流式主循环;
 //! - `context.rs`:上下文预算裁剪;
-//! - `bridge.rs`:通用「Provider 流 → channel」后台任务(翻译等共用)。
 
-mod bridge;
 // 命令子模块需对外可见:命令注册表使用子模块原始路径(Tauri 宏要求真实模块路径)。
 pub(crate) mod command;
 mod context;
@@ -49,5 +47,3 @@ pub struct ChatStreamInput {
 
 #[allow(unused_imports)]
 pub use command::chat_stream;
-#[allow(unused_imports)]
-pub(crate) use bridge::spawn_chat_to_channel;

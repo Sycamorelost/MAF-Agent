@@ -1,13 +1,14 @@
-import type { ProjectRow, SessionRow } from '../../lib/ipc';
+import type { SessionRow } from '../../lib/ipc';
 import { SessionRowItem } from './SessionRow';
+import { groupSessionsByTime } from './utils';
 
-/** 按时间扁平视图:所有会话平铺,上方显示所属项目标签 */
+/** 按时间分组视图(今天/昨天/7 天内/30 天内/更早),与 DeepSeek 侧栏一致。 */
 interface Props {
   sessions: SessionRow[];
-  projects: ProjectRow[];
   activeId: string | undefined;
   editingId: string | null;
   editingText: string;
+  emptyText?: string;
   onSessionNavigate: (id: string) => void;
   onSessionStartRename: (s: SessionRow) => void;
   onEditingTextChange: (t: string) => void;
@@ -18,10 +19,10 @@ interface Props {
 
 export function TimeListView({
   sessions,
-  projects,
   activeId,
   editingId,
   editingText,
+  emptyText = '还没有会话。',
   onSessionNavigate,
   onSessionStartRename,
   onEditingTextChange,
@@ -32,17 +33,17 @@ export function TimeListView({
   const flat = [...sessions].sort((a, b) => b.updated.localeCompare(a.updated));
 
   if (flat.length === 0) {
-    return <div className="side-empty">还没有会话。</div>;
+    return <div className="side-empty">{emptyText}</div>;
   }
 
   return (
     <>
-      {flat.map((s) => {
-        const proj = s.project_id ? projects.find((p) => p.id === s.project_id) : null;
-        return (
-          <div key={s.id} className="side-flat-row">
-            <span className="side-flat-tag">{proj ? proj.name : '未分类'}</span>
+      {groupSessionsByTime(flat).map((group) => (
+        <div key={group.key} className="side-time-group">
+          <div className="side-group-label">{group.label}</div>
+          {group.items.map((s) => (
             <SessionRowItem
+              key={s.id}
               session={s}
               indentClass="side-flat-item"
               activeId={activeId}
@@ -55,9 +56,9 @@ export function TimeListView({
               onCancelRename={onCancelRename}
               onContextMenu={onSessionContextMenu}
             />
-          </div>
-        );
-      })}
+          ))}
+        </div>
+      ))}
     </>
   );
 }

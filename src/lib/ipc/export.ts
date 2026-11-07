@@ -30,3 +30,8 @@ export const pickSavePath = (
 /** 唤起主窗口的原生打印对话框(用户在对话框里选「另存为 PDF」)。
  *  调用前渲染层需先把待导出内容铺成全屏白底覆盖层。 */
 export const exportPdf = () => invoke<void>('export_pdf');
+
+/** 把已有文档转成 PDF(LibreOffice 无头,免费离线,无需 API)。
+ *  返回生成的 PDF 绝对路径;同名文件已存在时自动加时间戳。 */
+export const exportFilePdf = (path: string, sessionId?: string) =>
+  invoke<string>('export_file_pdf', { path, sessionId: sessionId ?? null });

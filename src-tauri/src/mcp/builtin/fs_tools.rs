@@ -6,8 +6,11 @@
 use serde_json::Value;
 
 /// 本模块负责的工具名。
+/// `fs_to_pdf` 需要返回生成的绝对路径,统一在 `builtin::mod` 的路由里处理。
 pub(super) fn handles(name: &str) -> bool {
-    name.starts_with("fs_") || name.starts_with("zip_") || name == "file_extract"
+    (name.starts_with("fs_") && name != "fs_to_pdf")
+        || name.starts_with("zip_")
+        || name == "file_extract"
 }
 
 pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (String, bool) {

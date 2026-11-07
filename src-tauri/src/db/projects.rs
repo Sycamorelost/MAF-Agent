@@ -72,9 +72,8 @@ pub fn name_from_path(path: &str) -> String {
         .to_string()
 }
 
-/// 创建项目 —— path 必须是绝对路径且目录存在。
-/// name 为空时自动从 path 推断。
-pub fn create(name: &str, path: &str) -> Result<ProjectRow, String> {
+/// 规范化并校验工作文件夹:清理 Windows UNC 前缀,必须是绝对路径且目录存在。
+fn normalize_work_dir(path: &str) -> Result<String, String> {
     let path = path.trim();
     if path.is_empty() {
         return Err("项目路径不能为空".into());
@@ -86,20 +85,28 @@ pub fn create(name: &str, path: &str) -> Result<ProjectRow, String> {
         .map(|s| s.to_string())
         .unwrap_or_else(|| path.to_string());
 
-    // Windows 绝对路径校验
+    // 绝对路径校验(Windows 盘符 / POSIX 根 / UNC)
     let is_abs = std::path::Path::new(&path).is_absolute()
         || (path.len() >= 2 && path.chars().nth(1) == Some(':'))
         || path.starts_with(r"\\");
     if !is_abs {
-        log::warn!("project_create: path 不是绝对路径: {path}");
+        log::warn!("project path 不是绝对路径: {path}");
         return Err(format!("路径不是绝对路径: {path}"));
     }
 
     // 目录必须实际存在于磁盘上
     if !std::path::Path::new(&path).is_dir() {
-        log::warn!("project_create: 路径不是有效目录: {path}");
+        log::warn!("project path 不是有效目录: {path}");
         return Err(format!("路径不是有效目录: {path}"));
     }
+
+    Ok(path)
+}
+
+/// 创建项目 —— path 必须是绝对路径且目录存在。
+/// name 为空时自动从 path 推断。
+pub fn create(name: &str, path: &str) -> Result<ProjectRow, String> {
+    let path = normalize_work_dir(path)?;
 
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     let id: String = {
@@ -156,12 +163,17 @@ pub fn rename(id: &str, name: &str) -> Result<(), String> {
 }
 
 pub fn update_path(id: &str, path: &str) -> Result<(), String> {
+    let path = normalize_work_dir(path)?;
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    conn.execute(
-        "UPDATE projects SET path=?1, updated=?2 WHERE id=?3",
-        rusqlite::params![path, chrono::Local::now().to_rfc3339(), id],
-    )
-    .map_err(|e| e.to_string())?;
+    let changed = conn
+        .execute(
+            "UPDATE projects SET path=?1, updated=?2 WHERE id=?3",
+            rusqlite::params![path, chrono::Local::now().to_rfc3339(), id],
+        )
+        .map_err(|e| e.to_string())?;
+    if changed == 0 {
+        return Err(format!("项目不存在: {id}"));
+    }
     Ok(())
 }
 

@@ -72,7 +72,7 @@ pub async fn get_search_config(
     // 已启动则实时探测工具名;未启动返回空数组(前端显示"未启动")
     let mcp_tool_names = if runtime.is_running(&server).await {
         runtime
-            .list_tools(&server)
+            .list_tools(&server, false)
             .await
             .map(|tools| tools.into_iter().map(|t| t.name).collect())
             .unwrap_or_default()

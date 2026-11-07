@@ -78,8 +78,8 @@ export function useChatSend({
   const [retryTarget, setRetryTarget] = useState<BubbleMessage | null>(null);
   /** F8:钉入记忆后的轻提示(多行文件导入清单常驻,可手动关闭) */
   const { toast, showToast, hideToast } = useToast();
-  // 模型能力 / 学习进度 / 全裸模式 / 物理契约 / 文字质感等设置
-  const { bareMode, customContract, humanVoiceLevel, thinkCap, studyDigest } =
+  // 模型能力 / 全裸模式 / 物理契约 / 文字质感等设置
+  const { bareMode, customContract, humanVoiceLevel, thinkCap } =
     useChatSettings(current);
   /** P5 / D19:会话生效预设的上下文条数上限(会话未单独设置时生效;0 = 未解析/解析失败,回落兜底值)。 */
   const [presetCtxMax, setPresetCtxMax] = useState(0);
@@ -122,10 +122,9 @@ export function useChatSend({
         }),
         memBody,
         strategy,
-        studyDigest,
       );
     },
-    [session?.system_prompt, agent, studyDigest, bareMode, customContract, humanVoiceLevel],
+    [session?.system_prompt, agent, bareMode, customContract, humanVoiceLevel],
   );
   const buildSystem = useCallback(
     (): string => buildSystemWith(memoryBody, session?.memory_injection_strategy ?? 'hybrid'),
@@ -149,7 +148,7 @@ export function useChatSend({
   };
   // 消息操作与来源/钉入记忆
   const {
-    onTranslate, onEditResend, onDelete, onRegenerate, onPickRetryModel,
+    onEditResend, onDelete, onRegenerate, onPickRetryModel,
     onSaveSources, onPin,
   } = useMessageActions({
     sessionId, setComposerText, setPendingAttachments, setPendingImages,
@@ -246,20 +245,21 @@ export function useChatSend({
             return null;
           });
       }
-      if (text) {
-        try {
-          const hit = await ipc.docPrefetch(sessionId, text);
-          if (hit) llmContentBase = `${llmContentBase}\n\n${hit}`;
-        } catch {
-          // 预检索失败时退回纯文档卡/全文注入
-        }
-      }
+      // D1:预检索与「落库 + 记忆预算」互不依赖,先并行发起;
+      // 但落库必须等预检索结束并检查取消 —— 否则用户在中途点停止时消息已写入 DB,
+      // UI 却把乐观行移除,刷新后会出现「幽灵消息」。
+      const prefetchPromise: Promise<string | null> = text
+        ? ipc.docPrefetch(sessionId, text).catch(() => null) // 预检索失败不影响发送
+        : Promise.resolve(null);
+      const hit = await prefetchPromise;
+      if (hit) llmContentBase = `${llmContentBase}\n\n${hit}`;
       // P2-8:准备阶段任意时点可「停止」(哨兵取消,静默收尾,不当错误提示)
       if (prepCancelRef.current) throw new PrepCancelled();
-      // 2. 持久化用户消息(就地替换乐观行)
-      await appendUser(sessionId, displayContent, current?.model ?? null, attachmentsJson, optimisticId);
-      // 2.5 D3.5 记忆预算护栏:超限先压缩再发送
-      await enforceMemoryBudget();
+      // 2. 持久化用户消息(就地替换乐观行) 与 2.5 记忆预算护栏并行
+      await Promise.all([
+        appendUser(sessionId, displayContent, current?.model ?? null, attachmentsJson, optimisticId),
+        enforceMemoryBudget(),
+      ]);
       if (prepCancelRef.current) throw new PrepCancelled();
       // 搜索收尾:与上面的落库/预算并行执行,发流前在这里取结果注入
       let sources: ipc.SourceItem[] | null = null;
@@ -318,7 +318,7 @@ export function useChatSend({
   return {
     sending, searching, error, setError, compressNotice, setCompressNotice, toast,
     showToast, hideToast,
-    retryTarget, setRetryTarget, thinkCap, buildSystemWith, onSend, onCancel, onTranslate,
+    retryTarget, setRetryTarget, thinkCap, buildSystemWith, onSend, onCancel,
     onEditResend, onDelete, onRegenerate, onPickRetryModel, onSaveSources, onPin,
     onRecall, onToggleWebSearch,
   };

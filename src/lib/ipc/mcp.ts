@@ -164,3 +164,34 @@ export interface ToolCallLog {
 /** P4:「查看完整输出」按 id 拉取工具结果全文(不存在时返回 null)。 */
 export const mcpGetToolLog = (id: number) =>
   invoke<ToolCallLog | null>("mcp_get_tool_log", { id });
+
+// ------- C2 mcp_doctor 诊断 -------
+
+/** C2:单个 MCP server 的健康诊断结果(与 Rust 侧 McpDoctorResult 镜像)。 */
+export interface McpDoctorResult {
+  /** server 唯一名称 */
+  name: string;
+  /** 配置层面是否启用 */
+  enabled: boolean;
+  /** 是否预置 server(内置 4 个)/用户自定义 */
+  is_preset: boolean;
+  /** 传输方式:stdio / http */
+  transport: string;
+  /** runtime 里是否有 handle(仅表示已 spawn,不代表能响应) */
+  is_running: boolean;
+  /** C3 指数退避耗尽后自动标记禁用 */
+  disabled_by_failure: boolean;
+  /** 探活:已启动的 stdio server 能否响应 tools/list */
+  peek_ok: boolean;
+  /** 探活失败时的错误信息 */
+  peek_error?: string;
+  /** 命令二进制是否可执行(Windows 查 .exe/.cmd/.bat/.com + PATH;Unix 查 PATH 裸名) */
+  command_resolved: boolean;
+  /** 解析到的命令完整路径(Windows 才会返回, Unix 为 null) */
+  command_path?: string;
+  /** P0b:实际启动方式 —— npx(默认)/ native(原生二进制)/ http */
+  backend: string;
+}
+
+/** C2:批量诊断所有 MCP server(无参数)。 */
+export const mcpDoctor = () => invoke<McpDoctorResult[]>("mcp_doctor");

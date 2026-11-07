@@ -36,30 +36,6 @@ pub struct GenerateImageInput {
     pub custom_display_name: Option<String>,
 }
 
-/// 前端实时预览输入:与 generate_image 的组装规则完全一致,但不触发生成。
-#[derive(Debug, Deserialize)]
-pub struct ComposePromptInput {
-    pub provider_id: String,
-    pub model: String,
-    pub prompt: String,
-    pub negative: Option<String>,
-    pub style_prompt: Option<String>,
-}
-
-/// 组装最终 Prompt,供绘图页实时显示字数 / 估算 token / 上限 / 告警。
-///
-/// 复用 `draw_prompt::compose`,保证「预览看到的内容」就是「实际发给模型的内容」。
-#[tauri::command]
-pub fn compose_draw_prompt(input: ComposePromptInput) -> crate::draw_prompt::ComposedPrompt {
-    crate::draw_prompt::compose(
-        &input.prompt,
-        input.style_prompt.as_deref(),
-        input.negative.as_deref(),
-        &input.provider_id,
-        &input.model,
-    )
-}
-
 #[derive(Debug, serde::Serialize)]
 pub struct ImageResultItem {
     /// 落盘绝对路径(项目 data/images/ 下)
@@ -584,23 +560,6 @@ pub async fn save_image_as(
     };
     std::fs::copy(&src, &dst).map_err(|e| format!("保存图片失败: {e}"))?;
     Ok(Some(dst.display().to_string()))
-}
-
-/// 「上传到对话」:把已生成图片复制为指定会话的图片附件,返回附件元数据。
-#[tauri::command]
-pub async fn image_to_session(
-    image_path: String,
-    session_id: String,
-) -> Result<crate::commands::attachment::AttachmentMeta, String> {
-    let src = std::path::PathBuf::from(&image_path);
-    ensure_in_images_dir(&src)?;
-    let bytes = std::fs::read(&src).map_err(|e| format!("读取图片失败: {e}"))?;
-    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
-    let name = src
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "image.png".into());
-    crate::commands::attachment::save_attachment(session_id, name, b64).await
 }
 
 #[cfg(test)]

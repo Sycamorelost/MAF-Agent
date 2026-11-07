@@ -5,7 +5,7 @@ use super::*;
 #[tokio::test]
 async fn unrestricted_executes_without_whitelist() {
     // 信任模式不校验白名单/解释器,直接执行;用 echo 验证执行通路
-    let out = run_unrestricted("echo", &["trust-ok".to_string()], None)
+    let out = run_unrestricted("echo", &["trust-ok".to_string()], None, None)
         .await
         .expect("echo 必须执行成功");
     assert!(out.text.contains("trust-ok"), "实际输出:{}", out.text);
@@ -14,13 +14,13 @@ async fn unrestricted_executes_without_whitelist() {
 
 #[tokio::test]
 async fn unrestricted_still_rejects_empty_command() {
-    assert!(run_unrestricted("   ", &[], None).await.is_err());
+    assert!(run_unrestricted("   ", &[], None, None).await.is_err());
 }
 
 #[tokio::test]
 async fn unrestricted_supports_full_line_command() {
     // 整行命令(含空格)→ cmd /c:此前必然 program not found
-    let out = run_unrestricted("echo line-mode-ok", &[], None)
+    let out = run_unrestricted("echo line-mode-ok", &[], None, None)
         .await
         .expect("整行命令必须可执行");
     assert!(out.text.contains("line-mode-ok"), "实际输出:{}", out.text);
@@ -29,7 +29,7 @@ async fn unrestricted_supports_full_line_command() {
 
 #[tokio::test]
 async fn non_zero_exit_is_reported_as_failure() {
-    let out = run_unrestricted("cmd /c exit 3", &[], None)
+    let out = run_unrestricted("cmd /c exit 3", &[], None, None)
         .await
         .expect("进程本身能启动");
     assert_eq!(out.exit_code, Some(3), "实际:{}", out.text);
@@ -39,7 +39,7 @@ async fn non_zero_exit_is_reported_as_failure() {
 
 #[tokio::test]
 async fn empty_output_is_marked_explicitly() {
-    let out = run_unrestricted("cmd /c exit 0", &[], None)
+    let out = run_unrestricted("cmd /c exit 0", &[], None, None)
         .await
         .expect("进程本身能启动");
     assert!(out.text.contains("(无输出)"), "实际输出:{}", out.text);
@@ -49,7 +49,7 @@ async fn empty_output_is_marked_explicitly() {
 #[tokio::test]
 async fn huge_output_keeps_head_and_tail() {
     // 约 80KB 输出:必须保留头尾(尾部的错误/结果不能丢),中间标注省略
-    let out = run_unrestricted("cmd /c for /L %i in (1,1,8000) do @echo line%i", &[], None)
+    let out = run_unrestricted("cmd /c for /L %i in (1,1,8000) do @echo line%i", &[], None, None)
         .await
         .expect("批量输出命令必须可执行");
     assert!(out.success(), "实际:{}", out.text);
@@ -101,7 +101,7 @@ fn parse_shell_args_coerces_types() {
 
 #[test]
 fn cwd_defaults_to_workspace_and_allows_any_existing_dir() {
-    let root = crate::fs::paths::workspace_root().expect("工作区根可用");
+    let root = crate::fs::paths::default_workspace_root().expect("工作区根可用");
     // 缺省 → 工作区根(与 fs_* 对齐)
     let dir = resolve_cwd(None, &root).expect("默认 cwd 必须是工作区根");
     assert_eq!(dir, root);

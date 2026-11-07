@@ -70,8 +70,24 @@ pub struct ApprovalPolicy {
 
 impl ApprovalPolicy {
     /// 是否需要弹窗审批(false = 后台直接放行)。
+    ///
+    /// 无会话上下文时按全局默认工作区判定;能拿到 session_id 的调用点必须改用
+    /// [`ApprovalPolicy::requires_approval_in`],否则项目绑定后「项目内写」仍会误弹审批。
+    #[allow(dead_code)]
     pub fn requires_approval(
         &self,
+        server: &str,
+        tool: &str,
+        risk: ApprovalRisk,
+        args: &serde_json::Value,
+    ) -> bool {
+        self.requires_approval_in(None, server, tool, risk, args)
+    }
+
+    /// 会话感知版:工作区档下,「项目内写」按会话绑定的项目目录判定。
+    pub fn requires_approval_in(
+        &self,
+        session_id: Option<&str>,
         server: &str,
         tool: &str,
         risk: ApprovalRisk,
@@ -95,7 +111,7 @@ impl ApprovalPolicy {
                 if self.allow.iter().any(|p| p.trim() == key || p.trim() == tool) {
                     return false;
                 }
-                !workspace_write_auto_allowed(server, tool, args)
+                !workspace_write_auto_allowed_in(session_id, server, tool, args)
             }
         }
     }
@@ -105,7 +121,18 @@ impl ApprovalPolicy {
 /// 且 path 解析后落在工作区内;删除 / 备份恢复 / zip 解包 / shell 一律仍需审批。
 /// 分批写入的 chunk/finish 不带 path,改为校验 write_id 有效
 /// (目标路径已在 begin 时做过同样的工作区校验,且分片只落临时文件,无法改道)。
+#[allow(dead_code)] // 单测使用;运行时统一走会话感知版
 fn workspace_write_auto_allowed(server: &str, tool: &str, args: &serde_json::Value) -> bool {
+    workspace_write_auto_allowed_in(None, server, tool, args)
+}
+
+/// 会话感知版:工作区边界按会话绑定的项目目录解析(未绑定项目时回退全局)。
+fn workspace_write_auto_allowed_in(
+    session_id: Option<&str>,
+    server: &str,
+    tool: &str,
+    args: &serde_json::Value,
+) -> bool {
     if server != "builtin" {
         return false;
     }
@@ -125,7 +152,7 @@ fn workspace_write_auto_allowed(server: &str, tool: &str, args: &serde_json::Val
     let Some(path) = args.get("path").and_then(|v| v.as_str()) else {
         return false;
     };
-    let Ok(root) = crate::fs::paths::workspace_root() else {
+    let Ok(root) = crate::fs::paths::resolve_workspace_root(session_id) else {
         return false;
     };
     in_workspace_at(&root, path)
@@ -299,6 +326,11 @@ pub(crate) fn assess_risk(server: &str, tool: &str, args: &serde_json::Value) ->
         return ApprovalRisk::High;
     }
     let t = tool.to_ascii_lowercase();
+    // M2:present 只登记产物元数据(不写用户文件、不改内容),按低风险处理,
+    // 否则每轮交付都会弹审批,打断「写完即交付」的主流程。
+    if server == "builtin" && t == "present" {
+        return ApprovalRisk::Low;
+    }
     // 2. 破坏性/执行类动词 → 高风险
     const DESTRUCTIVE: [&str; 7] = [
         "delete",
@@ -372,6 +404,11 @@ mod tests {
         assert_eq!(
             assess_risk("builtin", "fs_delete", &json!({})),
             ApprovalRisk::High
+        );
+        // M2:present 只登记产物,不写文件 → 低风险,不触发审批
+        assert_eq!(
+            assess_risk("builtin", "present", &json!({})),
+            ApprovalRisk::Low
         );
 
         // P1:外部 MCP 工具名由对方 server 提供,不可作为放行依据 —— 一律至少 Medium;

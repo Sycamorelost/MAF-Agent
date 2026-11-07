@@ -5,23 +5,9 @@ import { useProvidersStore } from '../stores/providers';
 import { useSessionsStore } from '../stores/sessions';
 import { useUiStore } from '../stores/ui';
 import { sessionPath } from '../lib/workbench';
-import { NavMenu } from './NavMenu';
 import GlobalSearch from './GlobalSearch';
 import AgentPickerDialog from './AgentPickerDialog';
 import { IconEdit, IconSearch, IconX } from './icons';
-
-/** 会话历史抽屉可用的路由(其他页面无会话侧栏,隐藏历史开关);
- *  P3-1 路由收敛后 /work 仅剩聚合首页(无会话侧栏),不再包含。 */
-function sidebarAllowed(pathname: string) {
-  return pathname === '/' || pathname.startsWith('/chat');
-}
-
-/** 页面左栏抽屉可用的路由(标题栏显示「面板」开关)。 */
-function asideAllowed(pathname: string) {
-  return ['/plan', '/draw', '/translate', '/memory', '/notes', '/settings'].some((p) =>
-    pathname.startsWith(p),
-  );
-}
 
 /**
  * 自定义标题栏(简洁模式):
@@ -40,6 +26,7 @@ export default function Titlebar() {
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const sidebarOpen = useUiStore((s) => s.sidebarOpen);
 
   // 路由变化收起浮层(搜索跳转 / 导航后不残留);抽屉开启状态持久化,不随路由复位
   useEffect(() => {
@@ -88,36 +75,20 @@ export default function Titlebar() {
 
   return (
     <div className="titlebar" data-tauri-drag-region>
-      <NavMenu />
-
-      {/* 玻璃组件组:会话抽屉 / 全局搜索 / 新建对话(DeepSeek 式简洁模式) */}
+      {/* 玻璃组件组:侧栏折叠 / 全局搜索 / 新建对话(导航已移入侧栏) */}
       <div className="tb-pill">
-        {sidebarAllowed(loc.pathname) && (
-          <button
-            className="tb-pill-btn"
-            title="会话历史"
-            aria-label="会话历史"
-            onClick={() => useUiStore.getState().setSidebarOpen(!useUiStore.getState().sidebarOpen)}
-          >
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
-              <rect x="1.8" y="2.5" width="12.4" height="11" rx="2" />
-              <path d="M6 2.5v11" />
-            </svg>
-          </button>
-        )}
-        {asideAllowed(loc.pathname) && (
-          <button
-            className="tb-pill-btn"
-            title="面板"
-            aria-label="面板"
-            onClick={() => useUiStore.getState().setAsideOpen(!useUiStore.getState().asideOpen)}
-          >
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
-              <rect x="1.8" y="2.5" width="12.4" height="11" rx="2" />
-              <path d="M6 2.5v11" />
-            </svg>
-          </button>
-        )}
+        <button
+          className={`tb-pill-btn${sidebarOpen ? ' on' : ''}`}
+          title={sidebarOpen ? '折叠侧栏' : '展开侧栏'}
+          aria-label={sidebarOpen ? '折叠侧栏' : '展开侧栏'}
+          aria-pressed={sidebarOpen}
+          onClick={() => useUiStore.getState().setSidebarOpen(!sidebarOpen)}
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+            <rect x="1.8" y="2.5" width="12.4" height="11" rx="2" />
+            <path d="M6 2.5v11" />
+          </svg>
+        </button>
         <button className="tb-pill-btn" title="搜索 (Ctrl+K)" aria-label="搜索 (Ctrl+K)" onClick={() => setSearchOpen((v) => !v)}>
           <IconSearch size={15} />
         </button>

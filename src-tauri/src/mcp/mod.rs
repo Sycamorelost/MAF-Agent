@@ -8,11 +8,15 @@ pub mod capability;
 pub mod config;
 pub mod dispatcher;
 pub mod http;
+pub mod mcp_call;
+pub mod native;
+pub mod reconnect;
 pub mod runtime;
 pub mod safety;
 pub mod shell;
 pub mod time_tool;
 pub mod tool_spec;
+pub mod util;
 
 // Phase 4 骨架导出;safety 四个函数/常量 Phase 5e/6 ChatStream/shell 才真正消费
 #[allow(unused_imports)]
@@ -24,7 +28,8 @@ pub use approval::{
 pub use capability::{Capability, CapabilityStore, Scope};
 #[allow(unused_imports)]
 pub use config::{McpConfig, McpServerConfig, Transport, default_servers};
-pub use runtime::{McpRuntime, McpToolCall, McpToolInfo, McpToolResult};
+pub use runtime::McpRuntime;
+pub use mcp_call::{McpToolCall, McpToolInfo, McpToolResult};
 #[allow(unused_imports)]
 pub use safety::{resolve_safe_path, truncate_chars, validate_command, validate_server_command};
 

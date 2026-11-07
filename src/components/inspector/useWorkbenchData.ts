@@ -27,6 +27,8 @@ import { useMessagesStore } from '../../stores/messages';
 const EMPTY_MESSAGES: MessageRow[] = [];
 
 export interface WorkbenchData {
+  /** 当前会话 id:相对路径读取/回滚都要按该会话工作区解析 */
+  sessionId: string;
   messages: MessageRow[];
   streaming: string;
   traces: SessionTrace[];
@@ -140,6 +142,7 @@ export function useWorkbenchData(sessionId: string): WorkbenchData {
   }, [streaming, refreshMemory, refreshBackups]);
 
   return {
+    sessionId,
     messages,
     streaming,
     traces,

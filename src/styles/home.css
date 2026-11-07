@@ -25,46 +25,13 @@
   padding-top: var(--space-4);
   padding-bottom: var(--space-4);
 }
-.home > .composer,
-.home > .home-quick,
-.home > .home-recent {
+.home > .composer {
   width: 100%;
   max-width: var(--composer-max-w);
   margin-left: auto;
   margin-right: auto;
 }
 
-/* ---------- 区块标题(输入框前) ---------- */
-.home-sec-head {
-  display: flex; align-items: center; gap: var(--space-1);
-  margin-bottom: var(--space-2);
-  font-size: var(--font-micro); font-weight: 600;
-  color: var(--text-3); letter-spacing: .3px;
-}
-.home-sec-head svg { color: var(--text-3); flex-shrink: 0; }
-
-/* ---------- 最近对话:轻量列表,无卡片描边 ---------- */
-.home-recent { margin-top: var(--space-5); }
-.home-recent-item {
-  display: flex; align-items: center; gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: none; border-radius: var(--radius-m);
-  background: transparent; color: var(--text-2);
-  font-family: var(--font); font-size: var(--font-caption);
-  text-align: left; cursor: pointer;
-  transition: background .15s, color .15s;
-}
-.home-recent-item:hover { background: var(--bg-hover); color: var(--text-1); }
-.home-recent-item .t {
-  flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.home-recent-item .m {
-  flex-shrink: 0;
-  font-size: var(--font-micro); color: var(--text-4);
-}
-.home-recent-err { font-size: var(--font-micro); color: var(--warn); padding: 0 var(--space-3); }
 /* 首页卡片:统一 composer 边界 + 静息阴影;hover 抬升 ≤2px */
 .home .card {
   border-color: var(--composer-border);

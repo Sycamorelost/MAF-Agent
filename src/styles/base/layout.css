@@ -49,6 +49,7 @@ a:hover { text-decoration: underline; }
 .body {
   flex: 1;
   display: flex;
+  gap: 0;                    /* 栏间距由 .side-drawer 的 margin 承担,折叠时才能真正收拢 */
   min-height: 0;
   margin-top: 0;
   margin-left: 10px;
@@ -56,26 +57,8 @@ a:hover { text-decoration: underline; }
   margin-bottom: 10px;
 }
 
-/* 抽屉挤出式(会话抽屉/页面左栏):打开时主区整体让位,内容不被遮挡;
-   关闭途径 = 标题栏 pill 再点 / 抽屉 ✕ / Esc(无遮罩,点击主区不关闭) */
-.main { transition: padding-left .2s ease; }
-body.sidebar-open .main { padding-left: var(--sidebar-w); }
-body.aside-open .main { padding-left: var(--aside-w); }
-
-/* 页面左栏抽屉 ✕(AsideDrawer 渲染,定位于抽屉右上角) */
-.aside-close {
-  position: fixed;
-  top: calc(var(--titlebar-h) + 8px);
-  left: calc(var(--aside-w) - 32px);
-  z-index: var(--z-base);
-}
-
-/* 抽屉内通用开合提示行(记忆/知识库/设置等无描述段的抽屉头部) */
-.drawer-hint {
-  padding: 0 var(--pad-x-narrow) var(--space-2);
-  font-size: var(--font-micro);
-  color: var(--text-4);
-}
+/* 侧栏与会话同层:展开时作为 flex 列推挤主区,折叠时不渲染节点;
+   因此主区不需要任何 padding-left 让位规则。 */
 
 /* 标题栏搜索/菜单浮层的透明遮罩 */
 .tb-pop-backdrop {
@@ -116,11 +99,23 @@ body.aside-open .main { padding-left: var(--aside-w); }
 }
 
 /* Sidebar(会话历史抽屉):基础由 _tokens.css 提供,此处追加项目分组视图样式 */
-.side-list {
+/* 新建对话以下的内容共用一个滚动容器(项目 + 会话 + 记忆 + 知识库一起滚) */
+.side-scroll {
   flex: 1;
-  overflow-y: auto;
   min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+.side-scroll::-webkit-scrollbar { width: 8px; }
+.side-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+.side-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+.side-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }

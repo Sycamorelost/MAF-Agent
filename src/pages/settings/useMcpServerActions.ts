@@ -7,6 +7,7 @@ import {
   mcpListTools,
   type McpConfig,
   type McpServerConfig,
+  type McpToolInfo,
 } from '../../lib/ipc/mcp';
 import { pickDataDir } from '../../lib/ipc';
 import type { McpServerStatus } from './McpServerCard';
@@ -51,11 +52,17 @@ export function useMcpServerActions({
       await mcpStartServer(s.name);
       // 启动后立即 list_tools 测试
       const tools = await mcpListTools(s.name);
-      setStatus((prev) => ({ ...prev, [s.name]: { running: true, tools } }));
+      setStatus((prev) => ({
+        ...prev,
+        [s.name]: { running: true, tools, doctor: prev[s.name]?.doctor },
+      }));
       setMsg(`成功: ${s.name} 启动成功,共 ${tools.length} 个工具`);
     } catch (e: any) {
       setMsg(`失败: 启动失败: ${e}`);
-      setStatus((prev) => ({ ...prev, [s.name]: { running: false } }));
+      setStatus((prev) => ({
+        ...prev,
+        [s.name]: { running: false, doctor: prev[s.name]?.doctor },
+      }));
     }
   };
 
@@ -75,17 +82,32 @@ export function useMcpServerActions({
       } else {
         setMsg(`警告: 一键启动完成:${ok} 成功,${fail} 失败${errors.length ? `(${errors.join("; ")})` : ""}`);
       }
-      // 刷新状态
-      const newStatus: Record<string, McpServerStatus> = {};
+      // 刷新状态 —— 先在外面 await 完 tools,再同步 setStatus(保留已有 doctor)
+      const toolMap = new Map<string, McpToolInfo[]>();
+      const failedSet = new Set<string>();
       for (const s of enabled) {
         try {
-          const tools = await mcpListTools(s.name);
-          newStatus[s.name] = { running: true, tools };
+          toolMap.set(s.name, await mcpListTools(s.name));
         } catch {
-          newStatus[s.name] = { running: false };
+          failedSet.add(s.name);
         }
       }
-      setStatus((prev) => ({ ...prev, ...newStatus }));
+      setStatus((prev) => {
+        const next: Record<string, McpServerStatus> = {};
+        for (const s of enabled) {
+          const old = prev[s.name];
+          if (failedSet.has(s.name)) {
+            next[s.name] = { running: false, doctor: old?.doctor };
+          } else {
+            next[s.name] = {
+              running: true,
+              tools: toolMap.get(s.name),
+              doctor: old?.doctor,
+            };
+          }
+        }
+        return { ...prev, ...next };
+      });
     } catch (e: any) {
       setMsg(`失败: 一键启动失败: ${e}`);
     } finally {

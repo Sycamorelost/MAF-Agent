@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getVersion } from '@tauri-apps/api/app';
-import AsideDrawer from '../components/AsideDrawer';
 
 import { NAV } from './settings/constants';
 import { useUsageData } from './settings/useUsageData';
@@ -11,7 +10,6 @@ import { UsageView } from './settings/UsageView';
 import { ProvidersView } from './settings/ProvidersView';
 import { MemoryView } from './settings/MemoryView';
 import { SearchView } from './settings/SearchView';
-import { TranslateView } from './settings/TranslateView';
 import { StorageView } from './settings/StorageView';
 import { AboutView } from './settings/AboutView';
 import { NavMenuView } from './settings/NavMenuView';
@@ -86,11 +84,6 @@ export default function SettingsPage() {
     savingSearch,
     searchTestStatus,
     searchTesting,
-    glossary,
-    glossaryDirty,
-    glossaryMsg,
-    savingGlossary,
-    importRef,
     engineLabel,
     engineReady,
     mcpServerNames,
@@ -102,10 +95,6 @@ export default function SettingsPage() {
     onSaveSearch,
     onTestSearch,
     patchSearchDraft,
-    mutateGlossary,
-    onSaveGlossary,
-    onImportGlossary,
-    onImportPresetGlossary,
     patchSettings,
     saveSettingsPatch,
     toggleNavItem,
@@ -177,20 +166,6 @@ export default function SettingsPage() {
     />
   );
 
-  const translateView = (
-    <TranslateView
-      glossary={glossary}
-      glossaryDirty={glossaryDirty}
-      glossaryMsg={glossaryMsg}
-      savingGlossary={savingGlossary}
-      importRef={importRef}
-      onMutateGlossary={mutateGlossary}
-      onSaveGlossary={onSaveGlossary}
-      onImportGlossary={onImportGlossary}
-      onImportPresetGlossary={onImportPresetGlossary}
-    />
-  );
-
   const storageView = (
     <StorageView
       dataDir={dataDir}
@@ -225,7 +200,6 @@ export default function SettingsPage() {
     providers: providersView,
     memory: memoryView,
     search: searchView,
-    translate: translateView,
     appearance: <AppearanceView />,
     navmenu: navmenuView,
     presets: (
@@ -245,10 +219,8 @@ export default function SettingsPage() {
 
   return (
     <div className="pg pg-settings">
-      {/* 左:设置分区导航(玻璃抽屉,标题栏「面板」按钮释放) */}
-      <AsideDrawer>
-      <nav className="set-nav drawer">
-        <div className="drawer-hint">点标题栏「面板」可开合本栏</div>
+      {/* 左:设置分区导航(常驻列,随窗口缩放) */}
+      <nav className="set-nav">
         {NAV.map((g) => (
           <div key={g.grp}>
             <div className="grp">{g.grp}</div>
@@ -268,9 +240,13 @@ export default function SettingsPage() {
           </div>
         ))}
       </nav>
-      </AsideDrawer>
 
-      <div className="set-content">{viewByNav[nav]}</div>
+      {/* 右:分区内容;切换分区时复用主面板抽屉动画 */}
+      <div className="set-content">
+        <div className="set-view" key={nav}>
+          {viewByNav[nav]}
+        </div>
+      </div>
     </div>
   );
 }

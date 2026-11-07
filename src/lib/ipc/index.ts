@@ -15,7 +15,7 @@ export * from './websearch';
 export * from './export';
 export * from './notes';
 export * from './fs';
+export * from './deliverable';
 export * from './media';
 export * from './task';
 export * from './tutorial';
-export * from './aiflavor';

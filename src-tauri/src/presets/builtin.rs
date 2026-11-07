@@ -17,7 +17,7 @@ const BUILTIN_JSON: &str = r#"{
       "order": 1,
       "description": "最少工具与上下文:只读检索 + shell,适合快问快答与弱模型。",
       "tools": {
-        "include": ["get_now", "fs_read", "fs_list", "doc_search", "doc_read", "shell_exec"],
+        "include": ["get_now", "fs_read", "fs_list", "doc_search", "doc_read", "present", "shell_exec"],
         "exclude": ["*"]
       },
       "context": { "max_messages": 20, "max_chars": 24000, "prune": { "threshold_chars": 8192, "head": 4096, "tail": 1024 } },
@@ -31,7 +31,7 @@ const BUILTIN_JSON: &str = r#"{
       "order": 2,
       "description": "日常办公与写作的默认档:读写文件、任务清单、混合检索。",
       "tools": {
-        "include": ["get_now", "fs_read", "fs_list", "fs_grep", "fs_write", "file_extract", "doc_search", "doc_read", "zip_list", "todo_write", "todo_read", "shell_exec"],
+        "include": ["get_now", "fs_read", "fs_list", "fs_grep", "fs_write", "file_extract", "doc_search", "doc_read", "zip_list", "todo_write", "todo_read", "present", "fs_to_pdf", "shell_exec"],
         "exclude": ["*"]
       },
       "context": { "max_messages": 40, "max_chars": 48000, "prune": { "threshold_chars": 8192, "head": 4096, "tail": 1024 } },

@@ -19,7 +19,8 @@ use crate::provider::{ChatMessage, StreamChunk, ToolCall};
 
 use super::approval::{APPROVAL_TIMEOUT_SECS, ApprovalResult, ApprovalStore};
 use super::capability::CapabilityStore;
-use super::runtime::{McpRuntime, McpToolCall};
+use super::mcp_call::McpToolCall;
+use super::runtime::McpRuntime;
 
 /// 单轮工具调用结果 —— 供 ChatStream 循环决定是否继续下一轮。
 #[derive(Debug)]
@@ -106,6 +107,7 @@ pub async fn dispatch_tool_calls(
                     &tool_name,
                     args.clone(),
                     forced,
+                    session_id,
                 )
                 .await
                 {
@@ -192,6 +194,7 @@ pub async fn dispatch_tool_calls(
             &tool_name,
             args,
             false,
+            session_id,
         )
         .await
         {
@@ -336,6 +339,7 @@ async fn ask_approval(
     tool: &str,
     args: Value,
     forced: bool,
+    session_id: Option<&str>,
 ) -> Option<Value> {
     // P1:高危 shell 命令(格式化/删根/改注册表等)强制人工确认。
     // `confirm` 是模型可写的工具参数,不作为人类确认依据,在此统一忽略。
@@ -372,7 +376,7 @@ async fn ask_approval(
         );
         return Some(args);
     }
-    if !forced && !policy.requires_approval(server, tool, risk, &args) {
+    if !forced && !policy.requires_approval_in(session_id, server, tool, risk, &args) {
         crate::mcp::audit(
             data_dir,
             "approval_skip",

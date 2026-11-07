@@ -1,8 +1,8 @@
-//! 通用设置数据源:应用设置 / 数据目录 / 联网搜索 / 术语表 / 导航可见性。
+//! 通用设置数据源:应用设置 / 数据目录 / 联网搜索 / 导航可见性。
 //!
 //! 从 SettingsPage 抽出(§10.2.1),页面只负责展示与 props 组装。
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as ipc from '../../lib/ipc';
 import { mcpLoadConfig } from '../../lib/ipc/mcp';
 import { ENGINES, NAV_VISIBILITY } from './constants';
@@ -35,13 +35,6 @@ export function useGeneralSettings() {
   /** MCP 调用方式的下拉候选:已有服务名(工具名由后端 get_search_config 直接返回) */
   const [mcpServerNames, setMcpServerNames] = useState<string[]>([]);
 
-  // 翻译术语表(迭代 D6.1)
-  const [glossary, setGlossary] = useState<ipc.GlossaryEntry[] | null>(null);
-  const [glossaryDirty, setGlossaryDirty] = useState(false);
-  const [glossaryMsg, setGlossaryMsg] = useState<string | null>(null);
-  const [savingGlossary, setSavingGlossary] = useState(false);
-  const importRef = useRef<HTMLInputElement | null>(null);
-
   // 加载(顺序与原 SettingsPage 初始化 effect 一致)
   useEffect(() => {
     ipc.getSettings().then((s) => setSettings(s));
@@ -57,7 +50,6 @@ export function useGeneralSettings() {
         mcp_tool: c.mcp_tool,
       }));
     });
-    ipc.glossaryList().then(setGlossary);
   }, []);
 
   // MCP 调用方式:服务下拉候选(已保存的 MCP server);工具名由后端 get_search_config 实时返回,无需前端单独探测
@@ -206,89 +198,6 @@ export function useGeneralSettings() {
   const patchSearchDraft = (patch: Partial<SearchDraft>) =>
     setSearchDraft((d) => ({ ...d, ...patch }));
 
-  // ---- 术语表(迭代 D6.1)----
-
-  const mutateGlossary = (next: ipc.GlossaryEntry[]) => {
-    setGlossary(next);
-    setGlossaryDirty(true);
-    setGlossaryMsg(null);
-  };
-
-  const onSaveGlossary = async (next?: ipc.GlossaryEntry[]) => {
-    const list = next ?? glossary ?? [];
-    setSavingGlossary(true);
-    setGlossaryMsg(null);
-    try {
-      await ipc.glossarySave(list);
-      setGlossary(list.filter((e) => e.src.trim() && e.dst.trim()));
-      setGlossaryDirty(false);
-      setGlossaryMsg(`已保存 ${list.filter((e) => e.src.trim() && e.dst.trim()).length} 条术语`);
-    } catch (e) {
-      setGlossaryMsg(`保存失败:${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setSavingGlossary(false);
-    }
-  };
-
-  /** 导入 JSON 术语表(数组结构 [{src,dst,note?}];按 src 合并去重后立即保存)。 */
-  const onImportGlossary = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text) as unknown;
-      if (!Array.isArray(parsed)) throw new Error('JSON 顶层必须是数组');
-      const incoming: ipc.GlossaryEntry[] = [];
-      for (const item of parsed) {
-        const o = item as Record<string, unknown>;
-        if (typeof o?.src === 'string' && typeof o?.dst === 'string' && o.src && o.dst) {
-          incoming.push({
-            src: o.src,
-            dst: o.dst,
-            note: typeof o.note === 'string' ? o.note : null,
-          });
-        }
-      }
-      if (incoming.length === 0) throw new Error('未解析到有效词条(需 src/dst 字段)');
-      // 按 src 合并:新词条覆盖同名旧词条
-      const map = new Map<string, ipc.GlossaryEntry>();
-      for (const e of glossary ?? []) map.set(e.src, e);
-      for (const e of incoming) map.set(e.src, e);
-      const merged = [...map.values()];
-      await onSaveGlossary(merged);
-      setGlossaryMsg(`已导入 ${incoming.length} 条(合并后共 ${merged.length} 条)`);
-    } catch (e) {
-      setGlossaryMsg(`导入失败:${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
-
-  /** 导入预置术语(内置 8 类权威词表,双向展开;合并不覆盖,后端直接落盘)。 */
-  const onImportPresetGlossary = async () => {
-    const ok = await uiConfirm({
-      title: '一键导入预置术语',
-      message:
-        '将从内置的 8 类专业术语表(IT / AI / 学术 / 法律 / 金融 / 医学 / 商务 / 通用)导入中英双向词条。\n\n' +
-        '合并规则:已有词条一律保留你的译法;缺失的预置词条会被补回,可反复点击。' +
-        (glossaryDirty ? '\n\n注意:当前有未保存的修改,导入会以磁盘上的术语表为准,这些修改将丢失。' : ''),
-      confirmText: '开始导入',
-    });
-    if (!ok) return;
-    setSavingGlossary(true);
-    setGlossaryMsg(null);
-    try {
-      const r = await ipc.glossaryImportPresets();
-      setGlossary(await ipc.glossaryList());
-      setGlossaryDirty(false);
-      setGlossaryMsg(
-        r.added > 0
-          ? `已导入预置术语:新增 ${r.added} 条,保留已有 ${r.kept} 条,共 ${r.total} 条`
-          : `预置术语已全部存在(共 ${r.total} 条),未做改动`,
-      );
-    } catch (e) {
-      setGlossaryMsg(`导入失败:${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setSavingGlossary(false);
-    }
-  };
-
   // ---- 设置项局部编辑 + 即时写盘 ----
 
   const patchSettings = (patch: Partial<ipc.AppSettings>) =>
@@ -381,11 +290,6 @@ export function useGeneralSettings() {
     searchTestStatus,
     searchTesting,
     mcpServerNames,
-    glossary,
-    glossaryDirty,
-    glossaryMsg,
-    savingGlossary,
-    importRef,
     engineLabel,
     engineReady,
     hiddenNav,
@@ -397,10 +301,6 @@ export function useGeneralSettings() {
     onSaveSearch,
     onTestSearch,
     patchSearchDraft,
-    mutateGlossary,
-    onSaveGlossary,
-    onImportGlossary,
-    onImportPresetGlossary,
     patchSettings,
     saveSettingsPatch,
     toggleNavItem,

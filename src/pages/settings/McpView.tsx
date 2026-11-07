@@ -44,6 +44,7 @@ export function McpView() {
     onResetWorkspace,
     onOpenWorkspace,
     onOpenBackups,
+    onDiagnose,
   } = useMcpSettings();
 
   if (loading) return <div className="set-hint">加载中…</div>;
@@ -123,6 +124,9 @@ export function McpView() {
           onClick={() => void onStartAll()}
         >
           {startingAll ? '正在一键启动…' : `一键启动全部 (${cfg.servers.filter((s) => s.enabled).length})`}
+        </button>
+        <button className="btn" onClick={() => void onDiagnose()}>
+          诊断所有服务
         </button>
       </div>
 

@@ -1,6 +1,6 @@
 import { type ComponentType } from 'react';
 import * as ipc from '../../lib/ipc';
-import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconTranslate, IconChart, IconPlus, IconFileText, IconGauge, IconSparkles } from '../../components/icons';
+import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconChart, IconPlus, IconFileText, IconGauge, IconSparkles } from '../../components/icons';
 
 export const ENGINES = [
   { id: 'bocha', name: '博查 Bocha' },
@@ -26,7 +26,6 @@ export const NAV: NavGroup[] = [
     grp: '能力',
     items: [
       { id: 'search', label: '联网搜索', icon: IconGlobe },
-      { id: 'translate', label: '翻译', icon: IconTranslate },
     ],
   },
   {
@@ -53,13 +52,9 @@ export const NAV: NavGroup[] = [
 
 /** 导航菜单可见性开关项(对话/设置固定保留,不在此列)。 */
 export const NAV_VISIBILITY: { key: string; label: string }[] = [
-  { key: 'plan', label: '学习中心' },
-  { key: 'draw', label: '绘图' },
-  { key: 'translate', label: '翻译' },
-  { key: 'memory', label: '记忆' },
-  { key: 'notes', label: '知识库' },
+  { key: 'memory', label: '记忆库' },
+  { key: 'knowledge', label: '知识库' },
   { key: 'attachments', label: '附件' },
-  { key: 'aiflavor', label: 'AI 味检测' },
 ];
 
 /** 记忆注入策略选项(与 MemoryStrategy 对齐)。 */

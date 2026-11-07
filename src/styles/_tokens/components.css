@@ -127,27 +127,7 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .win-btn.close:hover{background:#C93B3B;color:#fff}
 .win-btn.pinned{color:var(--brand)}
 
-/* 图标轨(Rail)已移除:主导航收进标题栏 ⋮ 下拉菜单(NavMenu) */
-.nav-menu{position:relative;flex-shrink:0}
-.menu-btn{
-  width:calc(30px * var(--ui-scale));height:calc(30px * var(--ui-scale));padding:0;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-  border:none;background:transparent;color:var(--text-2);
-  border-radius:var(--radius-s);cursor:pointer;transition:.15s;
-}
-.menu-btn:hover,.menu-btn.on{background:var(--bg-hover);color:var(--text-1)}
-.nav-pop{
-  position:absolute;top:calc(100% + 6px);left:0;z-index:var(--z-pop-card);
-  min-width:calc(168px * var(--ui-scale));padding:var(--space-2);
-  display:flex;flex-direction:column;gap:var(--space-1);
-  /* 与 .ctx-menu 同款:用 bg-main-rgb + bg-glass-alpha,深色主题变量自动覆盖 */
-  background:rgba(var(--bg-main-rgb),var(--bg-glass-alpha));
-  border:1px solid var(--border);
-  border-radius:var(--radius-l);
-  box-shadow:var(--shadow-card-h);
-  -webkit-backdrop-filter:blur(16px) saturate(1.4);
-  backdrop-filter:blur(16px) saturate(1.4);
-}
+/* 导航项(侧栏导航区复用):选中态 = 品牌色指示线 + 加粗 */
 .nav-item{
   display:flex;align-items:center;gap:var(--space-2);
   min-height:var(--ctl-h);padding:0 var(--space-3);border:none;background:transparent;
@@ -181,35 +161,100 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   border-radius:var(--radius-s);cursor:pointer;transition:.15s;
 }
 .tb-pill-btn:hover{background:var(--bg-hover);color:var(--text-1)}
+.tb-pill-btn.on{background:var(--brand-soft);color:var(--brand-deep)}
 
-/* 会话历史抽屉(玻璃浮层,固定在标题栏下方左侧,不再占据布局列) */
-/* 会话历史抽屉:与 .main 同位置同高度,不破坏圆角外框 */
+/* 侧栏(与会话同层,参与 flex 布局,不悬浮):展开态 = 品牌 + 导航 + 会话列表 + 设置 */
+/* 抽屉容器常驻挂载,靠宽度收放实现「唤出 / 关闭」双向动画;
+   无边界/阴影/圆角,与主区同层 */
+.side-drawer{
+  flex:0 0 auto;height:100%;display:flex;overflow:hidden;
+  width:var(--sidebar-w);margin-right:10px;
+  transition:width var(--drawer-dur) var(--drawer-ease),
+             margin-right var(--drawer-dur) var(--drawer-ease),
+             opacity var(--drawer-dur) var(--drawer-ease);
+}
+/* 关闭态:宽度收拢到 0 并淡出;visibility 延迟到动画结束,避免收起过程中还能聚焦 */
+.side-drawer.closed{
+  width:0;margin-right:0;opacity:0;visibility:hidden;
+  transition:width var(--drawer-dur) var(--drawer-ease),
+             margin-right var(--drawer-dur) var(--drawer-ease),
+             opacity var(--drawer-dur) var(--drawer-ease),
+             visibility 0s linear var(--drawer-dur);
+}
+/* 拖拽调宽时关闭过渡,保证跟手 */
+.side-drawer.dragging{transition:none}
+
 .sidebar{
-  position:fixed;top:var(--titlebar-h);left:10px;bottom:10px;z-index:var(--z-drawer);
-  width:var(--sidebar-w);flex-shrink:0;
-  background:var(--bg-surface);
-  border-radius:12px;
-  border:1px solid var(--border);
-  box-shadow:0 0 0 transparent;
+  position:relative;
+  width:var(--sidebar-w);flex:0 0 var(--sidebar-w);height:100%;
+  background:var(--bg-side);
   display:flex;flex-direction:column;
-  padding:var(--space-4) var(--pad-x-narrow);
-  transform:translateX(-105%);
-  visibility:hidden;
-  pointer-events:none;
-  opacity:0;
-  transition:transform .28s cubic-bezier(.4,.0,.2,1), opacity .18s ease, visibility 0s linear .28s;
+  padding:var(--space-3) var(--pad-x-narrow) calc(var(--space-3) * .5);
+  overflow:hidden;
+  transition:transform var(--drawer-dur) var(--drawer-ease);
 }
-.sidebar.open{
-  transform:translateX(0);
-  visibility:visible;
-  pointer-events:auto;
-  opacity:1;
-  box-shadow:var(--shadow-card-h);
-  transition:transform .28s cubic-bezier(.4,.0,.2,1), opacity .18s ease, visibility 0s, box-shadow .2s ease;
+/* 关闭时整栏向左滑出,与容器收窄同步 → 真正的抽屉推出/拉回 */
+.side-drawer.closed .sidebar{transform:translateX(-100%)}
+/* 抽屉统一动效:主面板切换与侧栏同源(同一时长/缓动) */
+@keyframes drawer-in-right{
+  from{opacity:0;transform:translateX(10px)}
+  to{opacity:1;transform:none}
 }
-.side-head{display:flex;align-items:center;justify-content:space-between;padding:0 0 var(--space-2)}
-.side-head-title{font-size:var(--font-h3);font-weight:600;color:var(--text-1)}
+/* 展开态右缘拖拽把手(200–320px,双击复位) */
+.side-resize{
+  position:absolute;top:0;right:0;bottom:0;width:5px;z-index:2;
+  cursor:col-resize;touch-action:none;background:transparent;transition:background .15s;
+}
+.side-resize:hover{background:var(--brand-line)}
 .side-head-actions{display:flex;align-items:center;gap:var(--space-1);flex:none}
+/* 「新对话」主按钮:DeepSeek 式整行品牌色按钮 */
+.side-new{
+  display:flex;align-items:center;justify-content:center;gap:var(--space-1);
+  width:100%;height:calc(36px * var(--ui-scale));flex:none;
+  border:none;border-radius:var(--radius-m);
+  background:var(--brand);color:#fff;
+  font-family:var(--font);font-size:var(--font-sub);font-weight:600;
+  cursor:pointer;transition:background .15s,transform .1s;
+}
+.side-new:hover{background:var(--brand-deep)}
+.side-new:active{transform:translateY(1px)}
+.side-new svg{flex:none}
+/* 导航区:一级入口(设置固定底部) */
+.nav-rail{display:flex;flex-direction:column;gap:2px;width:100%;flex:none;margin-top:var(--space-2)}
+.nav-rail.foot{margin-top:auto;padding-top:var(--space-2);border-top:1px solid var(--border)}
+.nav-rail .nav-item{
+  width:100%;min-height:calc(34px * var(--ui-scale));
+  border-left:none;border-radius:var(--radius-s);
+  color:var(--text-2);font-weight:500;
+}
+.nav-rail .nav-item:hover{background:var(--bg-hover);color:var(--text-1)}
+.nav-rail .nav-item.active{
+  background:var(--brand-soft);color:var(--brand-deep);
+  border-left-color:transparent;font-weight:600;
+}
+.nav-rail .nav-item:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+/* 会话区:展开态下显示 */
+.side-sec{display:flex;flex-direction:column;padding-top:var(--space-2);border-top:1px solid var(--border)}
+.side-sec-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-1);padding:0 var(--space-1) var(--space-2)}
+.side-sec-title{font-size:var(--font-micro);font-weight:600;color:var(--text-4);letter-spacing:.02em}
+/* 区块标题可点击折叠(项目/会话) */
+.side-sec-toggle{
+  display:flex;align-items:center;gap:var(--space-1);
+  flex:1;min-width:0;padding:0;border:none;background:transparent;
+  color:inherit;font:inherit;text-align:left;cursor:pointer;
+}
+.side-sec-toggle .chevron{flex:none;color:var(--text-4);transition:transform .15s}
+.side-sec-toggle .chevron.down{transform:rotate(90deg)}
+.side-sec-count{
+  flex:none;min-width:16px;padding:0 5px;border-radius:999px;
+  background:var(--bg-hover);color:var(--text-4);
+  font-size:var(--font-mini);font-weight:600;line-height:16px;text-align:center;
+}
+/* 项目区块:与下方会话区共用一个滚动容器,不再单独限高/内部滚动 */
+.side-proj-sec{
+  display:flex;flex-direction:column;
+  padding-top:var(--space-2);border-top:1px solid var(--border);
+}
 /* 面板折叠:统一的收起/展开小按钮与折叠后的窄条入口 */
 .panel-toggle{
   width:calc(22px * var(--ui-scale));height:calc(22px * var(--ui-scale));padding:0;flex-shrink:0;

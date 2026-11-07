@@ -1,5 +1,6 @@
 /* ==================== 附件管理中心(迭代 F7) ==================== */
-.att-page { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg-main); }
+/* 底色跟随 .main 统一画布,不在页面层再铺灰色 */
+.att-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
 .att-head {
   padding: var(--space-3) var(--pad-x);

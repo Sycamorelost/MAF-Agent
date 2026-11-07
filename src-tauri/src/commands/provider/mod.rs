@@ -16,15 +16,14 @@ pub(crate) mod models;
 pub(crate) mod pricing;
 pub(crate) mod stream;
 pub(crate) mod templates;
-pub(crate) mod translate;
 pub(crate) mod usage;
 
 // ---------- 命令与对外类型(保持 crate::commands::provider::xxx 原路径可用)----------
 
 pub use chat::{ChatStreamInput, chat_stream};
 pub use image::{
-    ComposePromptInput, GenerateImageInput, ImageListItem, ImageMeta, ImageResultItem,
-    compose_draw_prompt, generate_image, image_to_session, list_images, read_image,
+    GenerateImageInput, ImageListItem, ImageMeta, ImageResultItem, generate_image, list_images,
+    read_image,
 };
 pub use keys::{
     KeySlotView, delete_api_key, delete_provider_key, get_rotation_configs, has_api_key,
@@ -41,7 +40,6 @@ pub use templates::{
     delete_provider_template, list_provider_templates, restore_builtin_templates,
     save_provider_template,
 };
-pub use translate::{TranslateStreamInput, translate_stream};
 pub use usage::{
     UsageRecalcReport, UsageRecalcRow, usage_entries, usage_hourly, usage_key_health, usage_recalc,
     usage_summary,

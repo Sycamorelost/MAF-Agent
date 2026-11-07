@@ -342,12 +342,14 @@ async fn perf_real_tavily_mcp_startup() {
         "npx",
         &["-y".into(), "tavily-mcp@latest".into()],
         &[],
+        false,
+        true,
     )
     .await
     .expect("tavily-mcp 启动失败");
     println!("[perf] tavily-mcp 冷启动(进程+握手) {}ms", t.elapsed().as_millis());
     let t2 = std::time::Instant::now();
-    let tools = rt.list_tools("perf-tavily").await.unwrap_or_default();
+    let tools = rt.list_tools("perf-tavily", false).await.unwrap_or_default();
     println!(
         "[perf] tools/list {}ms,{} 个工具:{:?}",
         t2.elapsed().as_millis(),
@@ -369,11 +371,13 @@ async fn perf_real_agent_search_mcp() {
         "npx",
         &["-y".into(), "agent-search-mcp@latest".into()],
         &[],
+        false,
+        true,
     )
     .await
     .expect("agent-search-mcp 启动失败");
     println!("[perf] agent-search-mcp 冷启动 {}ms", t0.elapsed().as_millis());
-    let tools = rt.list_tools("perf-agent").await.unwrap_or_default();
+    let tools = rt.list_tools("perf-agent", false).await.unwrap_or_default();
     println!(
         "[perf] tools: {:?}",
         tools.iter().map(|t| t.name.clone()).collect::<Vec<_>>()

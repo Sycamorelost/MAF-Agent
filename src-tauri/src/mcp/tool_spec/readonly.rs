@@ -12,6 +12,25 @@ pub fn readonly_tool_defs() -> Vec<ToolDef> {
             "获取当前本地日期、时间、时区与星期。",
             json!({ "type": "object", "properties": {} }),
         ),
+        // M2 产物事件:模型显式声明本轮交付的文件,前端据此渲染交付卡
+        tool(
+            "present",
+            "声明本轮交付给用户的文件(报告/表格/图片/代码等)。只对真实存在、且本轮刚写好或用户要的文件调用;path 用工作区相对路径或绝对路径,kind 省略时按扩展名推断。调用后前端会在回答下方展示交付卡,正文里不必再重复完整路径。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "产物路径(工作区相对或绝对)" },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["image", "doc", "sheet", "slides", "pdf", "archive", "text", "html", "file"],
+                        "description": "产物类型;省略按扩展名推断"
+                    },
+                    "name": { "type": "string", "description": "展示名;省略取文件名" },
+                    "note": { "type": "string", "description": "一句话说明(可选)" }
+                },
+                "required": ["path"]
+            }),
+        ),
         // harness 任务清单:多步任务开始时分解、每完成一步立即更新;UI 实时展示进度
         tool(
             "todo_write",

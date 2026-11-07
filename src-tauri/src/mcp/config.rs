@@ -38,6 +38,10 @@ pub struct McpServerConfig {
     /// 启动子进程时注入的环境变量(如 TAVILY_API_KEY)
     #[serde(default)]
     pub env: HashMap<String, String>,
+    /// C4:是否为应用内置的预置 server(默认 false)。
+    /// 预置 server 超时分档更短、启动失败处理更激进;自定义 server 保守给足超时。
+    #[serde(default)]
+    pub is_preset: bool,
 }
 
 impl McpServerConfig {
@@ -97,10 +101,9 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             ],
             url: String::new(),
             headers: HashMap::new(),
-            // 允许目录为空时不做文件夹授权限制:启动时传入本机全部磁盘根(见 launch_dirs);
-            // 用户也可在 UI 里指定目录主动收窄范围
             allowed_dirs: vec![],
             env: HashMap::new(),
+            is_preset: true,
         },
         McpServerConfig {
             name: "长期记忆".into(),
@@ -112,6 +115,7 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             headers: HashMap::new(),
             allowed_dirs: vec![],
             env: HashMap::new(),
+            is_preset: true,
         },
         McpServerConfig {
             name: "顺序思考".into(),
@@ -126,6 +130,7 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             headers: HashMap::new(),
             allowed_dirs: vec![],
             env: HashMap::new(),
+            is_preset: true,
         },
         // v5:联网搜索(默认 agent-search-mcp,零 Key、9 引擎并行、原生中文适配)。
         // 提供 free_search / free_search_advanced / free_extract / fetch_github_readme /
@@ -141,6 +146,7 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
             headers: HashMap::new(),
             allowed_dirs: vec![],
             env: HashMap::new(),
+            is_preset: true,
         },
     ]
 }
@@ -287,6 +293,7 @@ mod tests {
             headers: HashMap::new(),
             allowed_dirs: dirs,
             env: HashMap::new(),
+            is_preset: true,
         }
     }
 

@@ -103,6 +103,7 @@ export function FullTrustPanel({ fullTrust }: { fullTrust: boolean }) {
 
       {/* GUI 自动化(Windows UI Automation) */}
       <div className="mcp-policy-desc">
+        仅支持 Windows(使用系统 UI Automation;macOS / Linux 暂不可用,面板会提示不支持)。
         模型可枚举窗口、查找元素并执行点击 / 写值 / 输入;可操作的进程由下方白名单限定,
         句柄有存活时间,输入有字数上限。
       </div>

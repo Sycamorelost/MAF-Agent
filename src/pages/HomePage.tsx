@@ -11,7 +11,6 @@ import Composer from '../components/Composer';
 import Toast from '../components/Toast';
 import AgentPickerDialog from '../components/AgentPickerDialog';
 import {
-  IconHistory,
   agentIconComponent,
 } from '../components/icons';
 import { useSessionsStore } from '../stores/sessions';
@@ -27,22 +26,6 @@ import type { SkippedFile } from '../lib/attachmentDrop';
 
 /** 首页默认提示语(用户可在设置 · 主题与字体大小 · 首页中自定义)。 */
 export const DEFAULT_HOME_PROMPT = 'myAgent | 向更美好的生活出发！';
-
-/** 最近对话的相对时间(失败兜底为空串,不阻塞渲染)。 */
-function relTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '';
-  const diff = Date.now() - t;
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return '刚刚';
-  if (min < 60) return `${min} 分钟前`;
-  const hours = Math.floor(min / 60);
-  if (hours < 24) return `${hours} 小时前`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} 天前`;
-  const d = new Date(t);
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
-}
 
 /** 首页选中的待上传附件:文件本体 + 占位元数据(真正落盘要等会话创建后) */
 interface PendingFile {
@@ -64,8 +47,6 @@ export default function HomePage() {
   const nav = useNavigate();
   const create = useSessionsStore((s) => s.create);
   const setWebSearch = useSessionsStore((s) => s.setWebSearch);
-  const sessions = useSessionsStore((s) => s.sessions);
-  const refreshSessions = useSessionsStore((s) => s.refresh);
   const current = useProvidersStore((s) => s.current);
   const { templates, loaded, load } = useAgentsStore();
   const setThinking = useThinkingStore((s) => s.set);
@@ -84,8 +65,6 @@ export default function HomePage() {
   /** 拖入文件夹时的逐个文件拒绝提示(轻提示,不占用错误栏) */
   const { toast, showToast, hideToast } = useToast();
   const [greeting, setGreeting] = useState(DEFAULT_HOME_PROMPT);
-  /** 最近对话加载失败(非阻塞,仅小节内提示) */
-  const [recentError, setRecentError] = useState(false);
 
   // 首页提示语:读取设置里的自定义文案,并随设置保存实时更新
   useEffect(() => {
@@ -108,21 +87,6 @@ export default function HomePage() {
     if (!loaded) void load();
   }, [loaded, load]);
 
-  // 最近对话:进入首页时刷新一次,失败只在小节内提示,不阻塞主流程
-  useEffect(() => {
-    let alive = true;
-    refreshSessions()
-      .then(() => {
-        if (alive) setRecentError(false);
-      })
-      .catch(() => {
-        if (alive) setRecentError(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [refreshSessions]);
-
   // 当前模型的思考能力(与会话页同源;查询失败按不支持处理,控件隐藏)
   useEffect(() => {
     let alive = true;
@@ -141,14 +105,6 @@ export default function HomePage() {
 
   const agent = templates.find((t) => t.agent_id === agentId) ?? null;
   const attachments = useMemo(() => pending.map((p) => p.meta), [pending]);
-  /** 最近 3 个会话(按更新时间倒序;空标题兜底为「新对话」) */
-  const recents = useMemo(
-    () =>
-      [...sessions]
-        .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime())
-        .slice(0, 3),
-    [sessions],
-  );
 
   const pickFiles = (files: File[], notice?: string, rejected?: SkippedFile[]) => {
     // notice:拖入文件夹时的逐个文件拒绝提示(黑名单、空文件、超限)
@@ -296,31 +252,6 @@ export default function HomePage() {
         <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-caption)', color: 'var(--err)' }}>
           {error}
         </div>
-      )}
-
-      {(recents.length > 0 || recentError) && (
-        <section className="home-recent" aria-label="最近对话">
-          <div className="home-sec-head">
-            <IconHistory size={13} />
-            <span>最近对话</span>
-          </div>
-          {recentError ? (
-            <div className="home-recent-err">最近对话加载失败,可重新进入首页重试</div>
-          ) : (
-            recents.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="home-recent-item"
-                title={s.title || '新对话'}
-                onClick={() => nav(sessionPath(s.id))}
-              >
-                <span className="t">{s.title || '新对话'}</span>
-                <span className="m">{relTime(s.updated)}</span>
-              </button>
-            ))
-          )}
-        </section>
       )}
 
       {pickerOpen && (

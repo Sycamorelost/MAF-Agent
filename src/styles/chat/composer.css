@@ -398,6 +398,120 @@
   display: block;
 }
 
+/* 会话产物卡:AI 回复中提到的本地文件,点击在文件管理器中定位 */
+.out-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  max-width: 100%;
+}
+.out-card {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  color: var(--text-2);
+  font-size: var(--font-caption);
+  text-align: left;
+  transition: border-color .12s, background .12s;
+}
+.out-card:hover { border-color: var(--brand); background: var(--bg-hover); }
+.out-card-info { display: flex; flex-direction: column; min-width: 0; }
+.out-card-name {
+  max-width: calc(220px * var(--ui-scale));
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+}
+.out-card-kind {
+  max-width: calc(220px * var(--ui-scale));
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-4);
+  font-size: var(--font-micro);
+}
+/* 操作组:打开 / 定位 / 复制路径 / 转 PDF */
+.out-card-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.out-act {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(24px * var(--ui-scale));
+  height: calc(24px * var(--ui-scale));
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-4);
+  cursor: pointer;
+}
+.out-act:hover { background: var(--bg-hover); color: var(--brand); }
+/* 转 PDF:文字按钮(比图标宽一点),转换中禁用避免重复触发 */
+.out-act-pdf {
+  width: auto;
+  min-width: calc(30px * var(--ui-scale));
+  padding: 0 5px;
+  font-size: var(--font-micro);
+  letter-spacing: .02em;
+}
+.out-act:disabled { opacity: .5; cursor: progress; }
+.out-act-tip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  border-radius: var(--radius-s);
+  background: var(--text-1);
+  color: var(--bg-surface);
+  font-size: var(--font-micro);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.out-card-image { flex-direction: column; align-items: stretch; padding: var(--space-2); }
+.out-thumb {
+  width: calc(200px * var(--ui-scale));
+  max-height: calc(160px * var(--ui-scale));
+  object-fit: cover;
+  border-radius: var(--radius-s);
+  cursor: zoom-in;
+  display: block;
+}
+.out-thumb-empty {
+  height: calc(90px * var(--ui-scale));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-4);
+  font-size: var(--font-micro);
+  background: var(--bg-main);
+  border-radius: var(--radius-s);
+}
+.out-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  min-width: 0;
+  color: var(--text-3);
+  font-size: var(--font-micro);
+}
+
 /* 消息 hover 操作工具条 */
 .msg-actions {
   display: inline-flex;

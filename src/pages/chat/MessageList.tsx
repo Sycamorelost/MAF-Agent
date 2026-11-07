@@ -15,7 +15,6 @@ interface MessageListProps {
   startMargin: number;
   lastAssistantId: number | undefined;
   onQuote: (content: string, meta?: { role?: string; createdAt?: string }) => void;
-  onTranslate: (content: string, meta?: { role?: string; createdAt?: string }) => void;
   onEditResend: (msg: BubbleMessage) => void;
   onDelete: (id: number) => void;
   onRegenerate: (msg: BubbleMessage) => void;
@@ -34,7 +33,6 @@ export const MessageList = memo(function MessageList({
   startMargin,
   lastAssistantId,
   onQuote,
-  onTranslate,
   onEditResend,
   onDelete,
   onRegenerate,
@@ -56,9 +54,9 @@ export const MessageList = memo(function MessageList({
         <div key={m.id} id={`msg-${m.id}`} style={{ paddingBottom: 'var(--space-4)' }}>
           <MessageBubble
             msg={m}
+            sessionId={m.session_id}
             isLastAssistant={m.role === 'assistant' && m.id === lastAssistantId}
             onQuote={onQuote}
-            onTranslate={onTranslate}
             onEditResend={m.role === 'user' ? onEditResend : undefined}
             onDelete={onDelete}
             onRegenerate={

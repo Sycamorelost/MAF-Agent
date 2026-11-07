@@ -37,7 +37,8 @@ export const fsList = (rel?: string) =>
 export const fsBackupList = (sessionId?: string | null) =>
   invoke<FsBackup[]>('fs_backup_list', { sessionId: sessionId ?? null });
 
-export const fsRestore = (id: string) => invoke<string>('fs_restore', { id });
+export const fsRestore = (id: string, sessionId?: string | null) =>
+  invoke<string>('fs_restore', { id, sessionId: sessionId ?? null });
 
 export const fsOpenWorkspace = () => invoke<void>('fs_open_workspace');
 
@@ -48,19 +49,31 @@ export const fsOpenBackups = () => invoke<void>('fs_open_backups');
 
 // ============ P6 检查器 ============
 
-/** 读取文本文件(默认上限 20 万字符;offset 分页续读)。 */
-export const fsReadText = (path: string, offset?: number, maxChars?: number) =>
+/** 读取文本文件(默认上限 20 万字符;offset 分页续读;相对路径按会话工作区解析)。 */
+export const fsReadText = (
+  path: string,
+  offset?: number,
+  maxChars?: number,
+  sessionId?: string | null,
+) =>
   invoke<string>('fs_read_text', {
     path,
     offset: offset ?? null,
-    max_chars: maxChars ?? null,
+    maxChars: maxChars ?? null,
+    sessionId: sessionId ?? null,
   });
 
 /** 读取备份内容(diff 视图用;仅文本,截断 20 万字符)。 */
 export const fsBackupRead = (id: string) => invoke<string>('fs_backup_read', { id });
 
-/** 在系统文件管理器中定位工作区内文件(目录直接打开)。 */
-export const fsReveal = (path: string) => invoke<void>('fs_reveal', { path });
+/** 在系统文件管理器中定位文件(目录直接打开)。传入会话 id 时按该会话工作区解析相对路径。 */
+export const fsReveal = (path: string, sessionId?: string | null) =>
+  invoke<void>('fs_reveal', { path, sessionId: sessionId ?? null });
 
-/** 用系统默认应用打开工作区内文件。 */
-export const fsOpen = (path: string) => invoke<void>('fs_open', { path });
+/** 用系统默认应用打开文件。 */
+export const fsOpen = (path: string, sessionId?: string | null) =>
+  invoke<void>('fs_open', { path, sessionId: sessionId ?? null });
+
+/** 读取图片为 data URL(会话产物预览;仅图片且 ≤8MB)。 */
+export const fsReadDataUrl = (path: string, sessionId?: string | null) =>
+  invoke<string>('fs_read_data_url', { path, sessionId: sessionId ?? null });

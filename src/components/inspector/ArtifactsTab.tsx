@@ -114,7 +114,12 @@ export function ArtifactsTab({ data }: { data: WorkbenchData }) {
       <div className="ins-label">
         工作区文件
         <span className="sp" />
-        <button type="button" className="icon-btn" title="打开工作区目录" onClick={() => fsReveal('.').catch(() => {})}>
+        <button
+          type="button"
+          className="icon-btn"
+          title="打开工作区目录"
+          onClick={() => fsReveal('.', data.sessionId).catch(() => {})}
+        >
           <IconExternalLink size={13} />
         </button>
         <button
@@ -174,7 +179,9 @@ export function ArtifactsTab({ data }: { data: WorkbenchData }) {
               <button
                 type="button"
                 className="btn-primary btn-xs"
-                onClick={() => fsOpen(previewFile.path).catch((e) => setError(String(e)))}
+                onClick={() =>
+                  fsOpen(previewFile.path, data.sessionId).catch((e) => setError(String(e)))
+                }
               >
                 <IconExternalLink size={12} />
                 在应用中打开
@@ -182,7 +189,9 @@ export function ArtifactsTab({ data }: { data: WorkbenchData }) {
               <button
                 type="button"
                 className="btn-ghost btn-xs"
-                onClick={() => fsReveal(previewFile.path).catch((e) => setError(String(e)))}
+                onClick={() =>
+                  fsReveal(previewFile.path, data.sessionId).catch((e) => setError(String(e)))
+                }
               >
                 定位目录
               </button>
@@ -191,7 +200,9 @@ export function ArtifactsTab({ data }: { data: WorkbenchData }) {
                 type="button"
                 className="icon-btn"
                 title="下载/导出"
-                onClick={() => fsReveal(previewFile.path).catch((e) => setError(String(e)))}
+                onClick={() =>
+                  fsReveal(previewFile.path, data.sessionId).catch((e) => setError(String(e)))
+                }
               >
                 <IconDownload size={14} />
               </button>

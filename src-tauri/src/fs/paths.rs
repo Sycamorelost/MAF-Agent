@@ -9,9 +9,12 @@
 
 use std::path::{Path, PathBuf};
 
-/// 工作区根目录:环境变量 `MYAGENT_WORKSPACE` 优先,其次用户在设置里配的 `workspace_root`,
-/// 否则 `<数据目录>/workspace`。这是「相对路径」的默认基准目录(绝对路径不受其限制)。
-pub fn workspace_root() -> Result<PathBuf, String> {
+/// 全局默认工作区根目录:环境变量 `MYAGENT_WORKSPACE` 优先,其次用户在设置里配的
+/// `workspace_root`,否则 `<数据目录>/workspace`。
+///
+/// 这是「没有会话上下文时」的相对路径基准目录;凡是能拿到 session_id 的调用点,
+/// 必须改用 [`resolve_workspace_root`],否则项目绑定不生效。
+pub fn default_workspace_root() -> Result<PathBuf, String> {
     let root = match std::env::var("MYAGENT_WORKSPACE") {
         Ok(v) if !v.trim().is_empty() => PathBuf::from(v.trim()),
         _ => {
@@ -28,7 +31,7 @@ pub fn workspace_root() -> Result<PathBuf, String> {
 }
 
 /// 智能工作区根 —— 如果 session 绑定了项目且项目 path 有效,返回项目路径;
-/// 否则回退全局 `workspace_root()`。MCP tool dispatch 时用这个替换硬编码 workspace_root。
+/// 否则回退全局 [`default_workspace_root`]。MCP tool dispatch 时用这个替换硬编码全局根。
 pub fn resolve_workspace_root(session_id: Option<&str>) -> Result<PathBuf, String> {
     if let Some(sid) = session_id
         && let Ok(Some(session)) = crate::db::sessions::get(sid)
@@ -50,7 +53,7 @@ pub fn resolve_workspace_root(session_id: Option<&str>) -> Result<PathBuf, Strin
             }
         }
     }
-    workspace_root()
+    default_workspace_root()
 }
 
 /// 安全检查:目标路径必须在允许根目录下(canonicalize 后 starts_with 校验)。

@@ -150,7 +150,7 @@ pub async fn mcp_start_server(
         .find(|s| s.name == name)
         .cloned()
         .ok_or_else(|| format!("server `{name}` 不存在"))?;
-    runtime.start_from_config(&cfg, &data_dir_fn()).await
+    runtime.start_from_config(&cfg, &data_dir_fn(), true).await
 }
 
 /// 一键启动所有 enabled 的 MCP server。返回 (成功数, 失败数, 错误信息列表)。
@@ -173,7 +173,7 @@ pub async fn mcp_start_all_enabled(
     let mut fail = 0;
     let mut errors = Vec::new();
     for server in servers {
-        match runtime.start_from_config(&server, &dir).await {
+        match runtime.start_from_config(&server, &dir, true).await {
             Ok(()) => ok += 1,
             Err(e) => {
                 fail += 1;
@@ -190,7 +190,7 @@ pub async fn mcp_list_tools(
     name: String,
     runtime: State<'_, McpRuntime>,
 ) -> Result<Vec<mcp::McpToolInfo>, String> {
-    runtime.list_tools(&name).await
+    runtime.list_tools(&name, false).await
 }
 
 /// 带 HITL 审批的工具调用 —— ChatStream 调用链:
@@ -438,7 +438,7 @@ pub async fn mcp_collect_tools(
             Ok(t) => t,
             Err(_) => {
                 let was_running = runtime.is_running(&name).await;
-                match runtime.start_from_config(server, &dir).await {
+                match runtime.start_from_config(server, &dir, false).await {
                     Ok(()) => match runtime.list_tools_cached(&name).await {
                         Ok(t) => t,
                         Err(e) => {
@@ -497,12 +497,7 @@ pub async fn mcp_collect_tools(
 
 // ============ Phase 6:白名单 Shell 命令(执行内核见 mcp::shell) ============
 
-/// 执行白名单命令;审批策略为「完全访问」时放开为任意命令(用户明示完全信任 MCP)。
-/// 非信任模式下的校验规则(解释器拒绝 / 元字符 / 只读白名单)与超时控制全部在 `mcp::shell`。
-///
-/// D8 安全收口:完全信任模式下,命中 DANGEROUS_PATTERNS 的命令(格式化/删根/注册表等)
-/// 仍需二次确认。`confirm_danger=true` 表示用户已确认;否则返回带 `DANGEROUS_CONFIRM`
-/// 前缀的错误,前端据此弹确认框后带 true 重调。
+// ============ 执行内核 ============
 #[tauri::command]
 pub async fn shell_whitelist_exec(
     cmd: String,
@@ -525,9 +520,10 @@ pub async fn shell_whitelist_exec(
                 pattern.trim()
             ));
         }
-        crate::mcp::shell::run_unrestricted(&cmd, &args, cwd).await
+        // 该命令由设置页直接触发,无会话上下文 → 走全局默认工作区根
+        crate::mcp::shell::run_unrestricted(&cmd, &args, cwd, None).await
     } else {
-        crate::mcp::shell::run(&cmd, &args, cwd).await
+        crate::mcp::shell::run(&cmd, &args, cwd, None).await
     }
     .map(|o| o.text)
 }

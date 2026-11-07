@@ -13,7 +13,7 @@ use super::common::{
 
 /// 全局默认工作区根(未绑定项目时使用)。
 pub fn root() -> Result<PathBuf, String> {
-    paths::workspace_root()
+    paths::default_workspace_root()
 }
 
 /// 解析会话绑定的工作区根 —— 绑定项目且路径有效时返回项目路径,否则回退全局。

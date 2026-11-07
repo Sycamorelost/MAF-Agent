@@ -10,6 +10,14 @@ import {
   UI_SCALE_MAX,
   UI_SCALE_MIN,
 } from '../../lib/uiScale';
+import {
+  applyContentWidth,
+  loadContentWidth,
+  CONTENT_W_DEFAULT,
+  CONTENT_W_MAX,
+  CONTENT_W_MIN,
+  CONTENT_W_STEP,
+} from '../../lib/contentWidth';
 import { useThemeStore, THEMES, type ThemeKey } from '../../stores/theme';
 import { IconCheck } from '../../components/icons';
 import * as ipc from '../../lib/ipc';
@@ -22,8 +30,17 @@ const PRESETS: { pct: number; label: string }[] = [
   { pct: 120, label: '特大' },
 ];
 
+/** 正文列宽预设(px)。 */
+const WIDTH_PRESETS: { w: number; label: string }[] = [
+  { w: 620, label: '窄' },
+  { w: 720, label: '标准' },
+  { w: 820, label: '宽' },
+  { w: 960, label: '超宽' },
+];
+
 export function AppearanceView() {
   const [pct, setPct] = useState(() => Math.round(loadUiScale() * 100));
+  const [contentW, setContentW] = useState(() => loadContentWidth());
   const theme = useThemeStore((s) => s.theme);
   const applyTheme = useThemeStore((s) => s.applyTheme);
 
@@ -47,6 +64,11 @@ export function AppearanceView() {
   const onChange = (next: number) => {
     const applied = Math.round(applyUiScale(next / 100) * 100);
     setPct(applied);
+  };
+
+  /** 正文宽度:正文列与输入卡共用 --content-w,实时生效并持久化。 */
+  const onChangeWidth = (next: number) => {
+    setContentW(applyContentWidth(next));
   };
 
   const onPickTheme = (t: ThemeKey) => {
@@ -143,6 +165,59 @@ export function AppearanceView() {
             <div className="set-hint" style={{ marginTop: 'var(--space-1)' }}>
               次要说明文字示例(--font-caption)
             </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 style={{ marginTop: 'var(--space-6)' }}>正文宽度</h2>
+      <p className="set-desc">
+        会话页正文列与底部输入框始终等宽同轴;这里调整这一列的宽度,窗口较窄时自动收缩,不会溢出。
+      </p>
+
+      <div className="set-card">
+        <div className="set-card-h">
+          正文 / 输入框宽度
+          <span className="st">{contentW}px</span>
+        </div>
+        <div className="set-card-b">
+          <div className="set-actions" style={{ flexWrap: 'wrap' }}>
+            {WIDTH_PRESETS.map((p) => (
+              <button
+                key={p.w}
+                className={`btn btn-xs${contentW === p.w ? ' btn-primary' : ''}`}
+                onClick={() => onChangeWidth(p.w)}
+              >
+                {p.label} · {p.w}px
+              </button>
+            ))}
+            <span className="sp" />
+            <button
+              className="btn btn-xs"
+              disabled={contentW === CONTENT_W_DEFAULT}
+              onClick={() => onChangeWidth(CONTENT_W_DEFAULT)}
+            >
+              恢复默认
+            </button>
+          </div>
+
+          <div className="set-row" style={{ marginTop: 'var(--space-3)' }}>
+            <label className="lbl">自定义</label>
+            <input
+              type="range"
+              min={CONTENT_W_MIN}
+              max={CONTENT_W_MAX}
+              step={CONTENT_W_STEP}
+              value={contentW}
+              onChange={(e) => onChangeWidth(Number(e.target.value))}
+              style={{ flex: 1, maxWidth: 320 }}
+            />
+            <span className="set-hint">
+              {CONTENT_W_MIN} – {CONTENT_W_MAX}px
+            </span>
+          </div>
+
+          <div className="set-hint" style={{ marginTop: 'var(--space-3)' }}>
+            宽度会再随「字号缩放」等比放大;正文与输入框共用同一宽度,始终对齐。
           </div>
         </div>
       </div>

@@ -173,6 +173,16 @@ pub async fn fs_reveal(path: String, session_id: Option<String>) -> Result<(), S
             .map_err(|e| format!("定位文件失败: {e}"))?;
         return Ok(());
     }
+    // E3:macOS 用 `open -R` 让 Finder 选中该文件(而不是只打开父目录)
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&abs)
+            .spawn()
+            .map_err(|e| format!("定位文件失败: {e}"))?;
+        return Ok(());
+    }
     #[allow(unreachable_code)]
     open_dir(abs.parent().ok_or("无法定位父目录")?)
 }
@@ -197,6 +207,37 @@ pub async fn fs_open(path: String, session_id: Option<String>) -> Result<(), Str
         .spawn()
         .map_err(|e| format!("打开文件失败: {e}"))?;
     Ok(())
+}
+
+/// 读取图片为 data URL(会话产物预览用):仅图片格式,且限制 8MB,
+/// 避免把大文件编码后塞进前端导致内存膨胀。
+#[tauri::command]
+pub async fn fs_read_data_url(path: String, session_id: Option<String>) -> Result<String, String> {
+    let root = text::root_for_session(session_id.as_deref())?;
+    let abs = crate::fs::paths::resolve(&root, &path, true)?;
+    let ext = abs
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        _ => return Err("该文件不是可预览的图片".into()),
+    };
+    let meta = std::fs::metadata(&abs).map_err(|e| format!("文件不存在:{e}"))?;
+    if meta.len() > 8 * 1024 * 1024 {
+        return Err("图片超过 8MB,请点击在文件夹中查看".into());
+    }
+    let bytes = std::fs::read(&abs).map_err(|e| format!("读取失败:{e}"))?;
+    use base64::Engine as _;
+    Ok(format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(&bytes)
+    ))
 }
 
 fn open_dir(dir: &std::path::Path) -> Result<(), String> {

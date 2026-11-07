@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
@@ -23,36 +23,17 @@ import './styles/phase.css';
 import './styles/tools.css';
 import './styles/memory.css';
 import './styles/settings.css';
-import './styles/aiflavor.css';
 import './styles/workbench.css';
 import './styles/preset.css';
-import './styles/study.css';
 import 'katex/dist/katex.min.css';
 
 // PERF-4:页面按路由懒加载,首屏只加载布局与当前页,避免 8 MB+ 单包一次性解析。
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
-const StudyPage = lazy(() => import('./pages/StudyPage'));
-// 整卷测试独立页面(学习中心内跳转)
-const PaperPage = lazy(() =>
-  import('./pages/study/PaperPage').then((m) => ({ default: m.PaperPage })),
-);
-const DrawPage = lazy(() => import('./pages/DrawPage'));
-const TranslatePage = lazy(() => import('./pages/TranslatePage'));
 const MemoryPage = lazy(() => import('./pages/MemoryPage'));
 const NotesPage = lazy(() => import('./pages/NotesPage'));
 const AttachmentsPage = lazy(() => import('./pages/AttachmentsPage'));
-const AiFlavorPage = lazy(() => import('./pages/aiflavor/AiFlavorPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-
-/** 学习规划/绘画/翻译/记忆/设置页自带布局,隐藏会话侧栏(条件挂载,抽屉 body class 随卸载清理)。 */
-function MaybeSidebar() {
-  const loc = useLocation();
-  const bare = ['/plan', '/draw', '/translate', '/memory', '/notes', '/attachments', '/aiflavor', '/settings'];
-  const hidden = bare.some((p) => loc.pathname.startsWith(p));
-  if (hidden) return null;
-  return <Sidebar />;
-}
 
 /** 首页门:工作台页已并入会话页,首页永远是 HomePage。 */
 function HomeGate() {
@@ -100,6 +81,9 @@ function OnboardingGate() {
 /** 主窗口内容:监听「跳转会话」/「打开设置页」事件并导航。 */
 function MainApp() {
   const nav = useNavigate();
+  const loc = useLocation();
+  /** 主面板切换动画的分组键:一级路由变化才换场(会话之间切换不重播动画) */
+  const viewKey = loc.pathname.split('/')[1] || 'home';
   useEffect(() => {
     const unlistenSession = listen<{ sessionId: string }>('navigate-to-session', (e) => {
       // 先刷新会话列表:目标会话可能由其它窗口刚创建,否则模式门会因「本地不存在」而回首页
@@ -143,24 +127,23 @@ function MainApp() {
     <div className="window">
       <Titlebar />
       <div className="body">
-        <MaybeSidebar />
+        <Sidebar />
         <div className="main">
           <Suspense fallback={null}>
-            <Routes>
-              <Route path="/" element={<HomeGate />} />
-              <Route path="/chat/:id" element={<SessionGate />} />
-              {/* 工作台页已并入会话页,/work 路由不再注册;旧 /work/:id 链接直接由通配回首页 */}
-              <Route path="/plan" element={<StudyPage />} />
-              <Route path="/plan/paper/:id" element={<PaperPage />} />
-              <Route path="/draw" element={<DrawPage />} />
-              <Route path="/translate" element={<TranslatePage />} />
-              <Route path="/memory" element={<MemoryPage />} />
-              <Route path="/notes" element={<NotesPage />} />
-              <Route path="/attachments" element={<AttachmentsPage />} />
-              <Route path="/aiflavor" element={<AiFlavorPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <div className="main-view" key={viewKey}>
+              <Routes>
+                <Route path="/" element={<HomeGate />} />
+                <Route path="/chat/:id" element={<SessionGate />} />
+                {/* 工作台页已并入会话页,/work 路由不再注册;旧 /work/:id 链接直接由通配回首页 */}
+                <Route path="/memory" element={<MemoryPage />} />
+                {/* 知识库独立入口(侧栏「知识库」);旧 /notes 深链保留(?id= 直接定位笔记) */}
+                <Route path="/knowledge" element={<NotesPage />} />
+                <Route path="/notes" element={<NotesPage />} />
+                <Route path="/attachments" element={<AttachmentsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
           </Suspense>
         </div>
       </div>

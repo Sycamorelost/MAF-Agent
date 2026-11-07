@@ -171,5 +171,16 @@ pub fn write_tool_defs() -> Vec<ToolDef> {
                 "required": ["path", "dest"]
             }),
         ),
+        tool(
+            "fs_to_pdf",
+            "把已有文档(docx/xlsx/pptx/odt/html 等)高保真转换为 PDF。调用本机 LibreOffice 无头模式,免费离线、无需 API;未安装时返回可读提示。输出到源文件同目录,同名 PDF 已存在时自动加时间戳,不覆盖用户文件。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "待转换文件路径(工作区相对或绝对)" }
+                },
+                "required": ["path"]
+            }),
+        ),
     ]
 }

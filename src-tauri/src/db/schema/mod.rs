@@ -24,7 +24,7 @@ use v16::{
 };
 
 /// 当前 schema 版本。每次结构变更 +1 并追加迁移 SQL。
-pub const SCHEMA_VERSION: i32 = 37;
+pub const SCHEMA_VERSION: i32 = 38;
 
 // V29(P8.1 项目化升级):folders → projects,加字段对齐 Cursor Projects 设计。
 // - 重命名 folders → projects(SQLite ALTER TABLE RENAME)
@@ -106,6 +106,7 @@ fn is_schema_ready(conn: &Connection) -> rusqlite::Result<bool> {
         "tasks",
         "tool_call_log",
         "session_events",
+        "deliverables",
     ];
     let placeholders = vec!["?"; CORE.len()].join(",");
     let sql = format!("SELECT COUNT(*) FROM sqlite_master WHERE name IN ({placeholders})");
@@ -512,6 +513,26 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
          );
          CREATE INDEX IF NOT EXISTS idx_session_events_session ON session_events(session_id, id);
          CREATE INDEX IF NOT EXISTS idx_session_events_kind ON session_events(session_id, kind, id);",
+    )?;
+    // V38(M2 产物事件):deliverables 表。模型通过 present 工具显式声明本轮产物,
+    //   先以 message_id=NULL 暂存,助手消息落库时绑定到该条消息(message_id)后即可按消息回读。
+    //   path 存工作区相对路径(工作区外文件存绝对路径);不存 base64、不存临时路径。
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS deliverables (
+           id         INTEGER PRIMARY KEY AUTOINCREMENT,
+           session_id TEXT NOT NULL,
+           message_id INTEGER,
+           kind       TEXT NOT NULL DEFAULT 'file',
+           path       TEXT NOT NULL,
+           name       TEXT NOT NULL DEFAULT '',
+           mime       TEXT,
+           size       INTEGER,
+           note       TEXT,
+           created    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+         );
+         CREATE INDEX IF NOT EXISTS idx_deliverables_session ON deliverables(session_id, id);
+         CREATE INDEX IF NOT EXISTS idx_deliverables_message ON deliverables(message_id);
+         CREATE INDEX IF NOT EXISTS idx_deliverables_pending ON deliverables(session_id, message_id);",
     )?;
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

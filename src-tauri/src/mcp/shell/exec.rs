@@ -24,9 +24,14 @@ impl ShellOutcome {
 }
 
 /// 校验 + 执行白名单命令。
-/// 不限目录:`cwd` 可为任意已存在目录(缺省为工作区根),路径参数不限目录、不设文件黑名单。
-pub async fn run(cmd: &str, args: &[String], cwd: Option<&str>) -> Result<ShellOutcome, String> {
-    let root = crate::fs::paths::workspace_root()?;
+/// 不限目录:`cwd` 可为任意已存在目录(缺省为会话工作区根,绑定项目时为项目目录)。
+pub async fn run(
+    cmd: &str,
+    args: &[String],
+    cwd: Option<&str>,
+    session_id: Option<&str>,
+) -> Result<ShellOutcome, String> {
+    let root = crate::fs::paths::resolve_workspace_root(session_id)?;
     validate(cmd, args, &root)?;
     let dir = resolve_cwd(cwd, &root)?;
     execute(cmd, args, EXEC_TIMEOUT, false, Some(&dir)).await
@@ -39,17 +44,18 @@ pub async fn run(cmd: &str, args: &[String], cwd: Option<&str>) -> Result<ShellO
 /// 命令含空白或 shell 操作符时按「整行命令」走 `cmd /c`(仅 Windows):
 /// 与 shell 心智一致,支持管道/重定向/内建命令(del/copy/mkdir/set…);
 /// 纯程序名(无空白)仍走 argv 直 exec,保持精确语义。
-/// `cwd` 缺省为工作区根;任意已存在目录均可使用(仍写审计)。
+/// `cwd` 缺省为会话工作区根(绑定项目时为项目目录);任意已存在目录均可使用(仍写审计)。
 pub async fn run_unrestricted(
     cmd: &str,
     args: &[String],
     cwd: Option<&str>,
+    session_id: Option<&str>,
 ) -> Result<ShellOutcome, String> {
     let cmd_trimmed = cmd.trim();
     if cmd_trimmed.is_empty() {
         return Err("命令不能为空".into());
     }
-    let root = crate::fs::paths::workspace_root()?;
+    let root = crate::fs::paths::resolve_workspace_root(session_id)?;
     let dir = resolve_cwd(cwd, &root)?;
     let line_mode = needs_line_mode(cmd_trimmed);
     execute(cmd_trimmed, args, TRUST_EXEC_TIMEOUT, line_mode, Some(&dir)).await
