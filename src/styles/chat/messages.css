@@ -10,13 +10,13 @@
 .msg.assistant { display: block; }
 .msg-col {
   min-width: 0;
-  max-width: 660px;
+  max-width: min(calc(var(--chat-max-w) * 0.92), 100%);
   flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
-.msg.user .msg-col { align-items: flex-end; max-width: 560px; }
+.msg.user .msg-col { align-items: flex-end; max-width: min(calc(var(--chat-max-w) * 0.8), 100%); }
 .msg.assistant .msg-col { max-width: none; width: 100%; }
 .msg .bubble {
   max-width: 100%;

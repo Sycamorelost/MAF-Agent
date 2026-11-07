@@ -362,7 +362,10 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        std::env::temp_dir().join(format!("myagent-notes-presets-{tag}-{}-{nanos}", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "myagent-notes-presets-{tag}-{}-{nanos}",
+            std::process::id()
+        ))
     }
 
     #[test]
@@ -380,7 +383,11 @@ mod tests {
             assert!(p.tags.contains(&"预置"), "{} 缺「预置」标签", p.id);
             assert!(p.body.len() > 200, "{} 正文过短", p.id);
             // 术语表必须含表格;速查篇至少含一个标题行
-            assert!(p.body.contains('|') || p.body.contains("# "), "{} 内容形态异常", p.id);
+            assert!(
+                p.body.contains('|') || p.body.contains("# "),
+                "{} 内容形态异常",
+                p.id
+            );
         }
     }
 
@@ -501,13 +508,21 @@ mod tests {
         assert_eq!(report.skipped.len(), 10);
         let item = &report.merged[0];
         assert_eq!(item.title, "我的技术术语(改名)", "用户标题不被覆盖");
-        assert!(item.detail.contains("恢复章节"), "缺章节应恢复: {}", item.detail);
+        assert!(
+            item.detail.contains("恢复章节"),
+            "缺章节应恢复: {}",
+            item.detail
+        );
         assert!(
             item.detail.contains("表格「一、基础概念」补充"),
             "被删的预置行应按首列键补回: {}",
             item.detail
         );
-        assert!(!item.detail.contains("补充 21"), "function 行已存在不得重复补: {}", item.detail);
+        assert!(
+            !item.detail.contains("补充 21"),
+            "function 行已存在不得重复补: {}",
+            item.detail
+        );
 
         // 落盘内容核对:用户行保留 + 预置缺漏补回 + front-matter 用户字段保留
         let raw = fs::read_to_string(dir.join("preset-terms-it.md")).unwrap();

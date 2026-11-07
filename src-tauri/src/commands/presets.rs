@@ -37,8 +37,12 @@ pub(crate) fn resolve_for(s: &sessions::SessionRow) -> SessionPresetInfo {
         .and_then(crate::agents::find)
         .and_then(|t| t.preset);
     let default = crate::settings::load().default_preset;
-    let ResolvedPreset { preset, source } =
-        resolve(&all, s.preset_id.as_deref(), agent_preset.as_deref(), &default);
+    let ResolvedPreset { preset, source } = resolve(
+        &all,
+        s.preset_id.as_deref(),
+        agent_preset.as_deref(),
+        &default,
+    );
     SessionPresetInfo {
         preset,
         source,

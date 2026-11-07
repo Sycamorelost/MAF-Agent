@@ -27,11 +27,17 @@ pub(super) struct Selected {
 pub(super) fn select(markdown: &str, query: &str, budget: usize) -> Selected {
     let chunks = build_chunks(markdown);
     if chunks.is_empty() || budget == 0 {
-        return Selected { text: String::new(), matched: false };
+        return Selected {
+            text: String::new(),
+            matched: false,
+        };
     }
     let q_tokens = unique(tokenize(query));
     if q_tokens.is_empty() {
-        return Selected { text: pack(&chunks, &(0..chunks.len()).collect::<Vec<_>>(), budget), matched: false };
+        return Selected {
+            text: pack(&chunks, &(0..chunks.len()).collect::<Vec<_>>(), budget),
+            matched: false,
+        };
     }
 
     let docs: Vec<Vec<String>> = chunks.iter().map(|c| tokenize(&c.text)).collect();
@@ -76,10 +82,16 @@ pub(super) fn select(markdown: &str, query: &str, budget: usize) -> Selected {
     hits.sort_by(|a, b| b.1.total_cmp(&a.1));
 
     if hits.is_empty() {
-        return Selected { text: pack(&chunks, &(0..chunks.len()).collect::<Vec<_>>(), budget), matched: false };
+        return Selected {
+            text: pack(&chunks, &(0..chunks.len()).collect::<Vec<_>>(), budget),
+            matched: false,
+        };
     }
     let order: Vec<usize> = hits.into_iter().map(|(i, _)| i).collect();
-    Selected { text: pack(&chunks, &order, budget), matched: true }
+    Selected {
+        text: pack(&chunks, &order, budget),
+        matched: true,
+    }
 }
 
 /// 一个内容块(已带小标题上下文)。
@@ -285,7 +297,10 @@ fn is_stopword(w: &str) -> bool {
 
 fn unique(tokens: Vec<String>) -> Vec<String> {
     let mut seen = HashSet::new();
-    tokens.into_iter().filter(|t| seen.insert(t.clone())).collect()
+    tokens
+        .into_iter()
+        .filter(|t| seen.insert(t.clone()))
+        .collect()
 }
 
 #[cfg(test)]

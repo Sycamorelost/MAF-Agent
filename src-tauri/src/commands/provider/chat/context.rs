@@ -37,7 +37,11 @@ pub(crate) fn prune_context(messages: &mut Vec<ChatMessage>, budget: &ContextBud
         .collect();
     tail.reverse();
 
-    let mut weight: usize = system.iter().chain(tail.iter()).map(|m| budget.weight(m)).sum();
+    let mut weight: usize = system
+        .iter()
+        .chain(tail.iter())
+        .map(|m| budget.weight(m))
+        .sum();
     while weight > budget.limit() && tail.len() > 1 {
         weight = weight.saturating_sub(budget.weight(&tail[0]));
         tail.remove(0);

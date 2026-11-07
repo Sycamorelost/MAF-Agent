@@ -4,6 +4,7 @@
 //! 只有同时满足下面两条,才会用原生二进制替代 npx:
 //! 1. 环境变量 `MYAGENT_MCP_NATIVE=1`(显式 opt-in,默认关闭);
 //! 2. 资源目录里存在 `manifest.json`,且声明的二进制文件真实存在。
+//!
 //! 任何一条不满足 → 原样返回调用方给的 npx 命令与参数(与改造前完全一致)。
 //!
 //! 这样既能逐步消除 Node 依赖,又不会因为工具名/参数差异导致功能或权限范围变化 ——
@@ -93,9 +94,18 @@ pub fn platform_tag() -> &'static str {
         "linux-aarch64"
     }
     #[cfg(not(any(
-        all(target_os = "windows", any(target_arch = "x86_64", target_arch = "aarch64")),
-        all(target_os = "macos", any(target_arch = "x86_64", target_arch = "aarch64")),
-        all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")),
+        all(
+            target_os = "windows",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ),
+        all(
+            target_os = "macos",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ),
+        all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ),
     )))]
     {
         "unknown"
@@ -189,7 +199,9 @@ pub fn resolve(
         let Some(manifest) = read_manifest(&dir) else {
             continue;
         };
-        let Some(entry) = manifest.get(key) else { continue };
+        let Some(entry) = manifest.get(key) else {
+            continue;
+        };
         let Some(bin) = entry.get("bin").and_then(|v| v.as_str()) else {
             continue;
         };
@@ -222,7 +234,12 @@ pub fn resolve(
 }
 
 /// 当前该 server 实际会用的后端(供 mcp_doctor 展示;http/自定义返回 "npx"/"http")。
-pub fn describe_backend(name: &str, npx_command: &str, is_preset: bool, is_http: bool) -> &'static str {
+pub fn describe_backend(
+    name: &str,
+    npx_command: &str,
+    is_preset: bool,
+    is_http: bool,
+) -> &'static str {
     if is_http {
         return "http";
     }
@@ -246,7 +263,8 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let d = std::env::temp_dir().join(format!("maf-native-{tag}-{}-{nanos}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("maf-native-{tag}-{}-{nanos}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         d
     }
@@ -257,7 +275,10 @@ mod tests {
         let _g = ENV_LOCK.lock().unwrap();
         // SAFETY: 测试串行;仅影响本进程,且退出前恢复
         unsafe { std::env::remove_var(OPT_IN_ENV) };
-        let args = vec!["-y".into(), "@modelcontextprotocol/server-filesystem".into()];
+        let args = vec![
+            "-y".into(),
+            "@modelcontextprotocol/server-filesystem".into(),
+        ];
         let dirs = vec!["C:\\".to_string()];
         let l = resolve("项目文件", "npx", &args, &dirs, true);
         assert_eq!(l.backend, Backend::Npx);
@@ -271,11 +292,7 @@ mod tests {
         let _g = ENV_LOCK.lock().unwrap();
         unsafe { std::env::set_var(OPT_IN_ENV, "1") };
         let dir = temp_dir("custom");
-        std::fs::write(
-            dir.join(MANIFEST),
-            r#"{"my-server":{"bin":"whatever"}}"#,
-        )
-        .unwrap();
+        std::fs::write(dir.join(MANIFEST), r#"{"my-server":{"bin":"whatever"}}"#).unwrap();
         unsafe { std::env::set_var(BIN_DIR_ENV, &dir) };
         let l = resolve("我的自定义", "npx", &["-y".into()], &[], false);
         assert_eq!(l.backend, Backend::Npx);
@@ -305,7 +322,11 @@ mod tests {
     fn opt_in_with_manifest_uses_native_and_passes_dirs() {
         let _g = ENV_LOCK.lock().unwrap();
         let dir = temp_dir("hit");
-        let bin_name = if cfg!(windows) { "mcp-filesystem.exe" } else { "mcp-filesystem" };
+        let bin_name = if cfg!(windows) {
+            "mcp-filesystem.exe"
+        } else {
+            "mcp-filesystem"
+        };
         std::fs::write(dir.join(bin_name), b"stub").unwrap();
         std::fs::write(
             dir.join(MANIFEST),

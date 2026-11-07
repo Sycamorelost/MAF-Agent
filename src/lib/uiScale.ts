@@ -13,8 +13,12 @@ function clamp(v: number): number {
 
 /** 读取已保存的缩放比例;缺失或非法时回落 1。 */
 export function loadUiScale(): number {
-  const raw = Number(localStorage.getItem(KEY));
-  return Number.isFinite(raw) && raw > 0 ? clamp(raw) : UI_SCALE_DEFAULT;
+  try {
+    const raw = Number(localStorage.getItem(KEY));
+    return Number.isFinite(raw) && raw > 0 ? clamp(raw) : UI_SCALE_DEFAULT;
+  } catch {
+    return UI_SCALE_DEFAULT; // 非浏览器环境(如 node 单测)无 localStorage,回落默认
+  }
 }
 
 /** 应用缩放:写 CSS 变量并持久化,返回实际生效值。 */

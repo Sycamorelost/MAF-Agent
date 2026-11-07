@@ -15,7 +15,7 @@
   flex-shrink: 0;
 }
 .memory-tab {
-  padding: 6px 14px;
+  padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale));
   border: none;
   border-radius: var(--radius-s);
   background: transparent;
@@ -103,36 +103,8 @@
   white-space: nowrap;
 }
 .mem-actions button:hover { background: var(--bg-hover); color: var(--text-1); }
-.mem-mode-group {
-  display: flex;
-  gap: var(--space-1);
-  background: var(--bg-hover);
-  border-radius: var(--radius-s);
-  padding: var(--space-1);
-}
-.mem-mode-group button {
-  height: var(--ctl-h);
-  padding: 0 var(--ctl-pad);
-  line-height: 1;
-  white-space: nowrap;
-}
-.mem-mode-group button.active {
-  background: var(--bg-main);
-  color: var(--text-1);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(15, 20, 30, .06);
-}
-.mem-preview {
-  font-family: var(--font);
-}
-/* 记忆预览的 Markdown 排版统一走 _tokens.css 的 `.md` 模板 */
-.mem-split {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  min-height: 0;
-}
-.mem-split .mem-view.edit { border-right: 1px solid var(--border); }
+/* 记忆预览的 Markdown 排版统一走 _tokens.css 的 `.md` 模板;
+   三态切换/双栏样式已随 MemPanel 收敛移除(冲突对话框用 settings/dialogs.css 的副本) */
 
 /* 版本历史等附属区块:12px 字号 + 单档底色(32%),用分隔线分层,不再套卡片边框 */
 .mem-versions {

@@ -245,5 +245,4 @@ mod tests {
         assert!(notice.contains("Coding Plan"));
         assert!(notice.contains("封禁"));
     }
-
 }

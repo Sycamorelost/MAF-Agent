@@ -45,9 +45,7 @@ fn is_table_line(l: &str) -> bool {
 /// 分隔行:`| --- | :---: |` 形态(必须含至少一个 `-`)。
 fn is_sep_line(l: &str) -> bool {
     let t = l.trim();
-    t.starts_with('|')
-        && t.contains('-')
-        && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
+    t.starts_with('|') && t.contains('-') && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
 }
 
 /// 表格块 = 连续表格行;返回每块的 (起始下标, 结束下标开区间)。
@@ -222,7 +220,10 @@ mod tests {
     fn foreign_body_appends_all_sections_keeps_user_text() {
         let user = "# 完全无关的笔记\n\n今天的心情记录。";
         let (merged, details) = merge_body(user, PRESET);
-        assert!(merged.starts_with("# 完全无关的笔记\n\n今天的心情记录。"), "用户原文必须在开头原样保留");
+        assert!(
+            merged.starts_with("# 完全无关的笔记\n\n今天的心情记录。"),
+            "用户原文必须在开头原样保留"
+        );
         assert!(merged.contains("## 一、基础") && merged.contains("## 二、进阶"));
         assert_eq!(details.len(), 2, "两个章节都应恢复: {details:?}");
     }
@@ -239,7 +240,10 @@ mod tests {
     fn case_insensitive_key_not_duplicated() {
         let user = "## 一、基础\n\n| 英文 | 中文 | 备注 |\n| --- | --- | --- |\n| FUNCTION | 函数 | |\n| variable | 变量 | |\n\n## 二、进阶\n\n| 英文 | 中文 | 备注 |\n| --- | --- | --- |\n| cache | 缓存 | |\n| thread | 线程 | |\n\n说明文字。\n";
         let (_merged, details) = merge_body(user, PRESET);
-        assert!(details.is_empty(), "大小写差异不应造成重复补行: {details:?}");
+        assert!(
+            details.is_empty(),
+            "大小写差异不应造成重复补行: {details:?}"
+        );
     }
 
     #[test]
@@ -250,6 +254,9 @@ mod tests {
         assert!(merged.contains("我把整个表删了。"), "用户散文必须保留");
         let h = merged.find("## 一、基础").unwrap();
         let t = merged.find("| 英文 | 中文 | 备注 |").unwrap();
-        assert!(t > h && t < merged.find("我把整个表删了").unwrap(), "表格应插回章节标题之后");
+        assert!(
+            t > h && t < merged.find("我把整个表删了").unwrap(),
+            "表格应插回章节标题之后"
+        );
     }
 }

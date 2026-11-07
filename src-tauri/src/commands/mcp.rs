@@ -85,7 +85,10 @@ pub async fn mcp_get_tool_log(id: i64) -> Result<Option<crate::db::tool_log::Too
 }
 
 #[tauri::command]
-pub async fn mcp_add_server(server: McpServerConfig, state: State<'_, McpState>) -> Result<(), String> {
+pub async fn mcp_add_server(
+    server: McpServerConfig,
+    state: State<'_, McpState>,
+) -> Result<(), String> {
     if server.name.is_empty() {
         return Err("name 不能为空".into());
     }

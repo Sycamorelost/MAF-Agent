@@ -11,6 +11,8 @@ import {
   type TodoItem,
 } from '../../lib/ipc/session';
 import { IconChevronDown, IconChevronRight, IconRefresh } from '../../components/icons';
+import { useToast } from '../../lib/useToast';
+import Toast from '../../components/Toast';
 
 interface Props {
   sessionId: string;
@@ -26,6 +28,9 @@ export function ChatTodos({ sessionId, onNotice, hidden = false }: Props) {
   const [collapsed, setCollapsed] = useState(true);
   // 反向动画过渡态:点击收起后先播放 reverse,播完再真正卸载
   const [closing, setClosing] = useState(false);
+  // 手动刷新进行中(图标旋转反馈);失败用 toast 明示,不再静默吞错
+  const [refreshing, setRefreshing] = useState(false);
+  const { toast, showToast, hideToast } = useToast();
 
   const DRAWER_ANIM_MS = 180;
 
@@ -46,6 +51,20 @@ export function ChatTodos({ sessionId, onNotice, hidden = false }: Props) {
     sessionGetTodos(sessionId)
       .then((v) => setTodos(v))
       .catch(() => {});
+
+  // 手动刷新:带旋转反馈与结果提示,让用户确认「确实重新拉了一次」
+  const handleManualRefresh = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    sessionGetTodos(sessionId)
+      .then((v) => {
+        const unchanged = JSON.stringify(v) === JSON.stringify(todos);
+        setTodos(v);
+        if (unchanged) showToast('已是最新进度');
+      })
+      .catch(() => showToast('任务进度刷新失败,请稍后重试'))
+      .finally(() => setRefreshing(false));
+  };
 
   // session 切换:清列表 + 重新拉取 + 订阅事件
   useEffect(() => {
@@ -146,12 +165,13 @@ export function ChatTodos({ sessionId, onNotice, hidden = false }: Props) {
               type="button"
               className="chat-todos-refresh"
               title="刷新任务清单"
+              disabled={refreshing}
               onClick={(e) => {
                 e.stopPropagation();
-                refresh();
+                handleManualRefresh();
               }}
             >
-              <IconRefresh size={14} />
+              <IconRefresh size={14} className={refreshing ? 'spin' : undefined} />
             </button>
             <button
               type="button"
@@ -186,6 +206,7 @@ export function ChatTodos({ sessionId, onNotice, hidden = false }: Props) {
           </ul>
         </div>
       )}
+      {toast && <Toast text={toast} onClose={hideToast} />}
     </div>
   );
 }

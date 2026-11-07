@@ -102,11 +102,7 @@ fn read_records_at(path: &Path) -> Vec<StoredReject> {
 }
 
 /// 追加记录并按上限裁剪(写入失败返回中文原因)。
-fn append_records_at(
-    path: &Path,
-    records: Vec<StoredReject>,
-    max: usize,
-) -> Result<(), String> {
+fn append_records_at(path: &Path, records: Vec<StoredReject>, max: usize) -> Result<(), String> {
     let mut all = read_records_at(path);
     all.extend(records);
     if all.len() > max {
@@ -237,7 +233,10 @@ mod tests {
         assert_eq!(sanitize_field("a\r\nb   c", 20), "a b c");
         assert_eq!(sanitize_field("   ", 20), "未知");
         let long = "x".repeat(300);
-        assert_eq!(sanitize_field(&long, MAX_REASON_CHARS).chars().count(), MAX_REASON_CHARS);
+        assert_eq!(
+            sanitize_field(&long, MAX_REASON_CHARS).chars().count(),
+            MAX_REASON_CHARS
+        );
     }
 
     #[test]
@@ -281,12 +280,7 @@ mod tests {
         let p = temp_path("cap");
         let _ = fs::remove_file(&p);
         // 超过上限一次性写入:只保留最新 MAX_RECORDS 条
-        append_records_at(
-            &p,
-            (0..MAX_RECORDS + 50).map(record).collect(),
-            MAX_RECORDS,
-        )
-        .unwrap();
+        append_records_at(&p, (0..MAX_RECORDS + 50).map(record).collect(), MAX_RECORDS).unwrap();
         let all = read_records_at(&p);
         assert_eq!(all.len(), MAX_RECORDS);
         assert_eq!(all[0].name, "f50.exe");

@@ -109,7 +109,10 @@ fn remove_from_coupled(agent_id: &str) -> Result<(), String> {
         Ok(text) => serde_json::from_str(&text).unwrap_or_default(),
         Err(_) => return Ok(()),
     };
-    let next: Vec<_> = list.into_iter().filter(|t| t.agent_id != agent_id).collect();
+    let next: Vec<_> = list
+        .into_iter()
+        .filter(|t| t.agent_id != agent_id)
+        .collect();
     save_custom(&next)
 }
 

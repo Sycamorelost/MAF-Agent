@@ -235,8 +235,8 @@ fn looks_like_image_model(id: &str) -> bool {
 pub fn merge_image_models(preset: &[String], fetched: &[FetchedModel]) -> Vec<String> {
     let mut out: Vec<String> = preset.to_vec();
     for m in fetched {
-        let is_image =
-            m.output_modalities.iter().any(|x| x.contains("image")) || looks_like_image_model(&m.id);
+        let is_image = m.output_modalities.iter().any(|x| x.contains("image"))
+            || looks_like_image_model(&m.id);
         if is_image && !out.contains(&m.id) {
             out.push(m.id.clone());
         }
@@ -570,6 +570,9 @@ mod tests {
             no_modality("doubao-seed-2-1-lite-260915"),
         ];
         let merged = merge_image_models(&[], &fetched);
-        assert_eq!(merged, vec!["doubao-seedream-5-0-pro-260628", "flux-schnell"]);
+        assert_eq!(
+            merged,
+            vec!["doubao-seedream-5-0-pro-260628", "flux-schnell"]
+        );
     }
 }

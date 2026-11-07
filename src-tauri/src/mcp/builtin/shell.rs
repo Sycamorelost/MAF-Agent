@@ -7,7 +7,11 @@ use serde_json::Value;
 
 /// 执行 shell_exec。返回 (给模型的内容, 是否成功)。
 /// `session_id` 用于把缺省 cwd 解析成会话绑定的项目目录。
-pub(super) async fn exec(args: &Value, trust_shell: bool, session_id: Option<&str>) -> (String, bool) {
+pub(super) async fn exec(
+    args: &Value,
+    trust_shell: bool,
+    session_id: Option<&str>,
+) -> (String, bool) {
     let cmd = args
         .get("command")
         .and_then(|v| v.as_str())
@@ -15,7 +19,8 @@ pub(super) async fn exec(args: &Value, trust_shell: bool, session_id: Option<&st
         .trim();
     if cmd.is_empty() {
         return (
-            "缺少 command 参数\n[提示] command 填程序名(如 git、ls、where),参数放进 args 数组".into(),
+            "缺少 command 参数\n[提示] command 填程序名(如 git、ls、where),参数放进 args 数组"
+                .into(),
             false,
         );
     }
@@ -92,7 +97,12 @@ mod tests {
     /// 命令行控制:白名单只读命令应真实执行并返回回显。
     #[tokio::test]
     async fn shell_exec_runs_whitelisted_echo() {
-        let (content, ok) = exec(&json!({ "command": "echo", "args": ["mcp-ok"] }), false, None).await;
+        let (content, ok) = exec(
+            &json!({ "command": "echo", "args": ["mcp-ok"] }),
+            false,
+            None,
+        )
+        .await;
         assert!(ok, "echo 应执行成功,实际:{content}");
         assert!(content.contains("mcp-ok"), "应包含命令输出,实际:{content}");
     }

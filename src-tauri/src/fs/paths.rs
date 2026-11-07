@@ -72,15 +72,46 @@ pub fn ensure_within(root: &Path, target: &Path) -> Result<PathBuf, String> {
         let joined = abs_root.join(target);
         canonicalize_for(&joined)
     };
-    // Windows UNC 前缀统一后比较
+    // 词法规范化兜底:解析残留 `..`(父目录不存在时 canonicalize_for 无法消除)
+    let abs_target = normalize(&abs_target);
+    // Windows UNC 前缀统一后比较;S2:按「组件边界」比较,避免
+    // `D:\proj2` 被 `D:\proj` 的字符串前缀误命中
     let abs_root_str = display(&abs_root);
     let abs_target_str = display(&abs_target);
-    if !abs_target_str.starts_with(&abs_root_str) {
+    let root_prefix = format!("{}{}", abs_root_str, std::path::MAIN_SEPARATOR);
+    if abs_target_str != abs_root_str && !abs_target_str.starts_with(&root_prefix) {
         return Err(format!(
             "路径安全:目标 `{abs_target_str}` 不在项目工作区 `{abs_root_str}` 下"
         ));
     }
     Ok(abs_target)
+}
+
+/// 词法规范化:不访问文件系统,直接按组件解析 `.` / `..`。
+fn normalize(p: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// S1 默认沙箱语义(读取/写入/删除统一入口):
+/// - 相对路径:解析到 root 下,且必须留在 root 内(拒绝 `..` 越界);
+/// - 绝对路径:视为用户显式指定,放行(规范化后返回)。
+pub fn resolve_guarded(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let p = Path::new(rel.trim());
+    if p.is_absolute() {
+        return Ok(normalize(&canonicalize_for(p)));
+    }
+    ensure_within(root, p)
 }
 
 /// 路径规范化:存在则 canonicalize,不存在则规范化父目录再拼文件名。

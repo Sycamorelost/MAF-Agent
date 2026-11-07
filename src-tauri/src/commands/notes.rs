@@ -434,7 +434,10 @@ mod tests {
         let e = excerpt_of(body);
         assert!(!e.contains('#'), "摘要不应含标题符号: {e}");
         assert!(!e.contains('>'), "摘要不应含引用符号: {e}");
-        assert!(e.starts_with("数据清洗常见规则 通用最佳实践整理"), "实际: {e}");
+        assert!(
+            e.starts_with("数据清洗常见规则 通用最佳实践整理"),
+            "实际: {e}"
+        );
     }
 
     #[test]

@@ -45,13 +45,13 @@
 
 /* 关于页:产品标识区 + 条款文档(v1.9.0) */
 .set-product { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-5) var(--pad-x); }
-.set-product-logo { width: 56px; height: 56px; flex-shrink: 0; }
+.set-product-logo { width: calc(56px * var(--ui-scale)); height: calc(56px * var(--ui-scale)); flex-shrink: 0; }
 .set-product-info { min-width: 0; }
 .set-product-name { font-size: var(--font-h2); font-weight: 700; color: var(--text-1); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-product-ver { font-size: var(--font-caption); color: var(--text-4); margin-top: 4px; }
 .set-product-tagline { font-size: var(--font-body); color: var(--text-2); margin-top: var(--space-2); line-height: 1.65; }
-/* 条款文档:正文限宽保证可读行长;条目编号独立成列,正文悬挂缩进对齐 */
-.set-terms { font-size: var(--font-body); color: var(--text-2); line-height: 1.75; max-width: 74ch; }
+/* 条款文档:条目编号独立成列,正文悬挂缩进对齐;宽度随卡片铺满,不做固定字宽截断 */
+.set-terms { font-size: var(--font-body); color: var(--text-2); line-height: 1.75; }
 .set-term { padding: var(--space-4) 0; }
 .set-term:first-child { padding-top: var(--space-1); }
 .set-term + .set-term { border-top: 1px dashed var(--border); }

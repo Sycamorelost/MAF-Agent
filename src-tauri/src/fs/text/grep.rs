@@ -14,10 +14,20 @@ pub fn grep(
     limit: usize,
     session_id: Option<&str>,
 ) -> Result<Vec<String>, String> {
-    grep_in(&paths::resolve_workspace_root(session_id)?, pattern, rel, limit)
+    grep_in(
+        &paths::resolve_workspace_root(session_id)?,
+        pattern,
+        rel,
+        limit,
+    )
 }
 
-pub(crate) fn grep_in(root: &Path, pattern: &str, rel: &str, limit: usize) -> Result<Vec<String>, String> {
+pub(crate) fn grep_in(
+    root: &Path,
+    pattern: &str,
+    rel: &str,
+    limit: usize,
+) -> Result<Vec<String>, String> {
     let needle = pattern.trim().to_lowercase();
     if needle.is_empty() {
         return Err("pattern 不能为空".into());
@@ -25,7 +35,7 @@ pub(crate) fn grep_in(root: &Path, pattern: &str, rel: &str, limit: usize) -> Re
     let start = if rel.trim().is_empty() {
         root.to_path_buf()
     } else {
-        paths::resolve(root, rel, true)?
+        paths::resolve_guarded(root, rel)?
     };
     let limit = limit.clamp(1, 200);
     let mut out = Vec::new();
@@ -96,4 +106,3 @@ fn walk_grep(
     }
     Ok(())
 }
-

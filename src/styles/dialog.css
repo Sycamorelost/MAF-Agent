@@ -81,7 +81,7 @@
 .diff-col-head {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: var(--z-base);
   padding: var(--space-2) var(--space-3);
   background: var(--bg-side);
   color: var(--text-3);

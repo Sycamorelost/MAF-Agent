@@ -2,29 +2,10 @@ myAgent
 Copyright 2026 梧桐吾桐及其团队
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-This product includes material derived from the following third-party works,
-each licensed under the Apache License, Version 2.0.
+This product references the following third-party works.
 
 -------------------------------------------------------------------------------
-1. Deep-tutor
-   Copyright (c) hershate and contributors
-   https://github.com/hershate/Deep-tutor
-   License: Apache License 2.0
-   (license text: https://github.com/hershate/Deep-tutor/blob/main/LICENSE)
-
-   Used in:
-   - src-tauri/src/study/template.rs          prompt / JSON contracts
-   - src-tauri/src/study/mod.rs               plan-generation pipeline
-   - src-tauri/src/study/learn/               study units, quiz, mastery, review
-   - src/pages/study/                         interaction logic (no visual port)
-
-   Modifications: ported from FastAPI / React to Rust / React, re-implemented
-   with deterministic scheduling and Rust-side schema validation, and adapted
-   to this application's data model and UI component system. No upstream
-   visual assets or CSS were copied.
-
--------------------------------------------------------------------------------
-2. Cherry Studio
+1. Cherry Studio
    Copyright (c) CherryHQ and contributors
    https://github.com/CherryHQ/cherry-studio
    License: GNU Affero General Public License v3.0 (AGPL-3.0)
@@ -39,9 +20,24 @@ each licensed under the Apache License, Version 2.0.
    incorporated, the combined work must be distributed under AGPL-3.0.
 
 -------------------------------------------------------------------------------
-The project above (Deep-tutor) is distributed under the Apache License,
-Version 2.0. A copy of that license is provided in the LICENSE file at the
-root of this repository. Copyright notices and this NOTICE are retained in
-the source files that contain the respective derivative works.
+2. MCP reference servers (runtime, not bundled)
+   https://github.com/modelcontextprotocol/servers
+   License: MIT
+   Used at runtime via npx on-demand launch (not distributed in the package):
+   - @modelcontextprotocol/server-filesystem         (built-in "项目文件")
+   - @modelcontextprotocol/server-memory             (built-in "长期记忆")
+   - @modelcontextprotocol/server-sequential-thinking (built-in "顺序思考")
+
+3. agent-search-mcp (runtime, not bundled)
+   Copyright (c) lennney and contributors
+   https://github.com/lennney/agent-search-mcp
+   License: Apache License 2.0
+   Used at runtime via npx on-demand launch as the built-in "联网搜索"
+   default service (zero-API-key multi-engine aggregation); not distributed
+   in the package.
+
+-------------------------------------------------------------------------------
 Cherry Studio is licensed separately under AGPL-3.0 and is referenced at the
-architecture level only, as described in section 2.
+architecture level only, as described in section 1. The MCP reference servers
+(section 2) and agent-search-mcp (section 3) are launched on demand at
+runtime and are not redistributed with this product.

@@ -25,6 +25,31 @@ use super::context::{context_over_budget, prune_context};
 /// 时长由设置「生成时长」决定(默认 10 分钟,1..=1440),大工程可调大。
 /// 不额外设首字/空闲分段超时(长任务不会被中途的慢思考误杀),只在总时长到点后收口。
 /// 超时会向前端补 `Error`(而不是静默关闭 channel),前端据此保留已生成内容(P1)。
+/// 任务清单同步提醒的触发条件:会话存在未完成任务(in_progress/pending)。
+/// 读库失败按「不需要」处理,绝不因面板状态影响主流。
+fn todos_sync_needed(session_id: &Option<String>) -> bool {
+    let Some(sid) = session_id.as_deref() else {
+        return false;
+    };
+    let Ok(conn) = crate::db::conn().lock() else {
+        return false;
+    };
+    crate::db::todos::list(&conn, sid)
+        .map(|items| {
+            items
+                .iter()
+                .any(|t| matches!(t.status.as_str(), "in_progress" | "pending"))
+        })
+        .unwrap_or(false)
+}
+
+/// 收尾答复是否在等待用户决策:尾部出现疑问标点即视为阻塞于用户输入,
+/// 此时任务清单未更新是正确状态,不做「先同步清单」补轮(否则会空转刷屏)。
+fn awaiting_user_decision(text: &str) -> bool {
+    let tail: String = text.chars().rev().take(240).collect();
+    tail.contains('？') || tail.contains('?')
+}
+
 fn remaining_budget(started: &Instant, total: Duration) -> Duration {
     total.saturating_sub(started.elapsed())
 }
@@ -75,6 +100,12 @@ pub(super) fn spawn_chat_with_failover(
         // 工具调用轮次(模型每次要求调工具算一轮;上限 200 轮,支持长任务连续执行)
         const MAX_TOOL_ROUNDS: usize = 200;
         let mut round: usize = 0;
+        // 任务清单同步:模型连续未回写 todo 的轮数(达阈值随下一轮顺带提醒,不额外耗轮)
+        let mut todo_idle_rounds: u32 = 0;
+        // 收尾同步:nudged=已补过一轮(至多一轮,防死循环);
+        // pending=最终 Done 已就绪、待注入提醒(注入后立即复位,绝不二次触发)
+        let mut todo_nudged = false;
+        let mut todo_sync_pending = false;
         let data_dir = crate::paths::data_dir();
         // harness 子调用通道(上下文压缩 / delegate 委派):取最小槽位 Key 构造一次,全程复用;
         // 无 Key 时为 None,子功能自动降级,主对话不受影响
@@ -198,20 +229,19 @@ pub(super) fn spawn_chat_with_failover(
                         // P2:每个 chunk 只受「剩余总预算」约束(不按空闲时长打断长思考)
                         let mut timed_out = false;
                         loop {
-                            let chunk =
-                                match tokio::time::timeout(
-                                    remaining_budget(&started, total_timeout),
-                                    stream.next(),
-                                )
-                                    .await
-                                {
-                                    Ok(Some(c)) => c,
-                                    Ok(None) => break,
-                                    Err(_) => {
-                                        timed_out = true;
-                                        break;
-                                    }
-                                };
+                            let chunk = match tokio::time::timeout(
+                                remaining_budget(&started, total_timeout),
+                                stream.next(),
+                            )
+                            .await
+                            {
+                                Ok(Some(c)) => c,
+                                Ok(None) => break,
+                                Err(_) => {
+                                    timed_out = true;
+                                    break;
+                                }
+                            };
                             match &chunk {
                                 StreamChunk::Usage {
                                     input_tokens,
@@ -270,6 +300,17 @@ pub(super) fn spawn_chat_with_failover(
                                     // 表现为最后一条回复一直显示"闪烁光标"且不落库。
                                     saw_done = true;
                                     if pending_calls.is_some() {
+                                        continue;
+                                    }
+                                    // 任务清单收尾同步:最终答复已就绪但面板仍有未完成项 → 吞掉这个 Done,
+                                    // 由下方补一轮「先同步清单」提醒(至多一轮),保证进度与答复一致;
+                                    // 答复在等用户决策(疑问句收尾)时不补轮 —— 此时清单停滞是正确状态
+                                    if !todo_nudged
+                                        && stream_err.is_none()
+                                        && !awaiting_user_decision(&assistant_text)
+                                        && todos_sync_needed(&attr.session_id)
+                                    {
+                                        todo_sync_pending = true;
                                         continue;
                                     }
                                 }
@@ -335,6 +376,36 @@ pub(super) fn spawn_chat_with_failover(
                             cost_source,
                         });
 
+                        // 任务清单收尾同步:正文已就绪 → 回填 assistant 正文与同步提醒,
+                        // 补一轮让模型先调用 todo_write 对齐面板进度,再真正结束
+                        if todo_sync_pending && pending_calls.is_none() {
+                            todo_sync_pending = false;
+                            if stream_err.is_none() && round < MAX_TOOL_ROUNDS {
+                                todo_nudged = true;
+                                round += 1;
+                                req.messages.push(ChatMessage {
+                                    role: "assistant".into(),
+                                    content: std::mem::take(&mut assistant_text),
+                                    ..Default::default()
+                                });
+                                req.messages.push(ChatMessage {
+                                    role: "system".into(),
+                                    content: "结束前必须先用 todo_write 同步任务清单:完成项置为 completed,未完成项如实保留 pending/in_progress;若全部完成则全部置为 completed。只调用工具同步,不要重复正文。"
+                                        .into(),
+                                    ..Default::default()
+                                });
+                                continue 'rounds;
+                            }
+                            // 无法补轮(已达工具轮次上限):补发被吞掉的 Done,保证前端正常收流
+                            let _ = channel.send(StreamChunk::Done {
+                                finish_reason: Some("stop".into()),
+                                prompt_tokens: toks.0,
+                                completion_tokens: toks.1,
+                                reasoning_tokens: reasoning_toks,
+                                cached_tokens: cached_toks,
+                            });
+                            return;
+                        }
                         // Phase 5e:模型请求调用工具 → 审批 + 执行 + 回填消息,再发起下一轮
                         if let Some(calls) = pending_calls.take() {
                             if round >= MAX_TOOL_ROUNDS {
@@ -354,6 +425,8 @@ pub(super) fn spawn_chat_with_failover(
                                 return;
                             }
                             round += 1;
+                            // 任务清单多轮未同步检测:本轮是否回写了 todo(用于下方顺带提醒)
+                            let wrote_todos = calls.iter().any(|c| c.function.name == "todo_write");
                             let outcome = crate::mcp::dispatcher::dispatch_tool_calls(
                                 &app,
                                 calls,
@@ -376,6 +449,17 @@ pub(super) fn spawn_chat_with_failover(
                                     .into(),
                                 ..Default::default()
                             });
+                            }
+                            // 任务清单多轮未同步:随下一轮请求顺带提醒(不额外消耗轮次)
+                            todo_idle_rounds = if wrote_todos { 0 } else { todo_idle_rounds + 1 };
+                            if todo_idle_rounds >= 3 && todos_sync_needed(&attr.session_id) {
+                                todo_idle_rounds = 0;
+                                req.messages.push(ChatMessage {
+                                    role: "system".into(),
+                                    content: "提醒:任务清单已多轮未更新。每完成一步须立即调用 todo_write(完成项→completed、下一项→in_progress),保持面板进度实时同步。"
+                                        .into(),
+                                    ..Default::default()
+                                });
                             }
                             continue 'rounds;
                         }

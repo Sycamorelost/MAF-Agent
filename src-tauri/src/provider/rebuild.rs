@@ -2,6 +2,7 @@
 //! (P0 自 research/mod.rs 迁出;研究与学习规划两条流水线共用。)
 
 /// 重建 Provider(关闭 stream_options)所需的启动入参快照。
+#[allow(dead_code)] // 预留:stream_options 重建流水线启用后使用
 pub struct ProviderRebuild {
     pub provider_id: String,
     pub model: String,

@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -36,8 +36,7 @@ pub struct Deliverable {
     pub created: String,
 }
 
-const SELECT_COLS: &str =
-    "id, session_id, message_id, kind, path, name, mime, size, note, created";
+const SELECT_COLS: &str = "id, session_id, message_id, kind, path, name, mime, size, note, created";
 
 fn row_to_deliverable(r: &rusqlite::Row) -> rusqlite::Result<Deliverable> {
     Ok(Deliverable {
@@ -181,7 +180,10 @@ pub fn bind_pending_on(
 }
 
 /// 按会话列出全部产物(新→旧),前端按 message_id 归入各条消息。
-pub fn list_by_session_on(conn: &Connection, session_id: &str) -> rusqlite::Result<Vec<Deliverable>> {
+pub fn list_by_session_on(
+    conn: &Connection,
+    session_id: &str,
+) -> rusqlite::Result<Vec<Deliverable>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {SELECT_COLS} FROM deliverables WHERE session_id=?1 ORDER BY id ASC"
     ))?;
@@ -202,7 +204,10 @@ pub fn list_by_session(session_id: &str) -> Vec<Deliverable> {
 
 /// 删除单条消息时清掉其产物(避免悬空引用)。
 pub fn delete_by_message_on(conn: &Connection, message_id: i64) -> rusqlite::Result<usize> {
-    conn.execute("DELETE FROM deliverables WHERE message_id=?1", params![message_id])
+    conn.execute(
+        "DELETE FROM deliverables WHERE message_id=?1",
+        params![message_id],
+    )
 }
 
 /// 新一轮用户消息到达:清掉上一轮遗留的暂存产物。
@@ -331,8 +336,13 @@ mod tests {
     #[test]
     fn rejects_missing_and_directory() {
         let (conn, root, _file) = setup();
-        let err = register_pending_on(&conn, "s1", &root, &serde_json::json!({ "path": "nope.md" }))
-            .unwrap_err();
+        let err = register_pending_on(
+            &conn,
+            "s1",
+            &root,
+            &serde_json::json!({ "path": "nope.md" }),
+        )
+        .unwrap_err();
         assert!(err.contains("不存在"), "实际:{err}");
         let dir_arg = serde_json::json!({ "path": root.display().to_string() });
         assert!(register_pending_on(&conn, "s1", &root, &dir_arg).is_err());

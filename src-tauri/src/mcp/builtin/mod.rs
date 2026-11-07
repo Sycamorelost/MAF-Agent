@@ -67,13 +67,8 @@ pub(crate) fn builtin_needs_approval(name: &str) -> bool {
 /// 只处理按 path 读取本机文件的工具;`doc_*`、`sys_*`、`get_now`、`web_fetch`
 /// 不触碰本机文件(web_fetch 自带 SSRF 拦截),维持免审批。
 pub(crate) fn reads_outside_workspace(name: &str, args: &Value, session_id: Option<&str>) -> bool {
-    const PATH_READ_TOOLS: [&str; 5] = [
-        "fs_read",
-        "fs_list",
-        "fs_grep",
-        "file_extract",
-        "zip_list",
-    ];
+    const PATH_READ_TOOLS: [&str; 5] =
+        ["fs_read", "fs_list", "fs_grep", "file_extract", "zip_list"];
     if !PATH_READ_TOOLS.contains(&name) {
         return false;
     }

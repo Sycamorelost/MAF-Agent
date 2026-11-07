@@ -2,11 +2,11 @@
 
 use std::time::Duration;
 
+use super::Page;
 use super::chunk;
 use super::extract;
 use super::markdown::{extract_title, html_to_markdown};
 use super::robots::robots_allows;
-use super::Page;
 
 /// 默认返回正文长度;上限防止单次抓取撑爆上下文。
 const DEFAULT_MAX_CHARS: usize = 12_000;
@@ -17,8 +17,7 @@ const TIMEOUT_SECS: u64 = 30;
 const MAX_HOPS: u32 = 5;
 
 /// 浏览器 UA:不少站点对非浏览器 UA 直接返回 403,这里只用于取正文。
-const USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 /// 抓取网页正文。`max_chars` 省略时用默认值,超出上限自动收敛。
 ///
@@ -67,10 +66,14 @@ pub async fn fetch_page(
         .unwrap_or("")
         .to_ascii_lowercase();
     let media = ctype.split(';').next().unwrap_or("").trim().to_string();
-    let charset = ctype
-        .split("charset=")
-        .nth(1)
-        .map(|s| s.split(';').next().unwrap_or("").trim().trim_matches('"').to_string());
+    let charset = ctype.split("charset=").nth(1).map(|s| {
+        s.split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_matches('"')
+            .to_string()
+    });
 
     let body = read_limited(resp).await?;
     let is_html = match classify(&media, &body) {
@@ -80,7 +83,8 @@ pub async fn fetch_page(
     let text = decode_body(&body, charset.as_deref());
 
     let title = if is_html {
-        extract_title(&text).unwrap_or_else(|| final_url.host_str().unwrap_or("网页正文").to_string())
+        extract_title(&text)
+            .unwrap_or_else(|| final_url.host_str().unwrap_or("网页正文").to_string())
     } else {
         final_url.host_str().unwrap_or("网页正文").to_string()
     };
@@ -93,7 +97,9 @@ pub async fn fetch_page(
         return Err("未提取到正文(页面可能依赖登录或前端渲染)".into());
     }
 
-    let max = max_chars.unwrap_or(DEFAULT_MAX_CHARS).clamp(200, MAX_CHARS_CAP);
+    let max = max_chars
+        .unwrap_or(DEFAULT_MAX_CHARS)
+        .clamp(200, MAX_CHARS_CAP);
     let total_chars = content.chars().count();
     let query = query.map(str::trim).filter(|q| !q.is_empty());
     let mut query_selected = false;
@@ -164,11 +170,7 @@ fn validate_url(raw: &str) -> Result<reqwest::Url, String> {
 /// 本机、私网与云元数据地址判定(IPv4 字面量 + 常见主机名 + IPv6 前缀)。
 fn is_private_host(host: &str) -> bool {
     let h = host.trim().to_ascii_lowercase();
-    if h.is_empty()
-        || h == "localhost"
-        || h.ends_with(".local")
-        || h.ends_with(".localhost")
-    {
+    if h.is_empty() || h == "localhost" || h.ends_with(".local") || h.ends_with(".localhost") {
         return true;
     }
     if h.contains(':') {
@@ -210,7 +212,10 @@ async fn get_following(
     for _ in 0..=MAX_HOPS {
         let resp = client
             .get(url.clone())
-            .header(reqwest::header::ACCEPT, "text/html,application/json,text/plain;q=0.9,*/*;q=0.5")
+            .header(
+                reqwest::header::ACCEPT,
+                "text/html,application/json,text/plain;q=0.9,*/*;q=0.5",
+            )
             .send()
             .await
             .map_err(|e| format!("请求失败: {e}"))?;
@@ -253,11 +258,13 @@ fn classify(media: &str, body: &[u8]) -> Result<Kind, String> {
         let head = String::from_utf8_lossy(&body[..body.len().min(200)])
             .trim_start()
             .to_ascii_lowercase();
-        return Ok(if head.starts_with("<!doctype html") || head.starts_with("<html") {
-            Kind::Html
-        } else {
-            Kind::Text
-        });
+        return Ok(
+            if head.starts_with("<!doctype html") || head.starts_with("<html") {
+                Kind::Html
+            } else {
+                Kind::Text
+            },
+        );
     }
     Err(format!(
         "该链接返回的是 `{media}` 二进制内容,无法直接阅读;可下载到本地后用 file_extract 提取"
@@ -329,7 +336,10 @@ mod tests {
 
     #[test]
     fn classify_filters_binary_and_sniffs_html() {
-        assert_eq!(classify("text/html; charset=utf-8", b"").unwrap(), Kind::Html);
+        assert_eq!(
+            classify("text/html; charset=utf-8", b"").unwrap(),
+            Kind::Html
+        );
         assert_eq!(classify("text/plain", b"").unwrap(), Kind::Text);
         assert_eq!(classify("application/json", b"").unwrap(), Kind::Text);
         assert_eq!(

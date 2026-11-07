@@ -186,15 +186,7 @@ pub async fn dispatch_tool_calls(
 
         // 2. 审批(会话内已放行的工具直接跳过弹窗);AllowEdited 用用户改后的参数
         let exec_args = match ask_approval(
-            app,
-            approval,
-            capability,
-            &data_dir,
-            &server,
-            &tool_name,
-            args,
-            false,
-            session_id,
+            app, approval, capability, &data_dir, &server, &tool_name, args, false, session_id,
         )
         .await
         {
@@ -318,22 +310,19 @@ fn tool_message(tool_call_id: &str, content: String) -> ChatMessage {
 }
 
 /// 走一次 HITL 审批。返回 Some(实际执行参数) 表示放行,None 表示拒绝/超时/通道不可用。
-/// 以下四种情况直接放行(「解放双手」):
+/// 以下情况直接放行(「解放双手」):
 ///   1. 会话内已点过「始终允许」
-///   2. 命中有效的能力令牌(且作用域覆盖该工具)
-///   3. 审批档为「完全信任」(全局或会话级覆盖,D11)
-///   4. 「工作区」档下判定为只读 / 工作区内写,或命中附加白名单
+///   2. 审批档为「完全信任」—— 绝不弹窗(含高危 shell / 工作区外读取),仅写审计日志
+///   3. 「工作区」档下判定为只读 / 工作区内写,或命中附加白名单
 ///
-/// `forced=true` 表示必须人工确认、跳过一切自动放行(风险/白名单/能力令牌/会话常允许):
+/// `forced=true` 仅在非「完全信任」档下强制人工确认(跳过白名单/会话常允许):
 ///   - D3 工作区外读取(低风险但需确认)
-///   - P1 高危 shell 命令(完全信任档下也不交给模型自行确认)
-///
-/// 「完全信任」档位本身仍会拦截 `forced` 调用 —— 高危动作始终需要人类点击。
+///   - P1 高危 shell 命令
 #[allow(clippy::too_many_arguments)]
 async fn ask_approval(
     app: &tauri::AppHandle,
     approval: &ApprovalStore,
-    capability: &CapabilityStore,
+    _capability: &CapabilityStore,
     data_dir: &std::path::Path,
     server: &str,
     tool: &str,
@@ -345,37 +334,29 @@ async fn ask_approval(
     // `confirm` 是模型可写的工具参数,不作为人类确认依据,在此统一忽略。
     let danger = dangerous_shell_pattern(server, tool, &args);
     let forced = forced || danger.is_some();
-    if !forced
-        && approval.is_session_allowed(server, tool).await
-    {
+    if !forced && approval.is_session_allowed(server, tool).await {
         return Some(args);
     }
     // 审批档是全局永久设置(设置页统一授权,持久化在 mcp-approval.json):
     // 所有会话、所有环境共用一个档位,不存在会话级覆盖。
     let policy = super::approval::load_policy(data_dir);
-    let risk = super::approval::assess_risk(server, tool, &args);
-    // 能力令牌:已并入「完全信任」总开关 —— 仅完全信任模式下才消费令牌,
-    // 避免 full 期间签发的残留令牌在切回逐次/工作区档后继续免审批。
-    // forced(工作区外读取 / 高危 shell)不消费令牌:令牌不能被用来静默放行。
-    if !forced
-        && policy.mode == super::approval::ApprovalMode::Full
-        && let Some(cap) = capability.consume(capability_scope(server, tool, risk))
-    {
+    // 完全信任:绝不弹窗 —— forced(工作区外读取 / 高危 shell)同样直接放行,仅留审计记录。
+    // 能力令牌不再有此出口:full 档下任何调用都直接放行,令牌无消费必要;
+    // 切回逐次/工作区档后残留令牌也不再生效(由 mcp_call_tool_with_approval 各自判定)。
+    if policy.mode == super::approval::ApprovalMode::Full {
         crate::mcp::audit(
             data_dir,
-            "capability_use",
+            "full_trust_call",
             server,
             tool,
             &format!(
-                "cap={} label={} scope={} remaining={:?}",
-                cap.id,
-                cap.label,
-                capability_scope(server, tool, risk).label(),
-                cap.remaining()
+                "mode=full;forced={forced};danger={};跳过审批直接执行",
+                danger.as_deref().unwrap_or("-"),
             ),
         );
         return Some(args);
     }
+    let risk = super::approval::assess_risk(server, tool, &args);
     if !forced && !policy.requires_approval_in(session_id, server, tool, risk, &args) {
         crate::mcp::audit(
             data_dir,
@@ -396,9 +377,7 @@ async fn ask_approval(
     } else if forced {
         // 工作区外读取:低风险工具也要把风险标成 High 并说明原因,前端弹窗才会醒目
         req.risk = super::approval::ApprovalRisk::High;
-        req.reason = format!(
-            "工具 `{tool}` 要读取工作区外的本机文件,请确认路径无误后再放行"
-        );
+        req.reason = format!("工具 `{tool}` 要读取工作区外的本机文件,请确认路径无误后再放行");
     }
     // 通知前端弹审批框;emit 失败(窗口已关)按拒绝处理,避免无审批执行
     if app.emit("mcp-approval-request", &req).is_err() {
@@ -416,8 +395,8 @@ async fn ask_approval(
     }
 }
 
-// 内置工具路由(作用域映射 / 白名单 / 执行)已拆到 builtin.rs,此处仅做转发
+// 内置工具路由(白名单 / 执行)已拆到 builtin.rs,此处仅做转发
 pub(crate) use super::builtin::{
-    builtin_needs_approval, capability_scope, dangerous_shell_pattern, execute_builtin,
-    is_builtin_tool, reads_outside_workspace, record_tool_log,
+    builtin_needs_approval, dangerous_shell_pattern, execute_builtin, is_builtin_tool,
+    reads_outside_workspace, record_tool_log,
 };

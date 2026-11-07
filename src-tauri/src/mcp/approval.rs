@@ -108,7 +108,11 @@ impl ApprovalPolicy {
                     return true;
                 }
                 let key = format!("{server}::{tool}");
-                if self.allow.iter().any(|p| p.trim() == key || p.trim() == tool) {
+                if self
+                    .allow
+                    .iter()
+                    .any(|p| p.trim() == key || p.trim() == tool)
+                {
                     return false;
                 }
                 !workspace_write_auto_allowed_in(session_id, server, tool, args)
@@ -187,8 +191,6 @@ pub fn save_policy(data_dir: &Path, policy: &ApprovalPolicy) -> Result<(), Strin
     std::fs::write(policy_path(data_dir), json).map_err(|e| format!("写入失败: {e}"))?;
     Ok(())
 }
-
-
 
 /// 实际生效的审批档:审批档是全局永久设置(写入 mcp-approval.json,所有会话与环境一致,
 /// 重启后仍保持)。会话级覆盖由调用方在传入前替换 `policy.mode`,此处直接返回该档位。
@@ -308,9 +310,17 @@ fn sensitive_path(args: &serde_json::Value) -> bool {
         .and_then(|v| v.as_str())
         .map(|path| {
             let p = path.replace('\\', "/").to_ascii_lowercase();
-            [".env", "credentials", "secrets", "id_rsa", ".pem", ".pfx", ".key"]
-                .iter()
-                .any(|k| p.contains(k))
+            [
+                ".env",
+                "credentials",
+                "secrets",
+                "id_rsa",
+                ".pem",
+                ".pfx",
+                ".key",
+            ]
+            .iter()
+            .any(|k| p.contains(k))
         })
         .unwrap_or(false)
 }
@@ -455,15 +465,24 @@ mod tests {
         assert!(!ws.requires_approval("s", "read_text_file", ApprovalRisk::Low, &json!({})));
         // shell / 删除 / 外部写 一律审批(workspace_write_auto_allowed 对非白名单工具直接 false,
         // 不触碰文件系统,可在测试中安全调用)
-        assert!(
-            ws.requires_approval("builtin", "shell_exec", ApprovalRisk::High, &json!({"command":"ls"}))
-        );
-        assert!(
-            ws.requires_approval("builtin", "fs_delete", ApprovalRisk::High, &json!({"path":"a.txt"}))
-        );
-        assert!(
-            ws.requires_approval("mcp", "write_file", ApprovalRisk::High, &json!({"path":"a.txt"}))
-        );
+        assert!(ws.requires_approval(
+            "builtin",
+            "shell_exec",
+            ApprovalRisk::High,
+            &json!({"command":"ls"})
+        ));
+        assert!(ws.requires_approval(
+            "builtin",
+            "fs_delete",
+            ApprovalRisk::High,
+            &json!({"path":"a.txt"})
+        ));
+        assert!(ws.requires_approval(
+            "mcp",
+            "write_file",
+            ApprovalRisk::High,
+            &json!({"path":"a.txt"})
+        ));
 
         let full = ApprovalPolicy {
             mode: ApprovalMode::Full,
@@ -476,13 +495,24 @@ mod tests {
             mode: ApprovalMode::Workspace,
             allow: vec!["项目文件::read_text_file".into(), "search_nodes".into()],
         };
-        assert!(
-            !ws_allow.requires_approval("项目文件", "read_text_file", ApprovalRisk::Low, &json!({}))
-        );
-        assert!(!ws_allow.requires_approval("长期记忆", "search_nodes", ApprovalRisk::Low, &json!({})));
-        assert!(
-            ws_allow.requires_approval("长期记忆", "create_entities", ApprovalRisk::Medium, &json!({}))
-        );
+        assert!(!ws_allow.requires_approval(
+            "项目文件",
+            "read_text_file",
+            ApprovalRisk::Low,
+            &json!({})
+        ));
+        assert!(!ws_allow.requires_approval(
+            "长期记忆",
+            "search_nodes",
+            ApprovalRisk::Low,
+            &json!({})
+        ));
+        assert!(ws_allow.requires_approval(
+            "长期记忆",
+            "create_entities",
+            ApprovalRisk::Medium,
+            &json!({})
+        ));
     }
 
     /// P7:工作区档下,凭据类文件名即使在工作区内、即使命中自定义白名单也必须审批。
@@ -575,8 +605,14 @@ mod tests {
         assert_eq!(reloaded.mode, ApprovalMode::Full);
         // 任意会话上下文生效档位一致,不存在临时授权回落
         assert_eq!(effective_mode(&reloaded, &dir, None), ApprovalMode::Full);
-        assert_eq!(effective_mode(&reloaded, &dir, Some("s1")), ApprovalMode::Full);
-        assert_eq!(effective_mode(&reloaded, &dir, Some("s2")), ApprovalMode::Full);
+        assert_eq!(
+            effective_mode(&reloaded, &dir, Some("s1")),
+            ApprovalMode::Full
+        );
+        assert_eq!(
+            effective_mode(&reloaded, &dir, Some("s2")),
+            ApprovalMode::Full
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

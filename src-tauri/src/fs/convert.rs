@@ -11,8 +11,8 @@ use std::process::Command;
 
 /// 允许转换的输入扩展名(其余直接拒绝,避免误转二进制)。
 const SUPPORTED: [&str; 14] = [
-    "doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp", "html",
-    "htm", "txt",
+    "doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp", "html", "htm",
+    "txt",
 ];
 
 fn office_names() -> &'static [&'static str] {
@@ -60,7 +60,9 @@ pub fn find_office() -> Option<PathBuf> {
             dirs.push(PathBuf::from(base).join("LibreOffice").join("program"));
         }
     } else {
-        dirs.push(PathBuf::from("/Applications/LibreOffice.app/Contents/MacOS"));
+        dirs.push(PathBuf::from(
+            "/Applications/LibreOffice.app/Contents/MacOS",
+        ));
         dirs.push(PathBuf::from("/usr/bin"));
         dirs.push(PathBuf::from("/usr/local/bin"));
         // Linux:snap 与 flatpak 常不在 PATH(尤其是从桌面图标启动时)
@@ -133,8 +135,10 @@ pub fn convert_to_pdf(input: &Path, out_dir: &Path) -> Result<PathBuf, String> {
     if !SUPPORTED.contains(&ext.as_str()) {
         return Err(format!("不支持转换为 PDF 的文件类型:{ext}"));
     }
-    let office =
-        find_office().ok_or_else(|| "未检测到 LibreOffice(免费离线,无需 API)。请安装后重试,或使用内置 Markdown/表格导出。".to_string())?;
+    let office = find_office().ok_or_else(|| {
+        "未检测到 LibreOffice(免费离线,无需 API)。请安装后重试,或使用内置 Markdown/表格导出。"
+            .to_string()
+    })?;
     std::fs::create_dir_all(out_dir).map_err(|e| format!("创建输出目录失败:{e}"))?;
 
     let target = pick_target(input, out_dir);
@@ -181,13 +185,11 @@ pub fn convert_to_pdf(input: &Path, out_dir: &Path) -> Result<PathBuf, String> {
         std::fs::read_dir(&tmp_out)
             .ok()
             .and_then(|rd| {
-                rd.flatten()
-                    .map(|e| e.path())
-                    .find(|p| {
-                        p.extension()
-                            .map(|e| e.eq_ignore_ascii_case("pdf"))
-                            .unwrap_or(false)
-                    })
+                rd.flatten().map(|e| e.path()).find(|p| {
+                    p.extension()
+                        .map(|e| e.eq_ignore_ascii_case("pdf"))
+                        .unwrap_or(false)
+                })
             })
             .ok_or_else(|| "转换完成但未找到 PDF 输出".to_string())?
     };
@@ -203,10 +205,7 @@ pub fn convert_to_pdf(input: &Path, out_dir: &Path) -> Result<PathBuf, String> {
 }
 
 /// 供 IPC / 工具使用:工作区相对路径 → 绝对路径 → 同目录 PDF。
-pub fn convert_in_workspace(
-    session_id: Option<&str>,
-    raw_path: &str,
-) -> Result<PathBuf, String> {
+pub fn convert_in_workspace(session_id: Option<&str>, raw_path: &str) -> Result<PathBuf, String> {
     let root = crate::fs::paths::resolve_workspace_root(session_id)?;
     let input = crate::fs::paths::resolve(&root, raw_path, true)?;
     let out_dir = input
@@ -230,9 +229,13 @@ mod tests {
     #[test]
     fn finds_soffice_in_candidate_dirs() {
         let dir = tmp("find");
-        let exe = if cfg!(windows) { "soffice.exe" } else { "soffice" };
+        let exe = if cfg!(windows) {
+            "soffice.exe"
+        } else {
+            "soffice"
+        };
         std::fs::write(dir.join(exe), b"#!/bin/sh\n").unwrap();
-        let found = find_in_dirs(&[dir.clone()]).expect("应找到 soffice");
+        let found = find_in_dirs(std::slice::from_ref(&dir)).expect("应找到 soffice");
         assert_eq!(found.file_name().unwrap().to_string_lossy(), exe);
     }
 

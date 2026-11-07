@@ -15,9 +15,8 @@ mod search;
 
 #[allow(unused_imports)]
 pub use crud::{
-    append_on, append_on_partial, append_partial, clear, clear_on, copy_active_branch,
-    delete_from, delete_from_on, delete_one, delete_one_on, get_by_id, get_by_id_on,
-    update_content,
+    append_on, append_on_partial, append_partial, clear, clear_on, copy_active_branch, delete_from,
+    delete_from_on, delete_one, delete_one_on, get_by_id, get_by_id_on, update_content,
 };
 #[allow(unused_imports)]
 pub use search::{list, list_on, list_page, list_page_on, recent, recent_on};
@@ -126,8 +125,19 @@ mod tests {
             true,
         )
         .unwrap();
-        append_on(&conn, "s1", "assistant", "完整回答", None, 3, None, None, None, "main")
-            .unwrap();
+        append_on(
+            &conn,
+            "s1",
+            "assistant",
+            "完整回答",
+            None,
+            3,
+            None,
+            None,
+            None,
+            "main",
+        )
+        .unwrap();
         let rows = list_on(&conn, "s1", "main").unwrap();
         assert!(rows[0].partial, "中断保存的消息必须标记 partial");
         assert!(!rows[1].partial, "普通消息默认非 partial");

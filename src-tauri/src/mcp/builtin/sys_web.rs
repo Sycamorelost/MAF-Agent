@@ -13,7 +13,11 @@ pub(super) fn handles(name: &str) -> bool {
 pub(super) async fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (String, bool) {
     match name {
         "web_fetch" => {
-            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             if url.is_empty() {
                 return ("缺少 url 参数(需完整的 http/https 链接)".into(), false);
             }

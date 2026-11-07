@@ -145,6 +145,10 @@ mod tests {
         // 其他 UA 组不影响 myagent;空 Disallow 表示全站允许
         let other_only = "User-agent: Googlebot\nDisallow: /\n";
         assert!(robots_allows_path(other_only, "/a", "myagent"));
-        assert!(robots_allows_path("User-agent: *\nDisallow:\n", "/a", "myagent"));
+        assert!(robots_allows_path(
+            "User-agent: *\nDisallow:\n",
+            "/a",
+            "myagent"
+        ));
     }
 }

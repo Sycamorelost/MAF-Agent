@@ -85,10 +85,16 @@ mod tests {
     fn tag_name_and_attr_value_parse_simple_tags() {
         assert_eq!(tag_name("A href=\"x\""), "a");
         assert_eq!(tag_name("br/"), "br");
-        assert_eq!(attr_value("a href=\"https://x/y\"", "href").as_deref(), Some("https://x/y"));
+        assert_eq!(
+            attr_value("a href=\"https://x/y\"", "href").as_deref(),
+            Some("https://x/y")
+        );
         // 属性名必须独立成词,不能命中 `data-href`
         assert_eq!(attr_value("a data-href=\"x\"", "href"), None);
-        assert_eq!(attr_value("img src=logo.png", "src").as_deref(), Some("logo.png"));
+        assert_eq!(
+            attr_value("img src=logo.png", "src").as_deref(),
+            Some("logo.png")
+        );
     }
 
     #[test]

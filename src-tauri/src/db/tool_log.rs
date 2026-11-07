@@ -64,7 +64,10 @@ pub fn record(
 }
 
 /// 裁剪某会话的旧记录,只保留最近 [`KEEP_PER_SESSION`] 条。
-pub(crate) fn trim_session(conn: &rusqlite::Connection, session_id: &str) -> rusqlite::Result<usize> {
+pub(crate) fn trim_session(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+) -> rusqlite::Result<usize> {
     conn.execute(
         "DELETE FROM tool_call_log WHERE session_id=?1 AND id NOT IN (
            SELECT id FROM tool_call_log WHERE session_id=?1 ORDER BY id DESC LIMIT ?2

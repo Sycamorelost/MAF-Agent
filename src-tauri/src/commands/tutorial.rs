@@ -103,7 +103,8 @@ mod tests {
 
     #[test]
     fn parse_valid_tutorial() {
-        let raw = "---\nid: t1\npage: chat\ntitle: 标题\nsummary: 一句话\norder: 2\n---\n\n正文 **md**\n";
+        let raw =
+            "---\nid: t1\npage: chat\ntitle: 标题\nsummary: 一句话\norder: 2\n---\n\n正文 **md**\n";
         let doc = parse_tutorial("t1.md", raw).unwrap();
         assert_eq!(doc.id, "t1");
         assert_eq!(doc.page, "chat");
@@ -121,10 +122,7 @@ mod tests {
     fn load_repo_tutorials_sorted_and_filtered() {
         // 仓库自带 tutorials/,至少含 chat 页教程
         let docs = load_tutorials_from(&tutorials_dir(), "chat");
-        assert!(
-            !docs.is_empty(),
-            "repo tutorials/ should contain chat docs"
-        );
+        assert!(!docs.is_empty(), "repo tutorials/ should contain chat docs");
         assert!(docs.iter().all(|d| d.page == "chat"));
         let orders: Vec<i64> = docs.iter().map(|d| d.order).collect();
         let mut sorted = orders.clone();

@@ -49,16 +49,24 @@ async fn empty_output_is_marked_explicitly() {
 #[tokio::test]
 async fn huge_output_keeps_head_and_tail() {
     // 约 80KB 输出:必须保留头尾(尾部的错误/结果不能丢),中间标注省略
-    let out = run_unrestricted("cmd /c for /L %i in (1,1,8000) do @echo line%i", &[], None, None)
-        .await
-        .expect("批量输出命令必须可执行");
+    let out = run_unrestricted(
+        "cmd /c for /L %i in (1,1,8000) do @echo line%i",
+        &[],
+        None,
+        None,
+    )
+    .await
+    .expect("批量输出命令必须可执行");
     assert!(out.success(), "实际:{}", out.text);
     assert!(
         out.text.contains("line1"),
         "头部丢失:{}",
         out.text.chars().take(40).collect::<String>()
     );
-    assert!(out.text.contains("line8000"), "尾部丢失(只保留头部会看不到最终结果)");
+    assert!(
+        out.text.contains("line8000"),
+        "尾部丢失(只保留头部会看不到最终结果)"
+    );
     assert!(out.text.contains("省略中间"), "超限输出应显式标注省略");
     // P9:完整输出落盘,提示中给出可续读路径
     assert!(out.text.contains("[完整输出已保存]"), "实际:{}", out.text);

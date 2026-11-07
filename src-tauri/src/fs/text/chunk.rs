@@ -7,7 +7,7 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::fs::backup;
 
-use super::common::{audit, session_id_is_bound_to_project, write_target, WriteResult};
+use super::common::{WriteResult, audit, write_target};
 use super::io::root_for_session;
 
 // ---------------- 大文件分批写入(临时文件 → 收尾落盘) ----------------
@@ -82,14 +82,12 @@ fn chunk_tmp_dir() -> PathBuf {
 
 pub fn write_chunk_begin(rel: &str, session_id: Option<&str>) -> Result<WriteChunkState, String> {
     let root = root_for_session(session_id)?;
-    let enforce = session_id_is_bound_to_project(session_id);
-    write_chunk_begin_in(&root, rel, enforce, &chunk_tmp_dir(), session_id)
+    write_chunk_begin_in(&root, rel, &chunk_tmp_dir(), session_id)
 }
 
 pub(crate) fn write_chunk_begin_in(
     root: &Path,
     rel: &str,
-    enforce: bool,
     tmp: &Path,
     owner: Option<&str>,
 ) -> Result<WriteChunkState, String> {
@@ -118,8 +116,8 @@ pub(crate) fn write_chunk_begin_in(
             ));
         }
     }
-    // 目标路径在这次 begin 就解析并校验(项目绑定场景做越界检查),后续分片只写临时文件
-    let target = write_target(root, rel, enforce)?;
+    // 目标路径在这次 begin 就解析并校验(沙箱语义:相对路径禁止越界),后续分片只写临时文件
+    let target = write_target(root, rel)?;
     let id = uuid::Uuid::new_v4().to_string();
     let temp = tmp.join(format!("{id}.part"));
     std::fs::write(&temp, b"").map_err(|e| format!("创建临时文件失败: {e}"))?;
@@ -166,9 +164,9 @@ pub fn write_chunk_append(write_id: &str, content: &str) -> Result<WriteChunkSta
         }
         return Err(chunk_expired_msg(write_id));
     }
-    let w = map.get_mut(write_id).ok_or_else(|| {
-        format!("写入会话 `{write_id}` 不存在或已结束;请重新调用 fs_write_begin")
-    })?;
+    let w = map
+        .get_mut(write_id)
+        .ok_or_else(|| format!("写入会话 `{write_id}` 不存在或已结束;请重新调用 fs_write_begin"))?;
     let mut f = std::fs::OpenOptions::new()
         .append(true)
         .open(&w.temp)
@@ -203,7 +201,8 @@ pub fn write_chunk_finish(write_id: &str) -> Result<WriteResult, String> {
         }
         Err(msg)
     };
-    let backup_id = match backup::snapshot_in(&backup::backup_dir(), &w.root, &w.target, None, None) {
+    let backup_id = match backup::snapshot_in(&backup::backup_dir(), &w.root, &w.target, None, None)
+    {
         Ok(b) => b,
         Err(e) => return fail(w, e),
     };
@@ -274,4 +273,3 @@ pub(crate) fn backdate_chunk(write_id: &str, age: std::time::Duration) {
             .unwrap_or(w.created);
     }
 }
-

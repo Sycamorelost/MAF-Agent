@@ -5,8 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::fs::{backup, paths};
 
 use super::common::{
-    audit, display_path, session_id_is_bound_to_project, write_target, FileEntry, WriteResult,
-    MAX_LIST_ENTRIES, MAX_READ_CHARS,
+    FileEntry, MAX_LIST_ENTRIES, MAX_READ_CHARS, WriteResult, audit, display_path, write_target,
 };
 
 // ---------------- 对外接口(支持项目工作区绑定) ----------------
@@ -64,16 +63,13 @@ pub fn write_text(
     session_id: Option<&str>,
 ) -> Result<WriteResult, String> {
     let root = root_for_session(session_id)?;
-    let enforce = session_id_is_bound_to_project(session_id);
-    write_text_in(&root, rel, content, &backup::backup_dir(), enforce)
+    write_text_in(&root, rel, content, &backup::backup_dir())
 }
 
 pub fn delete(rel: &str, session_id: Option<&str>) -> Result<WriteResult, String> {
     let root = root_for_session(session_id)?;
-    let enforce = session_id_is_bound_to_project(session_id);
-    delete_in(&root, rel, &backup::backup_dir(), enforce)
+    delete_in(&root, rel, &backup::backup_dir())
 }
-
 
 // ---------------- 内核(显式传入工作区根,便于测试) ----------------
 
@@ -81,7 +77,7 @@ pub(crate) fn list_in(root: &Path, rel: &str) -> Result<Vec<FileEntry>, String> 
     let dir = if rel.trim().is_empty() {
         root.to_path_buf()
     } else {
-        paths::resolve(root, rel, true)?
+        paths::resolve_guarded(root, rel)?
     };
     if !dir.is_dir() {
         return Err(format!("`{rel}` 不是目录"));
@@ -159,7 +155,12 @@ impl PageState {
     }
 }
 
-pub(crate) fn read_text_in(root: &Path, rel: &str, offset: usize, max_chars: usize) -> Result<String, String> {
+pub(crate) fn read_text_in(
+    root: &Path,
+    rel: &str,
+    offset: usize,
+    max_chars: usize,
+) -> Result<String, String> {
     read_text_page_in(root, rel, offset, max_chars, None).map(|(text, _)| text)
 }
 
@@ -173,7 +174,7 @@ pub(crate) fn read_text_page_in(
 ) -> Result<(String, Option<u64>), String> {
     use std::io::{Read, Seek, SeekFrom};
 
-    let path = paths::resolve(root, rel, true)?;
+    let path = paths::resolve_guarded(root, rel)?;
     if !path.is_file() {
         return Err(format!("`{rel}` 不是文件"));
     }
@@ -181,7 +182,9 @@ pub(crate) fn read_text_page_in(
     let mut file = std::fs::File::open(&path).map_err(|e| format!("读取失败: {e}"))?;
     // 二进制探测只读前 8KB —— 不再 `std::fs::read` 整份文件(GB 级文件曾直接 OOM)。
     let mut probe = [0u8; 8192];
-    let probe_len = file.read(&mut probe).map_err(|e| format!("读取失败: {e}"))?;
+    let probe_len = file
+        .read(&mut probe)
+        .map_err(|e| format!("读取失败: {e}"))?;
     if probe[..probe_len].contains(&0) {
         return Err(format!(
             "`{rel}` 看起来是二进制文件,请使用专用导出/解析工具"
@@ -290,9 +293,8 @@ pub(crate) fn write_text_in(
     rel: &str,
     content: &str,
     backup_base: &Path,
-    enforce_boundary: bool,
 ) -> Result<WriteResult, String> {
-    let path = write_target(root, rel, enforce_boundary)?;
+    let path = write_target(root, rel)?;
     let backup_id = backup::snapshot_in(backup_base, root, &path, None, None)?;
     std::fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))?;
     audit("fs_write", rel, content.len());
@@ -303,18 +305,9 @@ pub(crate) fn write_text_in(
     })
 }
 
-pub(crate) fn delete_in(
-    root: &Path,
-    rel: &str,
-    backup_base: &Path,
-    enforce_boundary: bool,
-) -> Result<WriteResult, String> {
-    // 删除操作也要做越界检查(禁止删项目外的文件)
-    let path = if enforce_boundary {
-        paths::ensure_within(root, Path::new(rel))?
-    } else {
-        paths::resolve(root, rel, true)?
-    };
+pub(crate) fn delete_in(root: &Path, rel: &str, backup_base: &Path) -> Result<WriteResult, String> {
+    // 删除统一走沙箱语义:相对路径禁止越界,绝对路径视为用户显式指定
+    let path = paths::resolve_guarded(root, rel)?;
     if !path.is_file() {
         return Err("仅支持删除文件(目录请先清空)".into());
     }
@@ -327,4 +320,3 @@ pub(crate) fn delete_in(
         backup_id,
     })
 }
-

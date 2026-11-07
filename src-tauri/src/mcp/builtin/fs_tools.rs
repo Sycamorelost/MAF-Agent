@@ -63,7 +63,10 @@ pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (Strin
             let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
             // content 必须显式给出:省略时不能按空串写入(会把已有文件清空)
             let Some(content) = args.get("content").and_then(|v| v.as_str()) else {
-                return ("缺少 content 参数(删除全部内容请显式传空字符串)".into(), false);
+                return (
+                    "缺少 content 参数(删除全部内容请显式传空字符串)".into(),
+                    false,
+                );
             };
             if path.is_empty() {
                 return ("缺少 path 参数".into(), false);
@@ -255,9 +258,9 @@ mod tests {
         assert!(ok, "绝对路径应可读取,实际内容:{content}");
         assert!(content.contains("absolute-ok"));
 
-        // 相对路径 `..`:不再要求留在工作区内
+        // S1 沙箱语义:相对路径 `..` 必须被拦截
         let (content, ok) = exec("fs_list", &json!({ "path": ".." }), None);
-        assert!(ok, "`..` 应可列出,实际内容:{content}");
+        assert!(!ok, "`..` 应被沙箱拦截,实际内容:{content}");
         std::fs::remove_file(&outside).ok();
     }
 }

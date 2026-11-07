@@ -189,7 +189,9 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   width:var(--sidebar-w);flex:0 0 var(--sidebar-w);height:100%;
   background:var(--bg-side);
   display:flex;flex-direction:column;
-  padding:var(--space-3) var(--pad-x-narrow) calc(var(--space-3) * .5);
+  /* 顶部不留 padding:「新对话」按钮与右侧主面板上端同高(主面板贴 .body 顶);
+     右侧留白收窄一半,列表文字更贴近主面板 */
+  padding:0 calc(var(--pad-x-narrow) * .5) calc(var(--space-3) * .5) var(--pad-x-narrow);
   overflow:hidden;
   transition:transform var(--drawer-dur) var(--drawer-ease);
 }
@@ -202,21 +204,21 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 }
 /* 展开态右缘拖拽把手(200–320px,双击复位) */
 .side-resize{
-  position:absolute;top:0;right:0;bottom:0;width:5px;z-index:2;
+  position:absolute;top:0;right:0;bottom:0;width:5px;z-index:var(--z-base);
   cursor:col-resize;touch-action:none;background:transparent;transition:background .15s;
 }
 .side-resize:hover{background:var(--brand-line)}
 .side-head-actions{display:flex;align-items:center;gap:var(--space-1);flex:none}
-/* 「新对话」主按钮:DeepSeek 式整行品牌色按钮 */
+/* 「新对话」主按钮:白底黑字 + 细描边(与侧栏浅灰底区分) */
 .side-new{
   display:flex;align-items:center;justify-content:center;gap:var(--space-1);
   width:100%;height:calc(36px * var(--ui-scale));flex:none;
-  border:none;border-radius:var(--radius-m);
-  background:var(--brand);color:#fff;
+  border:1px solid var(--border);border-radius:var(--radius-m);
+  background:#fff;color:var(--text-1);
   font-family:var(--font);font-size:var(--font-sub);font-weight:600;
   cursor:pointer;transition:background .15s,transform .1s;
 }
-.side-new:hover{background:var(--brand-deep)}
+.side-new:hover{background:var(--bg-hover)}
 .side-new:active{transform:translateY(1px)}
 .side-new svg{flex:none}
 /* 导航区:一级入口(设置固定底部) */
@@ -225,7 +227,7 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .nav-rail .nav-item{
   width:100%;min-height:calc(34px * var(--ui-scale));
   border-left:none;border-radius:var(--radius-s);
-  color:var(--text-2);font-weight:500;
+  color:var(--text-1);font-weight:500;
 }
 .nav-rail .nav-item:hover{background:var(--bg-hover);color:var(--text-1)}
 .nav-rail .nav-item.active{
@@ -246,9 +248,9 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .side-sec-toggle .chevron{flex:none;color:var(--text-4);transition:transform .15s}
 .side-sec-toggle .chevron.down{transform:rotate(90deg)}
 .side-sec-count{
-  flex:none;min-width:16px;padding:0 5px;border-radius:999px;
+  flex:none;min-width:calc(16px * var(--ui-scale));padding:0 calc(5px * var(--ui-scale));border-radius:999px;
   background:var(--bg-hover);color:var(--text-4);
-  font-size:var(--font-mini);font-weight:600;line-height:16px;text-align:center;
+  font-size:var(--font-mini);font-weight:600;line-height:calc(16px * var(--ui-scale));text-align:center;
 }
 /* 项目区块:与下方会话区共用一个滚动容器,不再单独限高/内部滚动 */
 .side-proj-sec{
@@ -268,7 +270,7 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .side-item{
   display:flex;align-items:center;gap:var(--space-2);
   padding:var(--space-2) var(--pad-x-narrow);border-radius:var(--radius-s);
-  font-size:var(--font-sub);color:var(--text-2);
+  font-size:var(--font-sub);color:var(--text-1);
   cursor:pointer;transition:.15s;
   white-space:nowrap;overflow:hidden;
 }
@@ -335,7 +337,7 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .composer-box textarea{
   width:100%;border:none;outline:none;resize:none;background:transparent;
   font-family:var(--font);font-size:var(--font-body);
-  color:var(--text-1);padding:var(--space-3) var(--pad-x) var(--space-2);line-height:1.55;max-height:420px;
+  color:var(--text-1);padding:var(--space-3) var(--pad-x) var(--space-2);line-height:1.55;max-height:calc(420px * var(--ui-scale));
 }
 .composer-box textarea::placeholder{color:var(--text-4)}
 /* 输入框高度拖拽把手:置于外框顶部,上下拖动调整 textarea 高度 */

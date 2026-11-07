@@ -64,9 +64,7 @@ pub async fn chat_stream(
     );
     // D6:工作区根下的 AGENTS.md / CLAUDE.md 自动注入 system 基线(零配置,无需用户设置)
     let mut messages = input.messages.clone();
-    if let Some(rules) =
-        crate::project_rules::inject(&mut messages, input.session_id.as_deref())
-    {
+    if let Some(rules) = crate::project_rules::inject(&mut messages, input.session_id.as_deref()) {
         // D7:留下「本轮注入了哪个约定文件」的痕迹
         super::super::event_log::record_rules(
             input.session_id.as_deref(),

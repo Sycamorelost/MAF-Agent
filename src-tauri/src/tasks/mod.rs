@@ -31,7 +31,14 @@ pub struct Task {
 
 /// 合法任务状态。done / failed / cancelled 为终态(仅约束取值,流转不做硬限制:
 /// 用户可以把误标的任务改回 running,符合「计划可编辑」原则)。
-pub const TASK_STATUSES: [&str; 6] = ["pending", "running", "paused", "done", "failed", "cancelled"];
+pub const TASK_STATUSES: [&str; 6] = [
+    "pending",
+    "running",
+    "paused",
+    "done",
+    "failed",
+    "cancelled",
+];
 
 /// 合法任务优先级。
 pub const TASK_PRIORITIES: [&str; 3] = ["low", "normal", "high"];
@@ -247,8 +254,12 @@ mod tests {
         let conn = mem();
         let t = create(&conn, "s1", "a", "", "low").unwrap();
         assert!(set_plan(&conn, &t.id, Some("not json")).is_err());
-        set_plan(&conn, &t.id, Some(r#"{"steps":[{"id":"1","title":"查数","status":"pending"}]}"#))
-            .unwrap();
+        set_plan(
+            &conn,
+            &t.id,
+            Some(r#"{"steps":[{"id":"1","title":"查数","status":"pending"}]}"#),
+        )
+        .unwrap();
         let cur = list_by_session(&conn, "s1").unwrap().pop().unwrap();
         assert!(cur.plan.unwrap().contains("查数"));
         set_plan(&conn, &t.id, None).unwrap();

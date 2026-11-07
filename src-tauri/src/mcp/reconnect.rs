@@ -48,7 +48,10 @@ impl FailureTracker {
         let c = *count;
         if c >= MAX_FAILURE_RETRIES {
             drop(counts);
-            self.disabled_by_failure.lock().await.insert(name.to_string());
+            self.disabled_by_failure
+                .lock()
+                .await
+                .insert(name.to_string());
             log::warn!(
                 "[MCP] server `{name}` 连续失败 {c} 次,自动禁用;等待下一次退避 {}ms",
                 backoff_ms(c)

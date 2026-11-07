@@ -8,7 +8,9 @@ use super::MessageRow;
 
 /// 按 id 读取单条消息(P12:追加后前端乐观插入,避免整页重拉)。
 pub fn get_by_id(id: i64) -> Result<Option<MessageRow>, String> {
-    let conn = db::conn().lock().map_err(|e| format!("db lock 失败: {e}"))?;
+    let conn = db::conn()
+        .lock()
+        .map_err(|e| format!("db lock 失败: {e}"))?;
     get_by_id_on(&conn, id)
 }
 
@@ -388,7 +390,7 @@ pub fn copy_active_branch(
     from_branch: &str,
     to_branch: &str,
 ) -> Result<(), String> {
-    use rusqlite::{params, OptionalExtension};
+    use rusqlite::{OptionalExtension, params};
     // 1. 拉源消息(按 id asc)
     let mut stmt = conn
         .prepare(

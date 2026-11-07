@@ -33,9 +33,16 @@ impl McpSearch {
             .iter()
             .find(|s| s.name == self.server)
             .or_else(|| cfg.servers.iter().find(|s| s.name == DEFAULT_MCP_SERVER))
-            .ok_or_else(|| format!("未找到 MCP 服务「{}」,请在设置 · MCP 工具中添加", self.server))?;
+            .ok_or_else(|| {
+                format!(
+                    "未找到 MCP 服务「{}」,请在设置 · MCP 工具中添加",
+                    self.server
+                )
+            })?;
         // 自动兜底启动(非用户显式点击)→ 不重置失败计数,保留 C3 自动禁用语义
-        self.runtime.start_from_config(target, data_dir, false).await
+        self.runtime
+            .start_from_config(target, data_dir, false)
+            .await
     }
 }
 
@@ -203,9 +210,8 @@ impl SearchEngine for McpSearch {
     ) -> Result<Vec<super::RawSearchResult>, String> {
         self.ensure_started().await?;
         let tools = self.runtime.list_tools(&self.server, false).await?;
-        let tool = pick_search_tool(&tools, &self.tool).ok_or_else(|| {
-            format!("MCP 服务「{}」未暴露任何工具", self.server)
-        })?;
+        let tool = pick_search_tool(&tools, &self.tool)
+            .ok_or_else(|| format!("MCP 服务「{}」未暴露任何工具", self.server))?;
         let res = self
             .runtime
             .call_tool(

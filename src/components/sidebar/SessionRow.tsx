@@ -59,7 +59,6 @@ export function SessionRowItem({
         />
       ) : (
         <>
-          <span className="md-dot" aria-hidden="true">M</span>
           <span className="txt">{session.title || '未命名会话'}</span>
           <span className="when">{whenLabel(session.updated)}</span>
         </>

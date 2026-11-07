@@ -195,8 +195,7 @@ pub fn compose(
     }
     if family != PromptFamily::CogView && contains_cjk(&final_prompt) {
         warnings.push(
-            "当前模型对英文描述更敏感:中文可保留,但补充英文关键词通常能提高命中率。"
-                .to_string(),
+            "当前模型对英文描述更敏感:中文可保留,但补充英文关键词通常能提高命中率。".to_string(),
         );
     }
     if !neg.is_empty() {
@@ -345,7 +344,10 @@ mod tests {
 
     #[test]
     fn detects_families() {
-        assert_eq!(detect_family("zhipu", "cogview-3-plus"), PromptFamily::CogView);
+        assert_eq!(
+            detect_family("zhipu", "cogview-3-plus"),
+            PromptFamily::CogView
+        );
         assert_eq!(detect_family("custom", "flux-dev"), PromptFamily::Flux);
         assert_eq!(detect_family("openai", "dall-e-3"), PromptFamily::OpenAi);
         assert_eq!(detect_family("custom", "sdxl-turbo"), PromptFamily::Sdxl);
@@ -373,7 +375,13 @@ mod tests {
 
     #[test]
     fn converts_negative_to_avoid_text_and_warns() {
-        let c = compose("portrait", None, Some("blurry, watermark"), "openai", "dall-e-3");
+        let c = compose(
+            "portrait",
+            None,
+            Some("blurry, watermark"),
+            "openai",
+            "dall-e-3",
+        );
         assert!(c.prompt.contains("Avoid: blurry, watermark"));
         assert!(c.warnings.iter().any(|w| w.contains("negative")));
     }
@@ -407,7 +415,13 @@ mod tests {
 
     #[test]
     fn warns_on_chinese_for_non_cogview() {
-        let c = compose("黄昏时分的湖边小屋,水彩风格", None, None, "openai", "dall-e-3");
+        let c = compose(
+            "黄昏时分的湖边小屋,水彩风格",
+            None,
+            None,
+            "openai",
+            "dall-e-3",
+        );
         assert!(c.warnings.iter().any(|w| w.contains("英文")));
     }
 

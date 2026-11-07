@@ -132,9 +132,14 @@ pub fn retrieval_for_session(session_id: &str) -> RetrievalPolicy {
         .and_then(crate::agents::find)
         .and_then(|t| t.preset);
     let default = crate::settings::load().default_preset;
-    resolve::resolve(&all, s.preset_id.as_deref(), agent_preset.as_deref(), &default)
-        .preset
-        .retrieval
+    resolve::resolve(
+        &all,
+        s.preset_id.as_deref(),
+        agent_preset.as_deref(),
+        &default,
+    )
+    .preset
+    .retrieval
 }
 
 #[cfg(test)]

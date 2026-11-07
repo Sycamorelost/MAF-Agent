@@ -16,8 +16,8 @@ use rusqlite::Connection;
 
 pub mod branches;
 pub mod events;
-pub mod projects;
 pub mod messages;
+pub mod projects;
 pub mod schema;
 pub mod sessions;
 pub mod todos;
@@ -91,7 +91,9 @@ fn snapshot_before_migrate(conn: &Connection, db_path: &Path) {
         return;
     }
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S-%3f");
-    let snap = db_path.with_file_name(format!("{SNAPSHOT_PREFIX}{version}-{stamp}{SNAPSHOT_SUFFIX}"));
+    let snap = db_path.with_file_name(format!(
+        "{SNAPSHOT_PREFIX}{version}-{stamp}{SNAPSHOT_SUFFIX}"
+    ));
     match conn.execute(
         "VACUUM INTO ?1",
         rusqlite::params![snap.to_string_lossy().as_ref()],

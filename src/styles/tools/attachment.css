@@ -130,7 +130,7 @@
 .att-card:hover { border-color: var(--brand-line); box-shadow: var(--shadow-card-h); }
 .att-card.selected { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand) inset; }
 .att-select {
-  position: absolute; top: calc(8px * var(--ui-scale)); left: calc(8px * var(--ui-scale)); z-index: 2;
+  position: absolute; top: calc(8px * var(--ui-scale)); left: calc(8px * var(--ui-scale)); z-index: var(--z-base);
   display: inline-flex; align-items: center; justify-content: center;
   width: calc(20px * var(--ui-scale)); height: calc(20px * var(--ui-scale));
   padding: 0; border: 1px solid var(--composer-border); border-radius: calc(5px * var(--ui-scale));

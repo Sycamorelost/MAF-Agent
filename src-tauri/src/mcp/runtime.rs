@@ -44,7 +44,9 @@ pub const CALL_TOOL_TIMEOUT_SECS: u64 = 60;
 // === 指数退避重连(C3)常量与计数都在 reconnect.rs ===
 
 // 工具调用/结果/元信息已抽到 mcp_call.rs,避免本文件超 700 行。
-use crate::mcp::mcp_call::{handle_response, McpToolCall, McpToolInfo, McpToolResult, tool_to_info};
+use crate::mcp::mcp_call::{
+    McpToolCall, McpToolInfo, McpToolResult, handle_response, tool_to_info,
+};
 
 /// 全局 MCP Runtime —— tauri::State 注入。
 #[derive(Default, Clone)]
@@ -121,7 +123,13 @@ impl McpRuntime {
             }
             self.failure.increment(name).await;
             // C3:指数退避等待后再试一次,本次 stale 清理计入失败计数
-            let count = *self.failure.failure_counts.lock().await.get(name).unwrap_or(&0);
+            let count = *self
+                .failure
+                .failure_counts
+                .lock()
+                .await
+                .get(name)
+                .unwrap_or(&0);
             if self.failure.is_disabled(name).await {
                 return Err(format!("server `{name}` 连续失败 {count} 次,已自动禁用"));
             }
@@ -207,14 +215,13 @@ impl McpRuntime {
             CUSTOM_STARTUP_TIMEOUT_SECS
         };
 
-        let runtime = timeout(Duration::from_secs(startup_secs), client_info.serve(transport))
-            .await
-            .map_err(|_| {
-                format!(
-                    "启动 `{name}` 超时({startup_secs}s):npx 首次下载较慢或网络不可达"
-                )
-            })?
-            .map_err(|e| format!("serve `{name}` 失败: {e}"))?;
+        let runtime = timeout(
+            Duration::from_secs(startup_secs),
+            client_info.serve(transport),
+        )
+        .await
+        .map_err(|_| format!("启动 `{name}` 超时({startup_secs}s):npx 首次下载较慢或网络不可达"))?
+        .map_err(|e| format!("serve `{name}` 失败: {e}"))?;
 
         self.handles.lock().await.insert(
             name.to_string(),
@@ -269,7 +276,9 @@ impl McpRuntime {
         if cfg.is_http() {
             crate::mcp::safety::validate_server_url(&cfg.url)?;
             crate::mcp::safety::validate_headers(&cfg.headers)?;
-            return self.start_http(&cfg.name, &cfg.url, &cfg.headers, cfg.is_preset).await;
+            return self
+                .start_http(&cfg.name, &cfg.url, &cfg.headers, cfg.is_preset)
+                .await;
         }
 
         crate::mcp::safety::validate_server_command(&cfg.command)?;
@@ -363,7 +372,11 @@ impl McpRuntime {
     /// 列出指定 server 的所有工具。
     /// 只持锁取一份 Arc 快照,不持锁跨 await RPC —— 单个 server 无响应不能拖死整层 MCP。
     /// C4 超时分档:预置 server 用 PRESET_LIST_TOOLS_TIMEOUT_SECS,自定义 server 用 CUSTOM_LIST_TOOLS_TIMEOUT_SECS。
-    pub async fn list_tools(&self, name: &str, is_preset: bool) -> Result<Vec<McpToolInfo>, String> {
+    pub async fn list_tools(
+        &self,
+        name: &str,
+        is_preset: bool,
+    ) -> Result<Vec<McpToolInfo>, String> {
         let service = {
             let lock = self.handles.lock().await;
             lock.get(name).map(|h| h.runtime.clone())
@@ -419,7 +432,8 @@ impl McpRuntime {
         if names.is_empty() {
             return None;
         }
-        let lists = futures::future::join_all(names.iter().map(|n| self.list_tools_cached(n))).await;
+        let lists =
+            futures::future::join_all(names.iter().map(|n| self.list_tools_cached(n))).await;
         for (name, res) in names.iter().zip(lists) {
             if let Ok(tools) = res
                 && tools.iter().any(|t| t.name == tool)
@@ -565,11 +579,21 @@ rl.on('line', (line) => {
         let runtime = McpRuntime::default();
         let name = "e2e-fake";
         runtime
-            .start_server(name, "node", &[script.to_string_lossy().to_string()], &[], false, true)
+            .start_server(
+                name,
+                "node",
+                &[script.to_string_lossy().to_string()],
+                &[],
+                false,
+                true,
+            )
             .await
             .expect("MCP server 启动失败");
 
-        let tools = runtime.list_tools(name, false).await.expect("tools/list 失败");
+        let tools = runtime
+            .list_tools(name, false)
+            .await
+            .expect("tools/list 失败");
         assert!(
             tools.iter().any(|t| t.name == "echo"),
             "未取到 echo 工具,实际:{:?}",

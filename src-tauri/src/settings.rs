@@ -118,9 +118,10 @@ impl AttachmentQuota {
 /// 读取当前单会话附件配额(每次保存附件时读取,设置改完即时生效)。
 pub fn attachment_quota() -> AttachmentQuota {
     let s = load();
-    let files = s
-        .attachment_session_max_files
-        .clamp(MIN_ATTACHMENT_SESSION_MAX_FILES, MAX_ATTACHMENT_SESSION_MAX_FILES);
+    let files = s.attachment_session_max_files.clamp(
+        MIN_ATTACHMENT_SESSION_MAX_FILES,
+        MAX_ATTACHMENT_SESSION_MAX_FILES,
+    );
     let mb = s
         .attachment_session_max_mb
         .clamp(MIN_ATTACHMENT_SESSION_MAX_MB, MAX_ATTACHMENT_SESSION_MAX_MB);
@@ -255,10 +256,10 @@ mod tests {
         s.attachment_session_max_files = 0;
         s.attachment_session_max_mb = 0;
         let q = AttachmentQuota {
-            max_files: s
-                .attachment_session_max_files
-                .clamp(MIN_ATTACHMENT_SESSION_MAX_FILES, MAX_ATTACHMENT_SESSION_MAX_FILES)
-                as usize,
+            max_files: s.attachment_session_max_files.clamp(
+                MIN_ATTACHMENT_SESSION_MAX_FILES,
+                MAX_ATTACHMENT_SESSION_MAX_FILES,
+            ) as usize,
             max_bytes: s
                 .attachment_session_max_mb
                 .clamp(MIN_ATTACHMENT_SESSION_MAX_MB, MAX_ATTACHMENT_SESSION_MAX_MB)
@@ -274,11 +275,13 @@ mod tests {
         let text = serde_json::to_string(&s).unwrap();
         let back: AppSettings = serde_json::from_str(&text).unwrap();
         assert_eq!(
-            back.attachment_session_max_files.min(MAX_ATTACHMENT_SESSION_MAX_FILES),
+            back.attachment_session_max_files
+                .min(MAX_ATTACHMENT_SESSION_MAX_FILES),
             MAX_ATTACHMENT_SESSION_MAX_FILES
         );
         assert_eq!(
-            back.attachment_session_max_mb.min(MAX_ATTACHMENT_SESSION_MAX_MB),
+            back.attachment_session_max_mb
+                .min(MAX_ATTACHMENT_SESSION_MAX_MB),
             MAX_ATTACHMENT_SESSION_MAX_MB
         );
     }
@@ -288,12 +291,14 @@ mod tests {
         let mut s = AppSettings::default();
         s.chat_timeout_minutes = 0;
         assert_eq!(
-            s.chat_timeout_minutes.clamp(MIN_CHAT_TIMEOUT_MINUTES, MAX_CHAT_TIMEOUT_MINUTES),
+            s.chat_timeout_minutes
+                .clamp(MIN_CHAT_TIMEOUT_MINUTES, MAX_CHAT_TIMEOUT_MINUTES),
             MIN_CHAT_TIMEOUT_MINUTES
         );
         s.chat_timeout_minutes = 99999;
         assert_eq!(
-            s.chat_timeout_minutes.clamp(MIN_CHAT_TIMEOUT_MINUTES, MAX_CHAT_TIMEOUT_MINUTES),
+            s.chat_timeout_minutes
+                .clamp(MIN_CHAT_TIMEOUT_MINUTES, MAX_CHAT_TIMEOUT_MINUTES),
             MAX_CHAT_TIMEOUT_MINUTES
         );
         s.chat_timeout_minutes = 620;

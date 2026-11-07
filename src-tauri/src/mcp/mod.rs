@@ -28,8 +28,8 @@ pub use approval::{
 pub use capability::{Capability, CapabilityStore, Scope};
 #[allow(unused_imports)]
 pub use config::{McpConfig, McpServerConfig, Transport, default_servers};
-pub use runtime::McpRuntime;
 pub use mcp_call::{McpToolCall, McpToolInfo, McpToolResult};
+pub use runtime::McpRuntime;
 #[allow(unused_imports)]
 pub use safety::{resolve_safe_path, truncate_chars, validate_command, validate_server_command};
 
@@ -141,8 +141,8 @@ fn merge_presets(cfg: &mut McpConfig) -> bool {
                 // v5:联网搜索从 tavily-mcp 零 Key 升级 agent-search-mcp
                 if upgrading_to_v5 && existing.name == "联网搜索" {
                     let args_str = existing.args.join(" ");
-                    let auto_managed = args_str.contains("tavily-mcp")
-                        || args_str.contains("agent-search-mcp");
+                    let auto_managed =
+                        args_str.contains("tavily-mcp") || args_str.contains("agent-search-mcp");
                     if auto_managed {
                         existing.args = preset.args.clone();
                         existing.command = preset.command.clone();

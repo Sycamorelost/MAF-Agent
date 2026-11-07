@@ -59,15 +59,9 @@
 /* ---- 响应式断点（统一所有页面） ----
    ★ 栏宽策略:只「降档」、不硬隐藏。
      面板可见性由折叠态决定,优先级:用户手动展开 > 断点默认。
-     面板默认宽度由 usePanelWidth 读取 --mempanel-w,token 降档即生效;
+     面板默认宽度由 usePanelWidth 读取 --mempanel-w;
      另配合按视口比例(45%)的限宽,确保窄窗下主区不被挤到不可用。 */
-@media (max-width:1100px){
-  :root{ --mempanel-w:calc(280px * var(--ui-scale)); }
-}
 @media (max-width:900px){
-  :root{
-    --mempanel-w:calc(260px * var(--ui-scale));
-  }
   .cards{flex-direction:column;max-width:480px}
 }
 @media (max-width:560px){
@@ -97,11 +91,9 @@
   .tb-pill-btn svg{width:13px;height:13px}
   .win-btn{width:calc(28px * var(--ui-scale))}
 }
-/* 宽窗:栏宽升档,避免大屏下内容仍被限制在窄列 */
+/* 宽窗:卡片列放宽;正文/输入框宽度由「外观与首页 → 正文宽度」统一控制 */
 @media (min-width:1600px){
-  :root{ --mempanel-w:calc(360px * var(--ui-scale)); }
   .cards{max-width:960px}
-  .composer{max-width:960px}
 }
 
 /* ---- 窗口尺寸自适应:字号/按钮/栏高随窗口宽度缩放,不再固定 ---- */

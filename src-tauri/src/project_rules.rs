@@ -202,7 +202,11 @@ mod tests {
         let body = "x".repeat((MAX_BYTES + 1024) as usize);
         std::fs::write(dir.join("AGENTS.md"), &body).unwrap();
         let rules = load_in(&dir).unwrap();
-        assert!(rules.content.ends_with("[项目约定文件超过 32KB,以上为截断内容]"));
+        assert!(
+            rules
+                .content
+                .ends_with("[项目约定文件超过 32KB,以上为截断内容]")
+        );
         assert!(rules.content.len() < body.len());
         std::fs::remove_dir_all(&dir).ok();
     }

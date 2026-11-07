@@ -64,7 +64,9 @@ fn dangerous_shell_is_flagged_regardless_of_model_confirm() {
     }
     // 非 shell 内置工具与外部 server 的同名工具不触发该规则(外部工具另有审批门控)
     assert!(dangerous_shell_pattern("builtin", "fs_read", &json!({})).is_none());
-    assert!(dangerous_shell_pattern("mcp", "shell_exec", &json!({ "command": "shutdown" })).is_none());
+    assert!(
+        dangerous_shell_pattern("mcp", "shell_exec", &json!({ "command": "shutdown" })).is_none()
+    );
 }
 
 #[test]

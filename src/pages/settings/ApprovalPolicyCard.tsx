@@ -9,7 +9,7 @@ export const APPROVAL_MODES: { id: ApprovalMode; title: string; desc: string }[]
     title: "工作区",
     desc: "只读与工作区内写入自动放行,shell / 删除 / 越界写入仍询问",
   },
-  { id: "full", title: "完全信任", desc: "不再弹窗,shell 可执行任意命令(含系统环境操作),GUI 自动化可用" },
+  { id: "full", title: "完全信任", desc: "任何工具调用都不再弹窗(含高危 shell、工作区外读写),GUI 自动化可用" },
 ];
 
 /** 审批档卡片:全局永久设置,三档选择 + 工作区附加白名单。 */
@@ -32,7 +32,7 @@ export function ApprovalPolicyCard({
       <div className="mcp-policy-desc">
         此设置对所有会话、所有环境统一生效,保存后重启应用仍然有效。
         默认「逐次审批」:每次工具调用都要你确认;「工作区」:只读与工作区内写入免确认;
-        「完全信任」:不再确认,shell 可执行任意命令并解锁 GUI 自动化。
+        「完全信任」:包括高危 shell 命令与工作区外读写在内的所有调用都不再确认,并解锁 GUI 自动化。
       </div>
       <div className="mcp-modes">
         {APPROVAL_MODES.map((m) => (
@@ -56,7 +56,7 @@ export function ApprovalPolicyCard({
       </div>
       {policy.mode === "full" && (
         <div className="mcp-warn">
-          完全信任已开启:工具调用不再询问,模型可执行任意命令与系统环境操作。
+          完全信任已开启:所有工具调用(含高危 shell、删除、工作区外读写)都不再询问,模型可执行任意命令与系统环境操作。
           请仅在同时信任所用模型与全部工具输出内容时使用。
         </div>
       )}

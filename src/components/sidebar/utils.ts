@@ -1,16 +1,24 @@
 /** Sidebar 纯函数 + localStorage 持久化工具 */
 
+import { loadUiScale } from '../../lib/uiScale';
+
 export const LS_COLLAPSED = 'metaagent.sidebar.collapsed';
 export const LS_PROJECTS_OPEN = 'metaagent.sidebar.projectsOpen';
 
-/** 展开态栏宽约束(拖拽调整;双击复位到默认) */
+/** 展开态栏宽约束(拖拽调整;双击复位到默认)。上下限随 --ui-scale 等比,避免大字体下栏宽不足。 */
 export const SIDEBAR_W_MIN = 200;
 export const SIDEBAR_W_MAX = 320;
 export const SIDEBAR_W_DEFAULT = 280;
 
+/** 默认宽度随字号缩放等比变化(读取当前用户缩放)。 */
+export function defaultSidebarWidth(): number {
+  return Math.round(SIDEBAR_W_DEFAULT * loadUiScale());
+}
+
 export function clampSidebarWidth(w: number): number {
-  if (!Number.isFinite(w)) return SIDEBAR_W_DEFAULT;
-  return Math.min(SIDEBAR_W_MAX, Math.max(SIDEBAR_W_MIN, Math.round(w)));
+  if (!Number.isFinite(w)) return defaultSidebarWidth();
+  const s = loadUiScale();
+  return Math.min(Math.round(SIDEBAR_W_MAX * s), Math.max(Math.round(SIDEBAR_W_MIN * s), Math.round(w)));
 }
 
 /**

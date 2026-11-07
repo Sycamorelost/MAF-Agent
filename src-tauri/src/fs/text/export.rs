@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::fs::{backup, docgen};
 
-use super::common::{audit, session_id_is_bound_to_project, write_target, SheetInput, WriteResult};
+use super::common::{SheetInput, WriteResult, audit, write_target};
 use super::io::root_for_session;
 
 /// 完整文档导出:用途模板、目录、封面元信息均可指定。
@@ -14,8 +14,7 @@ pub fn export_docx_ext(
     session_id: Option<&str>,
 ) -> Result<WriteResult, String> {
     let root = root_for_session(session_id)?;
-    let enforce = session_id_is_bound_to_project(session_id);
-    export_docx_req_in(&root, rel, req, &backup::backup_dir(), enforce)
+    export_docx_req_in(&root, rel, req, &backup::backup_dir())
 }
 
 pub fn export_xlsx(
@@ -24,8 +23,7 @@ pub fn export_xlsx(
     session_id: Option<&str>,
 ) -> Result<WriteResult, String> {
     let root = root_for_session(session_id)?;
-    let enforce = session_id_is_bound_to_project(session_id);
-    export_xlsx_in(&root, rel, sheets, &backup::backup_dir(), enforce)
+    export_xlsx_in(&root, rel, sheets, &backup::backup_dir())
 }
 
 /// 兼容入口(仅测试使用):标题 + 正文,用途/目录/封面自动识别。
@@ -42,7 +40,7 @@ pub(crate) fn export_docx_in(
         body: body.to_string(),
         ..Default::default()
     };
-    export_docx_req_in(root, rel, &req, backup_base, false)
+    export_docx_req_in(root, rel, &req, backup_base)
 }
 
 /// 文档导出内核:只负责落盘、备份与审计;排版全部委托 `docgen`。
@@ -51,9 +49,8 @@ fn export_docx_req_in(
     rel: &str,
     req: &docgen::DocRequest,
     backup_base: &Path,
-    enforce_boundary: bool,
 ) -> Result<WriteResult, String> {
-    let path = write_target(root, rel, enforce_boundary)?;
+    let path = write_target(root, rel)?;
     let backup_id = backup::snapshot_in(backup_base, root, &path, None, None)?;
     let mut req = req.clone();
     // 相对图片路径默认展开到工作区根目录
@@ -75,11 +72,10 @@ pub(crate) fn export_xlsx_in(
     rel: &str,
     sheets: &[SheetInput],
     backup_base: &Path,
-    enforce_boundary: bool,
 ) -> Result<WriteResult, String> {
     use rust_xlsxwriter::Workbook;
 
-    let path = write_target(root, rel, enforce_boundary)?;
+    let path = write_target(root, rel)?;
     let backup_id = backup::snapshot_in(backup_base, root, &path, None, None)?;
 
     let mut wb = Workbook::new();
@@ -116,4 +112,3 @@ pub(crate) fn export_xlsx_in(
         backup_id,
     })
 }
-

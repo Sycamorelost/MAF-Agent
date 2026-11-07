@@ -110,7 +110,8 @@ pub fn load_decoupled() -> Vec<AgentTemplate> {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
         let prompt = match &prompt_file {
-            Some(pf) => fs::read_to_string(pf).unwrap_or_else(|_| fs::read_to_string(dir.join("prompt.md")).unwrap_or_default()),
+            Some(pf) => fs::read_to_string(pf)
+                .unwrap_or_else(|_| fs::read_to_string(dir.join("prompt.md")).unwrap_or_default()),
             None => fs::read_to_string(dir.join("prompt.md")).unwrap_or_default(),
         };
         let tools = match &tools_file {

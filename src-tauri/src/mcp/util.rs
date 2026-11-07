@@ -126,10 +126,7 @@ pub fn check_command_resolvable(command: &str) -> (bool, Option<String>) {
 /// 而 npm 装的 npx 是 `npx.cmd`。这里先按 PATH + 常见扩展名解析出真实文件,
 /// `.cmd/.bat` 再交给 `cmd.exe /C` 执行。
 #[cfg(windows)]
-pub fn build_command(
-    command: &str,
-    args: &[String],
-) -> Result<tokio::process::Command, String> {
+pub fn build_command(command: &str, args: &[String]) -> Result<tokio::process::Command, String> {
     // tokio::process::Command 在 Windows 上自带 raw_arg / creation_flags
     use tokio::process::Command;
 
@@ -154,10 +151,7 @@ pub fn build_command(
 }
 
 #[cfg(not(windows))]
-pub fn build_command(
-    command: &str,
-    args: &[String],
-) -> Result<tokio::process::Command, String> {
+pub fn build_command(command: &str, args: &[String]) -> Result<tokio::process::Command, String> {
     let mut c = tokio::process::Command::new(command);
     c.args(args);
     Ok(c)
@@ -245,7 +239,15 @@ mod tests {
             assert!(is_sensitive_env_key(key), "应判定为敏感: {key}");
         }
         // 系统必需变量绝不能被移除,否则 Windows 子进程无法启动
-        for key in ["PATH", "SystemRoot", "PATHEXT", "COMSPEC", "TEMP", "HOME", "USERPROFILE"] {
+        for key in [
+            "PATH",
+            "SystemRoot",
+            "PATHEXT",
+            "COMSPEC",
+            "TEMP",
+            "HOME",
+            "USERPROFILE",
+        ] {
             assert!(!is_sensitive_env_key(key), "不得移除系统变量: {key}");
         }
     }

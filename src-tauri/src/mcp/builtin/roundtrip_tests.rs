@@ -34,7 +34,8 @@ async fn fs_tools_edit_and_chunked_write_roundtrip() {
     let edited: serde_json::Value = serde_json::from_str(&content).unwrap();
     assert_eq!(edited["replaced"], 1);
 
-    let (content, ok) = execute_builtin("fs_read", &json!({ "path": path }), false, None, None).await;
+    let (content, ok) =
+        execute_builtin("fs_read", &json!({ "path": path }), false, None, None).await;
     assert!(ok, "读取失败:{content}");
     assert_eq!(content, "标题\n新句子\n结尾");
 

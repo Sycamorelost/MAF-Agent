@@ -135,7 +135,10 @@ fn skip_element(lower: &str, from: usize, name: &str) -> usize {
             }
             (_, Some(c)) => {
                 depth = depth.saturating_sub(1);
-                let end = lower[c..].find('>').map(|g| c + g + 1).unwrap_or(lower.len());
+                let end = lower[c..]
+                    .find('>')
+                    .map(|g| c + g + 1)
+                    .unwrap_or(lower.len());
                 if depth == 0 {
                     return end;
                 }

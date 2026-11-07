@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use tauri_plugin_dialog::DialogExt;
 
-use crate::agents::{self, export_agent, import_agent, AgentTemplate};
+use crate::agents::{self, AgentTemplate, export_agent, import_agent};
 use crate::db::sessions;
 
 /// 列出全部 Agent 模板(内置 14 个 + 用户变体/自定义)。

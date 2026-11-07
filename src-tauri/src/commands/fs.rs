@@ -18,7 +18,10 @@ pub async fn fs_workspace_info(session_id: Option<String>) -> Result<serde_json:
 
 /// 列出工作区目录(缺省为根目录)。
 #[tauri::command]
-pub async fn fs_list(rel: Option<String>, session_id: Option<String>) -> Result<Vec<text::FileEntry>, String> {
+pub async fn fs_list(
+    rel: Option<String>,
+    session_id: Option<String>,
+) -> Result<Vec<text::FileEntry>, String> {
     text::list(rel.as_deref().unwrap_or(""), session_id.as_deref())
 }
 
@@ -45,7 +48,10 @@ pub async fn fs_write_text(
 
 /// 删除文件(先备份)。
 #[tauri::command]
-pub async fn fs_delete(path: String, session_id: Option<String>) -> Result<text::WriteResult, String> {
+pub async fn fs_delete(
+    path: String,
+    session_id: Option<String>,
+) -> Result<text::WriteResult, String> {
     text::delete(&path, session_id.as_deref())
 }
 
@@ -102,7 +108,10 @@ pub async fn fs_extract_text(path: String, session_id: Option<String>) -> Result
 
 /// 列出 zip 内容。
 #[tauri::command]
-pub async fn fs_zip_list(path: String, session_id: Option<String>) -> Result<Vec<formats::ZipEntry>, String> {
+pub async fn fs_zip_list(
+    path: String,
+    session_id: Option<String>,
+) -> Result<Vec<formats::ZipEntry>, String> {
     formats::zip_list(&path, session_id.as_deref())
 }
 
@@ -161,7 +170,7 @@ pub async fn fs_backup_read(id: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn fs_reveal(path: String, session_id: Option<String>) -> Result<(), String> {
     let root = text::root_for_session(session_id.as_deref())?;
-    let abs = crate::fs::paths::resolve(&root, &path, true)?;
+    let abs = crate::fs::paths::resolve_guarded(&root, &path)?;
     if abs.is_dir() {
         return open_dir(&abs);
     }
@@ -191,7 +200,7 @@ pub async fn fs_reveal(path: String, session_id: Option<String>) -> Result<(), S
 #[tauri::command]
 pub async fn fs_open(path: String, session_id: Option<String>) -> Result<(), String> {
     let root = text::root_for_session(session_id.as_deref())?;
-    let abs = crate::fs::paths::resolve(&root, &path, true)?;
+    let abs = crate::fs::paths::resolve_guarded(&root, &path)?;
     if abs.is_dir() {
         return open_dir(&abs);
     }
@@ -214,7 +223,7 @@ pub async fn fs_open(path: String, session_id: Option<String>) -> Result<(), Str
 #[tauri::command]
 pub async fn fs_read_data_url(path: String, session_id: Option<String>) -> Result<String, String> {
     let root = text::root_for_session(session_id.as_deref())?;
-    let abs = crate::fs::paths::resolve(&root, &path, true)?;
+    let abs = crate::fs::paths::resolve_guarded(&root, &path)?;
     let ext = abs
         .extension()
         .and_then(|e| e.to_str())

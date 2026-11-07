@@ -7,7 +7,7 @@
 //!
 //! 纯计算模块:不做 IO 之外的裁剪,裁剪顺序由 compress.rs / chat.rs 决定。
 
-use crate::provider::{model_cards, ChatMessage};
+use crate::provider::{ChatMessage, model_cards};
 
 /// 未知窗口时的字符预算,与旧 `MAX_CONTEXT_CHARS` 一致。
 pub(crate) const DEFAULT_CHARS: usize = 48_000;
@@ -43,7 +43,8 @@ impl ContextBudget {
     pub(crate) fn for_model(provider_id: &str, model: &str) -> Self {
         match context_window_for(provider_id, model) {
             Some(window) => {
-                let tokens = ((window as f64 * WINDOW_RATIO) as usize).clamp(MIN_TOKENS, MAX_TOKENS);
+                let tokens =
+                    ((window as f64 * WINDOW_RATIO) as usize).clamp(MIN_TOKENS, MAX_TOKENS);
                 Self {
                     limit: Limit::Tokens(tokens),
                 }

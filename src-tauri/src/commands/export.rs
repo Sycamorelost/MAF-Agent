@@ -60,10 +60,7 @@ pub async fn export_pdf(app: tauri::AppHandle) -> Result<(), String> {
 /// 把工作区内已有文档转换为 PDF(LibreOffice 无头模式,免费离线、无需 API)。
 /// 返回生成的 PDF 绝对路径;失败时返回可读错误(未安装 LibreOffice 等)。
 #[tauri::command]
-pub async fn export_file_pdf(
-    session_id: Option<String>,
-    path: String,
-) -> Result<String, String> {
+pub async fn export_file_pdf(session_id: Option<String>, path: String) -> Result<String, String> {
     crate::fs::convert::convert_in_workspace(session_id.as_deref(), &path)
         .map(|p| p.display().to_string())
 }

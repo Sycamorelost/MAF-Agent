@@ -43,7 +43,8 @@ pub async fn gui_find_elements(
     let dir = data_dir_fn();
     let approval = crate::mcp::approval::load_policy(&dir);
     // 设置页自检与工具执行同一总开关:审批档是全局永久设置,无会话上下文
-    if crate::mcp::approval::effective_mode(&approval, &dir, None) != crate::mcp::approval::ApprovalMode::Full
+    if crate::mcp::approval::effective_mode(&approval, &dir, None)
+        != crate::mcp::approval::ApprovalMode::Full
     {
         return Err("GUI 自动化已并入完全信任模式:请将审批模式切为「完全信任」后自检".into());
     }

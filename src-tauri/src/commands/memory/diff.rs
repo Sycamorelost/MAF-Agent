@@ -155,7 +155,10 @@ pub async fn watch_memory(
 
 /// 停止监听。
 #[tauri::command]
-pub async fn unwatch_memory(session_id: String, state: State<'_, WatcherState>) -> Result<(), String> {
+pub async fn unwatch_memory(
+    session_id: String,
+    state: State<'_, WatcherState>,
+) -> Result<(), String> {
     memory::validate_id(&session_id)?;
     state.registry.unwatch(&session_id)
 }

@@ -19,8 +19,9 @@ pub fn mcp_issue_capability(
     let dir = data_dir_fn();
     let policy = crate::mcp::approval::load_policy(&dir);
     // 签发令牌无会话上下文,仅在「完全信任」档下允许
-    if crate::mcp::approval::effective_mode(&policy, &dir, None) != crate::mcp::approval::ApprovalMode::Full {
-
+    if crate::mcp::approval::effective_mode(&policy, &dir, None)
+        != crate::mcp::approval::ApprovalMode::Full
+    {
         return Err("能力令牌已并入完全信任模式:请将审批模式切为「完全信任」后签发".into());
     }
     let cap = store.issue(&label, scopes, ttl_secs, max_uses)?;

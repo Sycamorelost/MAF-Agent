@@ -7,8 +7,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::commands::attachment::{
-    count_doc_id_refs_on, delete_one_on, display_name_from_path, ensure_in_attachments_dir,
-    extract_and_index, AttachmentMeta, MAX_ATTACHMENT_BYTES,
+    AttachmentMeta, MAX_ATTACHMENT_BYTES, count_doc_id_refs_on, delete_one_on,
+    display_name_from_path, ensure_in_attachments_dir, extract_and_index,
 };
 
 /// 批量删除请求条目
@@ -83,10 +83,7 @@ pub async fn delete_attachments_batch(
         if let Err(e) = std::fs::remove_file(&p) {
             let msg = format!("删除磁盘文件失败: {e}");
             let path_str = p.to_string_lossy().to_string();
-            if let Some(out) = outcomes
-                .iter_mut()
-                .find(|o| o.ok && o.path == path_str)
-            {
+            if let Some(out) = outcomes.iter_mut().find(|o| o.ok && o.path == path_str) {
                 out.ok = false;
                 out.error = Some(msg);
             }
@@ -186,12 +183,12 @@ pub async fn retry_attachment_extract(
             replace_meta_on(&conn, message_id, &meta.path, &meta)?
         };
         // 内容更新后旧文档块若已无引用,顺手清理,避免 doc_search 命中过期内容
-        if let Some(old) = old_doc {
-            if meta.doc_id.as_deref() != Some(old.as_str()) {
-                let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
-                if count_doc_id_refs_on(&conn, &session_id, &old)? == 0 {
-                    crate::doc::service::purge(&conn, &session_id, &old)?;
-                }
+        if let Some(old) = old_doc
+            && meta.doc_id.as_deref() != Some(old.as_str())
+        {
+            let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
+            if count_doc_id_refs_on(&conn, &session_id, &old)? == 0 {
+                crate::doc::service::purge(&conn, &session_id, &old)?;
             }
         }
     }
@@ -285,7 +282,9 @@ mod tests {
         let mut fresh = a.clone();
         fresh.doc_id = Some("new-doc".into());
         assert_eq!(
-            replace_meta_on(&conn, msg, &a.path, &fresh).unwrap().as_deref(),
+            replace_meta_on(&conn, msg, &a.path, &fresh)
+                .unwrap()
+                .as_deref(),
             Some("old-doc")
         );
     }
@@ -294,8 +293,8 @@ mod tests {
     fn delete_one_returns_remaining_references() {
         let conn = setup_db();
         let a = meta("a.pdf", r"D:\att\s1\a.pdf");
-        let m1 = add_msg(&conn, &[a.clone()]);
-        let m2 = add_msg(&conn, &[a.clone()]);
+        let m1 = add_msg(&conn, std::slice::from_ref(&a));
+        let m2 = add_msg(&conn, std::slice::from_ref(&a));
         // 同一路径被两条消息引用:第一次删除后仍剩 1 个引用(磁盘文件保留)
         assert_eq!(delete_one_on(&conn, m1, &a.path).unwrap(), 1);
         // 最后一次引用被移除:返回 0,调用方据此清理磁盘与文档块

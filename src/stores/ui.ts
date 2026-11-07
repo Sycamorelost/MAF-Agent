@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { clampSidebarWidth, SIDEBAR_W_DEFAULT } from '../components/sidebar/utils';
+import { clampSidebarWidth, defaultSidebarWidth } from '../components/sidebar/utils';
 
 const LS_SIDEBAR = 'metaagent.sidebar';
 const LS_SIDEBAR_W = 'metaagent.sidebar.width';
@@ -25,10 +25,10 @@ const writeFlag = (key: string, v: boolean) => {
 const readWidth = () => {
   try {
     const raw = localStorage.getItem(LS_SIDEBAR_W);
-    if (raw === null) return SIDEBAR_W_DEFAULT;
+    if (raw === null) return defaultSidebarWidth();
     return clampSidebarWidth(Number(raw));
   } catch {
-    return SIDEBAR_W_DEFAULT;
+    return defaultSidebarWidth();
   }
 };
 

@@ -70,7 +70,9 @@ pub async fn set_session_permission_mode(id: String, mode: String) -> Result<(),
 
 /// 读取会话任务清单(harness todo 面板初始拉取;后续变更由 `session-todos-{id}` 事件推送)。
 #[tauri::command]
-pub async fn session_get_todos(session_id: String) -> Result<Vec<crate::db::todos::TodoItem>, String> {
+pub async fn session_get_todos(
+    session_id: String,
+) -> Result<Vec<crate::db::todos::TodoItem>, String> {
     let conn = crate::db::conn()
         .lock()
         .map_err(|e| format!("db lock 失败: {e}"))?;
@@ -89,13 +91,14 @@ pub async fn rename_session(id: String, title: String) -> Result<(), String> {
 /// 不复制 branches(保持线性新会话),不复制 tool_call_log(新会话会重新记录)。
 #[tauri::command]
 pub async fn clone_session(id: String) -> Result<String, String> {
-    let orig = sessions::get(&id)?
-        .ok_or_else(|| format!("源会话不存在:{id}"))?;
+    let orig = sessions::get(&id)?.ok_or_else(|| format!("源会话不存在:{id}"))?;
     let new_title = format!("副本-{}", orig.title);
     let model_id = orig.model_id.clone().unwrap_or_default();
     let agent_id = orig.agent_id.clone();
-    let SessionInfo { id: new_id, memory_path: _ } =
-        create_session(new_title, model_id, agent_id).await?;
+    let SessionInfo {
+        id: new_id,
+        memory_path: _,
+    } = create_session(new_title, model_id, agent_id).await?;
     // 复制 project_id
     if let Some(pid) = orig.project_id.as_deref() {
         sessions::set_project(&new_id, Some(pid))?;
@@ -179,7 +182,10 @@ pub async fn delete_session(id: String, state: State<'_, WatcherState>) -> Resul
 
 /// 仅当会话没有任何消息时删除(空对话默认不保留),返回是否已删。
 #[tauri::command]
-pub async fn delete_session_if_empty(id: String, state: State<'_, WatcherState>) -> Result<bool, String> {
+pub async fn delete_session_if_empty(
+    id: String,
+    state: State<'_, WatcherState>,
+) -> Result<bool, String> {
     memory::validate_id(&id)?;
     let deleted = sessions::delete_if_empty(&id)?;
     if deleted {
@@ -254,8 +260,7 @@ pub async fn append_message(input: AppendMessageInput) -> Result<messages::Messa
         input.partial,
     )?;
     // P12:返回完整行,前端可直接乐观插入(不再整页重拉)
-    messages::get_by_id(id)?
-        .ok_or_else(|| format!("消息 {id} 写入后读取失败"))
+    messages::get_by_id(id)?.ok_or_else(|| format!("消息 {id} 写入后读取失败"))
 }
 
 /// 列出分支可见的全部消息(branch_id 缺省 = 会话当前激活分支)。
@@ -321,7 +326,9 @@ pub async fn delete_messages_from(session_id: String, from_id: i64) -> Result<u6
 
 /// 列出会话全部分支(自动确保 main 存在,清理无消息的非激活空 fork)。
 #[tauri::command]
-pub async fn list_branches(session_id: String) -> Result<Vec<crate::db::branches::BranchInfo>, String> {
+pub async fn list_branches(
+    session_id: String,
+) -> Result<Vec<crate::db::branches::BranchInfo>, String> {
     memory::validate_id(&session_id)?;
     crate::db::branches::list(&session_id)
 }
@@ -345,7 +352,11 @@ pub async fn set_active_branch(session_id: String, branch_id: String) -> Result<
 
 /// 重命名分支(空名 = 恢复默认显示名)。
 #[tauri::command]
-pub async fn rename_branch(session_id: String, branch_id: String, name: String) -> Result<(), String> {
+pub async fn rename_branch(
+    session_id: String,
+    branch_id: String,
+    name: String,
+) -> Result<(), String> {
     memory::validate_id(&session_id)?;
     crate::db::branches::rename(&session_id, &branch_id, &name)
 }

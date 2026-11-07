@@ -36,16 +36,25 @@ pub fn resolve(
     default_preset: &str,
 ) -> ResolvedPreset {
     if let Some(p) = session_preset_id.and_then(|id| find(presets, id)) {
-        return ResolvedPreset { preset: p.clone(), source: PresetSource::Session };
+        return ResolvedPreset {
+            preset: p.clone(),
+            source: PresetSource::Session,
+        };
     }
     if let Some(p) = agent_preset.and_then(|id| find(presets, id)) {
-        return ResolvedPreset { preset: p.clone(), source: PresetSource::Agent };
+        return ResolvedPreset {
+            preset: p.clone(),
+            source: PresetSource::Agent,
+        };
     }
     let p = find(presets, default_preset)
         .or_else(|| find(presets, DEFAULT_PRESET))
         .or_else(|| presets.first())
         .expect("预设清单为空:内置四档必须存在");
-    ResolvedPreset { preset: p.clone(), source: PresetSource::Global }
+    ResolvedPreset {
+        preset: p.clone(),
+        source: PresetSource::Global,
+    }
 }
 
 /// 工具是否放行:include 命中(精确名或 `*`)且未被 exclude 命中。
@@ -57,14 +66,16 @@ pub fn tool_allowed(f: &ToolFilter, name: &str) -> bool {
         return false;
     }
     let named_exclude = f.exclude.iter().any(|p| p == name);
-    let star_exclude =
-        f.exclude.iter().any(|p| p == "*") && !f.include.iter().any(|p| p == name);
+    let star_exclude = f.exclude.iter().any(|p| p == "*") && !f.include.iter().any(|p| p == name);
     !named_exclude && !star_exclude
 }
 
 /// 按预设过滤工具定义列表(内置与 MCP 工具共用)。
 pub fn filter_defs<T>(f: &ToolFilter, tools: Vec<T>, name_of: impl Fn(&T) -> &str) -> Vec<T> {
-    tools.into_iter().filter(|t| tool_allowed(f, name_of(t))).collect()
+    tools
+        .into_iter()
+        .filter(|t| tool_allowed(f, name_of(t)))
+        .collect()
 }
 
 #[cfg(test)]

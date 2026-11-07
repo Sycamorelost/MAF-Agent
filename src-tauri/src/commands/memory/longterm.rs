@@ -101,11 +101,7 @@ fn parse_memory_jsonl(text: &str) -> (Vec<MemoryEntityInfo>, Vec<MemoryRelationI
                     .get("relationType")
                     .and_then(|x| x.as_str())
                     .unwrap_or("related_to");
-                let key = (
-                    from.to_string(),
-                    to.to_string(),
-                    relation_type.to_string(),
-                );
+                let key = (from.to_string(), to.to_string(), relation_type.to_string());
                 if seen_relations.insert(key.clone()) {
                     relations.push(MemoryRelationInfo {
                         from: key.0,

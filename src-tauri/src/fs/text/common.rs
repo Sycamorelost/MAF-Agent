@@ -51,13 +51,9 @@ pub(crate) fn display_path(p: &Path) -> String {
 }
 
 /// 写目标:校验路径并确保父目录存在。
-/// `enforce_boundary=true` 时额外做 ensure_within(项目绑定场景的越界检查)。
-pub(crate) fn write_target(root: &Path, rel: &str, enforce_boundary: bool) -> Result<PathBuf, String> {
-    let path = if enforce_boundary {
-        paths::ensure_within(root, Path::new(rel))?
-    } else {
-        paths::resolve(root, rel, false)?
-    };
+/// 统一走 S1 沙箱语义(resolve_guarded):相对路径必须在 root 内,绝对路径显式放行。
+pub(crate) fn write_target(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let path = paths::resolve_guarded(root, rel)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
     }
@@ -73,4 +69,3 @@ pub(crate) fn audit(event: &str, rel: &str, bytes: usize) {
         &format!("bytes={bytes}"),
     );
 }
-

@@ -1,10 +1,10 @@
 //! myAgent 后端入口。
 //!
 //! 第三方来源声明 / Third-party attribution(详见仓库根目录 `LICENSE` 与 `NOTICE`):
-//! - Deep-tutor           <https://github.com/hershate/Deep-tutor>        Apache-2.0
-//!   衍生:study/**、study/template.rs(Rust 重写)
 //! - Cherry Studio        <https://github.com/CherryHQ/cherry-studio>     AGPL-3.0
 //!   仅架构/交互理念参考,未复制源码、样式或资源
+//! - MCP 参考服务器(MIT)与 agent-search-mcp(Apache-2.0)
+//!   运行时经 npx 按需启动,不随安装包分发
 //!
 //! 本项目自身以 Apache License 2.0 发布。
 
@@ -211,21 +211,18 @@ pub fn run() {
             if window.label() != "main" {
                 return;
             }
-            match event {
-                // 点 × 的行为跟随「关闭时最小化到托盘」开关:
-                //   开关开 → 不销毁窗口,隐藏到托盘(托盘「退出」才真正结束进程);
-                //   开关关 → 直接结束应用
-                tauri::WindowEvent::CloseRequested { api, .. } => {
-                    if settings::load().minimize_to_tray {
-                        api.prevent_close();
-                        hide_to_tray(window);
-                    } else {
-                        window.app_handle().exit(0);
-                    }
+            // 点 × 的行为跟随「关闭时最小化到托盘」开关:
+            //   开关开 → 不销毁窗口,隐藏到托盘(托盘「退出」才真正结束进程);
+            //   开关关 → 直接结束应用
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if settings::load().minimize_to_tray {
+                    api.prevent_close();
+                    hide_to_tray(window);
+                } else {
+                    window.app_handle().exit(0);
                 }
-                // 最小化始终是普通最小化,窗口留在任务栏,不进托盘
-                _ => {}
             }
+            // 最小化始终是普通最小化,窗口留在任务栏,不进托盘
         })
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

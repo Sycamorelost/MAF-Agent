@@ -4,7 +4,9 @@ use serde::Serialize;
 
 use crate::attachment;
 
-use super::meta::{AttachmentMeta, MAX_ATTACHMENT_BYTES, ensure_in_attachments_dir, extract_and_index};
+use super::meta::{
+    AttachmentMeta, MAX_ATTACHMENT_BYTES, ensure_in_attachments_dir, extract_and_index,
+};
 
 /// 附件中心条目:展开 messages.attachments JSON,联表 sessions 取标题。
 #[derive(Debug, Clone, Serialize)]

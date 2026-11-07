@@ -1,5 +1,5 @@
 /* ============ 页面骨架(对齐模板 04/06/08/09) ============
-   通用类:.pg 根 / .pg-aside 左配置栏 / .pg-sec 分区 / .pg-lab 分组标签
+   通用类:.pg 根 / .pg-sec 分区 / .pg-lab 分组标签
            .pg-foot 底栏 / .pg-run 深色主行动 / .pg-main 右主区 / .pane 面板
    所有页面共用,保证跨页一致的圆角/间距/字号层级 */
 
@@ -11,7 +11,7 @@
 .resize-handle {
   width: calc(5px * var(--ui-scale)); flex-shrink: 0; cursor: col-resize;
   background: transparent; transition: background .15s;
-  touch-action: none; position: relative; z-index: 5;
+  touch-action: none; position: relative; z-index: var(--z-base);
 }
 .resize-handle:hover, .resize-handle.dragging { background: var(--brand-line); }
 

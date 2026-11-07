@@ -202,7 +202,11 @@ pub(crate) fn coverage_candidates(
             });
         }
     }
-    cands.sort_by(|a, b| b.cov_score.cmp(&a.cov_score).then_with(|| a.ord.cmp(&b.ord)));
+    cands.sort_by(|a, b| {
+        b.cov_score
+            .cmp(&a.cov_score)
+            .then_with(|| a.ord.cmp(&b.ord))
+    });
     Ok(cands)
 }
 
@@ -220,11 +224,10 @@ fn fts_candidates(
          JOIN doc_chunks c ON c.id = doc_chunks_fts.rowid
          WHERE doc_chunks_fts MATCH ?1 AND c.session_id = ?2",
     );
-    let mut values: Vec<rusqlite::types::Value> =
-        vec![
-            rusqlite::types::Value::Text(fts_q.to_string()),
-            rusqlite::types::Value::Text(session_id.to_string()),
-        ];
+    let mut values: Vec<rusqlite::types::Value> = vec![
+        rusqlite::types::Value::Text(fts_q.to_string()),
+        rusqlite::types::Value::Text(session_id.to_string()),
+    ];
     if let Some(h) = doc_hint {
         sql.push_str(" AND (c.doc_id=?3 OR c.doc_name LIKE '%'||?4||'%')");
         values.push(rusqlite::types::Value::Text(h.to_string()));
@@ -239,10 +242,9 @@ fn fts_candidates(
         Ok(s) => s,
         Err(_) => return Vec::new(),
     };
-    let rows = stmt
-        .query_map(rusqlite::params_from_iter(values.iter()), |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, f64>(1)?))
-        });
+    let rows = stmt.query_map(rusqlite::params_from_iter(values.iter()), |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, f64>(1)?))
+    });
     match rows {
         Ok(m) => m.collect::<Result<Vec<_>, _>>().unwrap_or_default(),
         Err(_) => Vec::new(),
@@ -318,11 +320,8 @@ pub fn search_with_policy(
 
     // 组装:id → Cand(FTS 命中的块按 id 回表取内容)
     // 注意:路 B 名次必须在移入 HashMap 前固定(HashMap 遍历顺序不定)。
-    let cov_rank: std::collections::HashMap<i64, usize> = cov
-        .iter()
-        .enumerate()
-        .map(|(i, c)| (c.id, i))
-        .collect();
+    let cov_rank: std::collections::HashMap<i64, usize> =
+        cov.iter().enumerate().map(|(i, c)| (c.id, i)).collect();
     let mut by_id: std::collections::HashMap<i64, Cand> =
         cov.into_iter().map(|c| (c.id, c)).collect();
     let mut missing: Vec<i64> = Vec::new();
@@ -339,7 +338,11 @@ pub fn search_with_policy(
         );
         let mut values: Vec<rusqlite::types::Value> =
             vec![rusqlite::types::Value::Text(session_id.to_string())];
-        values.extend(missing.iter().map(|id| rusqlite::types::Value::Integer(*id)));
+        values.extend(
+            missing
+                .iter()
+                .map(|id| rusqlite::types::Value::Integer(*id)),
+        );
         if let Ok(mut stmt) = conn.prepare(&sql) {
             let rows = stmt.query_map(rusqlite::params_from_iter(values.iter()), |r| {
                 Ok(Cand {

@@ -5,7 +5,7 @@
   right: calc(14px * var(--ui-scale));
   top: 50%;
   transform: translateY(-50%);
-  z-index: 20;
+  z-index: var(--z-pop);
   /* 扩大 hover 热区,便于光标从横线移入浮层 */
   padding: var(--space-4) var(--space-2);
 }

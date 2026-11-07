@@ -11,7 +11,9 @@ pub async fn task_create(
     goal: Option<String>,
     priority: Option<String>,
 ) -> Result<Task, String> {
-    let conn = db::conn().lock().map_err(|e| format!("db lock 失败: {e}"))?;
+    let conn = db::conn()
+        .lock()
+        .map_err(|e| format!("db lock 失败: {e}"))?;
     tasks::create(
         &conn,
         &session_id,
@@ -24,7 +26,9 @@ pub async fn task_create(
 /// 列出会话全部任务(按创建序;前端按状态分组)。
 #[tauri::command]
 pub async fn task_list(session_id: String) -> Result<Vec<Task>, String> {
-    let conn = db::conn().lock().map_err(|e| format!("db lock 失败: {e}"))?;
+    let conn = db::conn()
+        .lock()
+        .map_err(|e| format!("db lock 失败: {e}"))?;
     tasks::list_by_session(&conn, &session_id)
 }
 
@@ -37,7 +41,9 @@ pub async fn task_update(
     status: Option<String>,
     priority: Option<String>,
 ) -> Result<(), String> {
-    let conn = db::conn().lock().map_err(|e| format!("db lock 失败: {e}"))?;
+    let conn = db::conn()
+        .lock()
+        .map_err(|e| format!("db lock 失败: {e}"))?;
     tasks::update(
         &conn,
         &id,
@@ -51,13 +57,17 @@ pub async fn task_update(
 /// 写回任务计划(plan JSON);null 清除。
 #[tauri::command]
 pub async fn task_set_plan(id: String, plan: Option<String>) -> Result<(), String> {
-    let conn = db::conn().lock().map_err(|e| format!("db lock 失败: {e}"))?;
+    let conn = db::conn()
+        .lock()
+        .map_err(|e| format!("db lock 失败: {e}"))?;
     tasks::set_plan(&conn, &id, plan.as_deref())
 }
 
 /// 删除任务。
 #[tauri::command]
 pub async fn task_delete(id: String) -> Result<(), String> {
-    let conn = db::conn().lock().map_err(|e| format!("db lock 失败: {e}"))?;
+    let conn = db::conn()
+        .lock()
+        .map_err(|e| format!("db lock 失败: {e}"))?;
     tasks::remove(&conn, &id)
 }

@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::fs::{backup, paths};
 
-use super::common::{audit, session_id_is_bound_to_project};
+use super::common::audit;
 use super::io::root_for_session;
 
 // ---------------- 精确编辑(局部替换) ----------------
@@ -29,16 +29,7 @@ pub fn edit_text(
     session_id: Option<&str>,
 ) -> Result<EditResult, String> {
     let root = root_for_session(session_id)?;
-    let enforce = session_id_is_bound_to_project(session_id);
-    edit_text_in(
-        &root,
-        rel,
-        old,
-        new,
-        replace_all,
-        &backup::backup_dir(),
-        enforce,
-    )
+    edit_text_in(&root, rel, old, new, replace_all, &backup::backup_dir())
 }
 
 pub(crate) fn edit_text_in(
@@ -48,16 +39,11 @@ pub(crate) fn edit_text_in(
     new: &str,
     replace_all: bool,
     backup_base: &Path,
-    enforce: bool,
 ) -> Result<EditResult, String> {
     if old.is_empty() {
         return Err("old 不能为空:请给出待替换的原文片段".into());
     }
-    let path = if enforce {
-        paths::ensure_within(root, Path::new(rel))?
-    } else {
-        paths::resolve(root, rel, true)?
-    };
+    let path = paths::resolve_guarded(root, rel)?;
     if !path.is_file() {
         return Err(format!(
             "`{rel}` 不是文件(精确编辑需目标已存在,新建请用 fs_write)"
@@ -67,9 +53,8 @@ pub(crate) fn edit_text_in(
     if bytes[..bytes.len().min(8192)].contains(&0) {
         return Err(format!("`{rel}` 看起来是二进制文件,无法精确编辑"));
     }
-    let text = std::str::from_utf8(&bytes).map_err(|_| {
-        format!("`{rel}` 不是合法 UTF-8 文本,无法精确替换;请用 fs_write 整体重写")
-    })?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| format!("`{rel}` 不是合法 UTF-8 文本,无法精确替换;请用 fs_write 整体重写"))?;
     let count = text.matches(old).count();
     if count == 0 {
         return Err(format!(
@@ -96,4 +81,3 @@ pub(crate) fn edit_text_in(
         backup_id,
     })
 }
-

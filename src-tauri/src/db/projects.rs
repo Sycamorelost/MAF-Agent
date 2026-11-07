@@ -200,8 +200,11 @@ pub fn update_shared_context(id: &str, ctx: Option<&str>) -> Result<(), String> 
 /// 删除项目,同时把该项目下所有会话的 project_id 置为 NULL(归入「未分类」)。
 pub fn delete(id: &str) -> Result<(), String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    conn.execute("UPDATE sessions SET project_id=NULL WHERE project_id=?1", [id])
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE sessions SET project_id=NULL WHERE project_id=?1",
+        [id],
+    )
+    .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM projects WHERE id=?1", [id])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -225,16 +228,18 @@ pub fn get(id: &str) -> Result<Option<ProjectRow>, String> {
              FROM projects WHERE id=?1",
         )
         .map_err(|e| e.to_string())?;
-    let row = stmt
-        .query_row([id], row_to_project)
-        .ok();
+    let row = stmt.query_row([id], row_to_project).ok();
     Ok(row)
 }
 
 /// 构建项目工作区守卫提示词(追加到 system_prompt 末尾)。
 pub fn build_project_guard_prompt(project: &ProjectRow) -> String {
     let ctx = project.shared_context.as_deref().unwrap_or("");
-    let ctx_display = if ctx.trim().is_empty() { "(无)" } else { ctx.trim() };
+    let ctx_display = if ctx.trim().is_empty() {
+        "(无)"
+    } else {
+        ctx.trim()
+    };
     format!(
         "\n\n## 当前项目工作区\n\
          - 项目名: {name}\n\
@@ -283,7 +288,11 @@ pub fn remove_project_guard(session_id: &str) -> Result<(), String> {
         Some(idx) => existing[..idx].trim_end().to_string(),
         None => existing,
     };
-    let new_sp = if trimmed.is_empty() { None } else { Some(trimmed.as_str()) };
+    let new_sp = if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.as_str())
+    };
     crate::db::sessions::set_system_prompt(session_id, new_sp)?;
     Ok(())
 }

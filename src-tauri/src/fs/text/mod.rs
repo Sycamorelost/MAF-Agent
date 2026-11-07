@@ -17,18 +17,18 @@ mod grep;
 mod io;
 
 pub use chunk::{
-    write_chunk_append, write_chunk_begin, write_chunk_finish, write_chunk_known, WriteChunkState,
+    WriteChunkState, write_chunk_append, write_chunk_begin, write_chunk_finish, write_chunk_known,
 };
-pub use common::{FileEntry, SheetInput, WriteResult, MAX_READ_CHARS};
-pub use edit::edit_text;
+pub use common::{FileEntry, MAX_READ_CHARS, SheetInput, WriteResult};
 pub use edit::EditResult;
+pub use edit::edit_text;
 pub use export::{export_docx_ext, export_xlsx};
 pub use grep::grep;
 pub use io::{delete, list, read_text, read_text_page, root, root_for_session, write_text};
 
 #[cfg(test)]
 pub(crate) use chunk::{
-    backdate_chunk, write_chunk_begin_in, CHUNK_SESSION_TTL, MAX_CHUNK_SESSIONS_PER_OWNER,
+    CHUNK_SESSION_TTL, MAX_CHUNK_SESSIONS_PER_OWNER, backdate_chunk, write_chunk_begin_in,
 };
 #[cfg(test)]
 pub(crate) use edit::edit_text_in;

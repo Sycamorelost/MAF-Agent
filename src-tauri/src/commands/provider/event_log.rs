@@ -114,6 +114,9 @@ mod tests {
             }]),
             ..Default::default()
         };
-        assert_ne!(fingerprint(&[call("{\"path\":\"a\"}")]), fingerprint(&[call("{\"path\":\"b\"}")]));
+        assert_ne!(
+            fingerprint(&[call("{\"path\":\"a\"}")]),
+            fingerprint(&[call("{\"path\":\"b\"}")])
+        );
     }
 }

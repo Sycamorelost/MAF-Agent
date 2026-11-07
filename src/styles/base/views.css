@@ -71,7 +71,7 @@
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-s);
   font-size: var(--font-sub);
-  color: var(--text-2);
+  color: var(--text-1);
   cursor: pointer;
   transition: background .12s, color .12s;
   white-space: nowrap;
@@ -84,31 +84,12 @@
   color: var(--brand-deep);
   font-weight: 600;
 }
-.side-item.on .md-dot {
-  background: var(--brand);
-  color: #fff;
-  border-color: var(--brand);
-}
 .side-item.on .when {
   color: var(--brand);
   opacity: .75;
 }
 .side-item .txt { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
 .side-item .when { font-size: var(--font-mini); color: var(--text-4); flex: none; }
-.side-item .md-dot {
-  width: calc(18px * var(--ui-scale));
-  height: calc(18px * var(--ui-scale));
-  flex-shrink: 0;
-  border: 1px solid var(--brand-line);
-  background: var(--brand-soft);
-  color: var(--brand);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-mini);
-  font-weight: 700;
-  border-radius: var(--radius-xs, 4px);
-}
 /* 内联重命名 */
 .side-item .side-rename {
   flex: 1; min-width: 0;
@@ -118,10 +99,19 @@
   padding: 3px 6px; outline: none;
 }
 
-/* 缩进层级:项目内会话多一级缩进(space-2 + 14px folder + 4px gap) */
-.side-proj-item {
+/* 缩进层级:项目内会话与项目名首字对齐(项目头 = 8px padding + 14px 文件夹 + 4px 间距);
+   双类选择器提权,防止单类 .side-item 的内边距在不同加载顺序下反盖 */
+.side-item.side-proj-item {
   padding-left: calc(var(--space-2) + 14px + var(--space-1));
 }
+/* 项目展开/闭合:与侧栏同一套抽屉时长/缓动,grid 行高插值实现高度动画 */
+.proj-drawer {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--drawer-dur) var(--drawer-ease);
+}
+.proj-drawer.closed { grid-template-rows: 0fr; }
+.proj-drawer-inner { overflow: hidden; min-height: 0; }
 
 /* 空状态 */
 .side-empty {
@@ -225,7 +215,11 @@
   padding: var(--space-4) var(--pad-x);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4); min-height: 0; }
+  gap: var(--space-4); min-height: 0;
+  /* 隐藏滚动条后,用上下边缘渐隐提示「还有内容可滚动」 */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 28px), transparent 100%);
+}
 .chat-scroll::-webkit-scrollbar { width: 0; height: 0; }
 .chat-inner {
   max-width: var(--chat-max-w);

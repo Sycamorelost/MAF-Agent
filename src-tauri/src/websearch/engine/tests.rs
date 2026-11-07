@@ -61,8 +61,7 @@ fn key_id_is_engine_scoped() {
 #[test]
 fn legacy_config_defaults_to_api_mode() {
     // 旧版 search_config.json 只有 engine/base_url:缺省字段必须回落 api
-    let cfg: SearchConfig =
-        serde_json::from_str(r#"{"engine":"tavily","base_url":""}"#).unwrap();
+    let cfg: SearchConfig = serde_json::from_str(r#"{"engine":"tavily","base_url":""}"#).unwrap();
     assert_eq!(cfg.mode, "api");
     assert!(cfg.mcp_server.is_empty());
     assert!(cfg.mcp_tool.is_empty());
@@ -147,7 +146,10 @@ fn mcp_tool_pick_and_args_follow_schema() {
     let picked = pick_search_tool(&tools, "").unwrap();
     assert_eq!(picked.name, "tavily-search");
     // 显式指定优先
-    assert_eq!(pick_search_tool(&tools, "tavily-extract").unwrap().name, "tavily-extract");
+    assert_eq!(
+        pick_search_tool(&tools, "tavily-extract").unwrap().name,
+        "tavily-extract"
+    );
     // 只填 schema 声明过的键
     let args = mcp_search_args(picked, "rust", 5);
     assert_eq!(args["query"], "rust");
@@ -264,15 +266,25 @@ async fn e2e_mcp_search_then_switch_to_api_does_not_reuse_previous_engine() {
     assert_eq!(engine.name(), "mcp");
 
     let t0 = std::time::Instant::now();
-    let first = engine.search("rust 生命周期", 3).await.expect("MCP 搜索失败");
+    let first = engine
+        .search("rust 生命周期", 3)
+        .await
+        .expect("MCP 搜索失败");
     let first_ms = t0.elapsed().as_millis();
     assert_eq!(first.len(), 3, "MCP 结果条数异常:{first:?}");
     assert_eq!(first[0].url, "https://example.com/0");
-    assert!(first[0].title.contains("rust 生命周期"), "查询未传给 server:{}", first[0].title);
+    assert!(
+        first[0].title.contains("rust 生命周期"),
+        "查询未传给 server:{}",
+        first[0].title
+    );
     assert!(runtime.is_running("e2e-search").await, "server 未启动");
 
     let t1 = std::time::Instant::now();
-    let second = engine.search("tauri 打包", 2).await.expect("MCP 二次搜索失败");
+    let second = engine
+        .search("tauri 打包", 2)
+        .await
+        .expect("MCP 二次搜索失败");
     let warm_ms = t1.elapsed().as_millis();
     assert_eq!(second.len(), 2);
     assert!(
@@ -300,7 +312,10 @@ async fn e2e_mcp_search_then_switch_to_api_does_not_reuse_previous_engine() {
     // --- 切回 MCP:同一个 runtime 立即恢复 ---
     let back = build_engine_from(mcp_cfg("e2e-search"), &runtime, &dir).unwrap();
     assert_eq!(back.name(), "mcp");
-    let third = back.search("deepseek", 2).await.expect("切回 MCP 后搜索失败");
+    let third = back
+        .search("deepseek", 2)
+        .await
+        .expect("切回 MCP 后搜索失败");
     assert_eq!(third.len(), 2);
     assert!(third[0].title.contains("deepseek"));
 
@@ -324,7 +339,12 @@ async fn perf_real_api_search_latency() {
         let t = std::time::Instant::now();
         let got = engine.search("Rust 2026 新特性", 5).await;
         match got {
-            Ok(v) => println!("[perf] API(deepseek) 第{}次 {}ms / {} 条", i + 1, t.elapsed().as_millis(), v.len()),
+            Ok(v) => println!(
+                "[perf] API(deepseek) 第{}次 {}ms / {} 条",
+                i + 1,
+                t.elapsed().as_millis(),
+                v.len()
+            ),
             Err(e) => panic!("API 搜索失败({}ms): {e}", t.elapsed().as_millis()),
         }
     }
@@ -347,9 +367,15 @@ async fn perf_real_tavily_mcp_startup() {
     )
     .await
     .expect("tavily-mcp 启动失败");
-    println!("[perf] tavily-mcp 冷启动(进程+握手) {}ms", t.elapsed().as_millis());
+    println!(
+        "[perf] tavily-mcp 冷启动(进程+握手) {}ms",
+        t.elapsed().as_millis()
+    );
     let t2 = std::time::Instant::now();
-    let tools = rt.list_tools("perf-tavily", false).await.unwrap_or_default();
+    let tools = rt
+        .list_tools("perf-tavily", false)
+        .await
+        .unwrap_or_default();
     println!(
         "[perf] tools/list {}ms,{} 个工具:{:?}",
         t2.elapsed().as_millis(),
@@ -376,7 +402,10 @@ async fn perf_real_agent_search_mcp() {
     )
     .await
     .expect("agent-search-mcp 启动失败");
-    println!("[perf] agent-search-mcp 冷启动 {}ms", t0.elapsed().as_millis());
+    println!(
+        "[perf] agent-search-mcp 冷启动 {}ms",
+        t0.elapsed().as_millis()
+    );
     let tools = rt.list_tools("perf-agent", false).await.unwrap_or_default();
     println!(
         "[perf] tools: {:?}",
@@ -400,15 +429,18 @@ async fn perf_real_agent_search_mcp() {
     let elapsed = t1.elapsed().as_millis();
     println!(
         "[perf] agent-search-mcp.search {}ms ok={} error={:?}",
-        elapsed,
-        res.ok,
-        res.error
+        elapsed, res.ok, res.error
     );
     assert!(res.ok, "agent-search-mcp 调用失败:{:?}", res.error);
     let parsed = parse_mcp_results(&res.content);
     println!("[perf] 解析到 {} 条结果", parsed.len());
     assert!(!parsed.is_empty(), "agent-search-mcp 返回内容解析为 0 条");
     for (i, r) in parsed.iter().take(3).enumerate() {
-        println!("  [{}] {} → {}", i, r.title.chars().take(60).collect::<String>(), r.url);
+        println!(
+            "  [{}] {} → {}",
+            i,
+            r.title.chars().take(60).collect::<String>(),
+            r.url
+        );
     }
 }

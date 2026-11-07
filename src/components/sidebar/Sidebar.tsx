@@ -14,7 +14,7 @@ import { useToast } from '../../lib/useToast';
 import {
   readCollapsed, writeCollapsed,
   readProjectsOpen, writeProjectsOpen,
-  clampSidebarWidth, SIDEBAR_W_DEFAULT,
+  clampSidebarWidth, defaultSidebarWidth,
   isAbsolutePath,
   sectionFromPath,
   sidebarMode,
@@ -108,13 +108,21 @@ export default function Sidebar() {
   useEffect(() => { if (visible) void refreshProjects(); }, [visible, refreshProjects]);
 
   // 进入知识库分区时加载笔记列表(切走不重复请求;回到分区时刷新);
-  // 页面内新建/保存/删除/导入后广播 notes_changed,此处同步刷新
+  // 页面内新建/保存/删除/导入后广播 notes_changed,此处同步刷新。
+  // 2s 内的重复进入/事件复用上次结果,避免频繁切分区导致的重复全量扫盘。
+  const notesFetchedAt = useRef(0);
   useEffect(() => {
     if (!visible || section !== 'knowledge') return;
-    const reload = () => void ipc.notesList().then(setNotes).catch(() => setNotes([]));
+    const reload = (force = false) => {
+      const now = Date.now();
+      if (!force && now - notesFetchedAt.current < 2000) return;
+      notesFetchedAt.current = now;
+      void ipc.notesList().then(setNotes).catch(() => setNotes([]));
+    };
     reload();
-    window.addEventListener('notes_changed', reload);
-    return () => window.removeEventListener('notes_changed', reload);
+    const onChanged = () => reload(true);
+    window.addEventListener('notes_changed', onChanged);
+    return () => window.removeEventListener('notes_changed', onChanged);
   }, [visible, section]);
 
   // ====== 宽度拖拽 ======
@@ -483,7 +491,7 @@ export default function Sidebar() {
           onPointerMove={onResizeMove}
           onPointerUp={onResizeEnd}
           onPointerCancel={onResizeEnd}
-          onDoubleClick={() => setSidebarWidth(SIDEBAR_W_DEFAULT)}
+          onDoubleClick={() => setSidebarWidth(defaultSidebarWidth())}
         />
         </aside>
       </div>

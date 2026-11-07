@@ -158,7 +158,10 @@ pub fn preset_servers() -> Vec<McpServerConfig> {
 ///   复用「联网搜索」页的 Key 配置,用户无需在 MCP 页再填一遍。
 ///
 /// 已显式配置 env 的同名变量优先(不覆盖)。
-pub(crate) fn preset_env(args: &[String], configured: &HashMap<String, String>) -> Vec<(String, String)> {
+pub(crate) fn preset_env(
+    args: &[String],
+    configured: &HashMap<String, String>,
+) -> Vec<(String, String)> {
     // agent-search-mcp 默认零 Key 即跑通,不注入任何 env
     if args.iter().any(|a| a.contains("agent-search-mcp")) {
         return Vec::new();

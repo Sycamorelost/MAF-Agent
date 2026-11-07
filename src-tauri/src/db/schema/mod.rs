@@ -270,9 +270,7 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     //   - sessions.permission_mode:inherit = 跟随全局审批档;ask/workspace/full = 会话覆盖。
     tx.execute_batch(MIGRATION_V25_TASKS)?;
     ensure_column(&tx, "todos", "task_id", "TEXT")?;
-    tx.execute_batch(
-        "CREATE INDEX IF NOT EXISTS idx_todos_task ON todos(task_id, item_id);",
-    )?;
+    tx.execute_batch("CREATE INDEX IF NOT EXISTS idx_todos_task ON todos(task_id, item_id);")?;
     ensure_column(
         &tx,
         "sessions",
@@ -394,9 +392,7 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     }
     // 2) sessions.folder_id 存在 + project_id 不存在 → rename column
     if has_sessions_folder_id && !has_sessions_project_id {
-        tx.execute_batch(
-            "ALTER TABLE sessions RENAME COLUMN folder_id TO project_id;",
-        )?;
+        tx.execute_batch("ALTER TABLE sessions RENAME COLUMN folder_id TO project_id;")?;
     }
     // 3) projects 表存在且缺 model_override / shared_context → 加列
     if has_projects {
@@ -408,14 +404,10 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             .filter_map(|c| c.ok())
             .collect();
         if !cols.contains(&"model_override".to_string()) {
-            tx.execute_batch(
-                "ALTER TABLE projects ADD COLUMN model_override TEXT;",
-            )?;
+            tx.execute_batch("ALTER TABLE projects ADD COLUMN model_override TEXT;")?;
         }
         if !cols.contains(&"shared_context".to_string()) {
-            tx.execute_batch(
-                "ALTER TABLE projects ADD COLUMN shared_context TEXT;",
-            )?;
+            tx.execute_batch("ALTER TABLE projects ADD COLUMN shared_context TEXT;")?;
         }
     }
     // 4) 索引:projects 存在就建新的,sessions 上就建
@@ -494,12 +486,7 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     // 此处不再建表,新装环境天然无此三表。
     // V36(P1):断流/报错时保留已生成正文 —— messages.partial 标记该条回答被中断。
     //   0 = 完整回答(默认),1 = 中断/报错时落库的部分内容,前端气泡显示「已中断」。
-    ensure_column(
-        &tx,
-        "messages",
-        "partial",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
+    ensure_column(&tx, "messages", "partial", "INTEGER NOT NULL DEFAULT 0")?;
     // V37(D7 可解释性):会话事件追加表。只追加、不改写既有消息表,用于回答
     //   「模型当时看到了什么」:上下文压缩、项目约定注入、网页抓取、每轮请求指纹。
     //   payload 为 JSON 文本(结构随 kind 而定,读方忽略未知字段);会话删除时随库清理。

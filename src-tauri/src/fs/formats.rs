@@ -35,18 +35,14 @@ pub fn zip_list(rel: &str, session_id: Option<&str>) -> Result<Vec<ZipEntry>, St
 }
 
 /// 解包 zip 到工作区目录,返回解包文件数。
-pub fn zip_extract(
-    rel: &str,
-    dest: &str,
-    session_id: Option<&str>,
-) -> Result<usize, String> {
+pub fn zip_extract(rel: &str, dest: &str, session_id: Option<&str>) -> Result<usize, String> {
     zip_extract_in(&paths::resolve_workspace_root(session_id)?, rel, dest)
 }
 
 // ---------------- 内核 ----------------
 
 pub fn extract_in(root: &Path, rel: &str) -> Result<String, String> {
-    let path = paths::resolve(root, rel, true)?;
+    let path = paths::resolve_guarded(root, rel)?;
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
@@ -67,7 +63,7 @@ pub fn extract_in(root: &Path, rel: &str) -> Result<String, String> {
 }
 
 fn zip_list_in(root: &Path, rel: &str) -> Result<Vec<ZipEntry>, String> {
-    let path = paths::resolve(root, rel, true)?;
+    let path = paths::resolve_guarded(root, rel)?;
     let file = std::fs::File::open(&path).map_err(|e| format!("打开压缩包失败: {e}"))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("解析 zip 失败: {e}"))?;
     let mut out = Vec::new();
@@ -88,8 +84,8 @@ fn zip_list_in(root: &Path, rel: &str) -> Result<Vec<ZipEntry>, String> {
 }
 
 fn zip_extract_in(root: &Path, rel: &str, dest: &str) -> Result<usize, String> {
-    let path = paths::resolve(root, rel, true)?;
-    let dest_path = paths::resolve(root, dest, false)?;
+    let path = paths::resolve_guarded(root, rel)?;
+    let dest_path = paths::resolve_guarded(root, dest)?;
     std::fs::create_dir_all(&dest_path).map_err(|e| format!("创建目标目录失败: {e}"))?;
 
     let file = std::fs::File::open(&path).map_err(|e| format!("打开压缩包失败: {e}"))?;

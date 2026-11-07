@@ -57,10 +57,10 @@ pub(crate) fn quota_violation(
     size: u64,
     quota: AttachmentQuota,
 ) -> Option<String> {
-    if let Some(p) = path {
-        if usage.paths.contains(p) {
-            return None;
-        }
+    if let Some(p) = path
+        && usage.paths.contains(p)
+    {
+        return None;
     }
     if usage.files + 1 > quota.max_files {
         return Some(format!(
@@ -153,7 +153,7 @@ mod tests {
     fn usage_dedupes_same_path() {
         let conn = setup_db();
         let same = meta(r"D:\att\s1\a.png", 10);
-        add_msg(&conn, &[same.clone()]);
+        add_msg(&conn, std::slice::from_ref(&same));
         // 同路径再次复用:不应重复计数
         add_msg(&conn, &[same]);
         add_msg(&conn, &[meta(r"D:\att\s1\b.txt", 30)]);

@@ -159,7 +159,7 @@
   margin: 0 auto var(--space-2);
   box-sizing: border-box;
   position: relative; /* 悬浮抽屉的定位锚点 */
-  z-index: 10;        /* 高于消息区/Composer */
+  z-index: var(--z-drawer);        /* 高于消息区/Composer(--z-base) */
   flex: none;
 }
 
@@ -251,7 +251,7 @@
   bottom: calc(var(--ctl-h) + 6px);  /* 紧凑头和抽屉间留 6px 间隙 */
   left: 0;
   right: 0;
-  z-index: 10;
+  z-index: var(--z-base);
   background: var(--bg-surface);
   border: 1px solid var(--text-4);          /* 高亮30%:用最深灰代替默认边框 */
   border-radius: var(--radius-m);
@@ -326,7 +326,9 @@
   background: var(--bg-hover);
   color: var(--text-1);
 }
-.chat-todos-refresh:active svg { animation: todos-spin .4s linear; }
+/* 手动刷新进行中:图标持续旋转直到拉取完成(由组件 .spin 控制) */
+.chat-todos-refresh svg.spin { animation: todos-spin .7s linear infinite; }
+.chat-todos-refresh:disabled { opacity: .55; cursor: default; }
 @keyframes todos-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }

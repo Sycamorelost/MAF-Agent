@@ -66,9 +66,7 @@ pub(super) fn html_to_markdown(html: &str) -> String {
                 }
                 "br" => out.push('\n'),
                 "p" | "div" | "section" | "article" | "header" | "footer" | "main" | "tr"
-                | "blockquote" | "pre" | "table" | "ul" | "ol" | "dl" => {
-                    push_newlines(&mut out, 2)
-                }
+                | "blockquote" | "pre" | "table" | "ul" | "ol" | "dl" => push_newlines(&mut out, 2),
                 "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
                     let level = name[1..].parse::<usize>().unwrap_or(1).min(6);
                     push_newlines(&mut out, 2);

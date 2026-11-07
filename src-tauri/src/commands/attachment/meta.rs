@@ -115,7 +115,9 @@ pub(crate) fn ensure_in_attachments_dir(p: &std::path::Path) -> Result<(), Strin
         Ok(_) => Err("路径不在 attachments 目录内".into()),
         Err(_) => {
             let parent = p.parent().ok_or_else(|| "路径无效".to_string())?;
-            let canon_parent = parent.canonicalize().map_err(|e| format!("路径无效: {e}"))?;
+            let canon_parent = parent
+                .canonicalize()
+                .map_err(|e| format!("路径无效: {e}"))?;
             if !canon_parent.starts_with(&root) {
                 return Err("路径不在 attachments 目录内".into());
             }

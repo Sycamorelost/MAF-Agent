@@ -70,7 +70,10 @@ fn todo_write_exec(args: &Value, session_id: Option<&str>) -> (String, bool) {
             content,
             status,
             priority,
-            task_id: r.task_id.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+            task_id: r
+                .task_id
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
         });
     }
     if items.is_empty() {

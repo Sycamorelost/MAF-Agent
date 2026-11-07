@@ -9,7 +9,7 @@
   padding: var(--space-2) 0 var(--space-3);
   background: transparent;
   flex-shrink: 0;
-  z-index: 2;
+  z-index: var(--z-base);
 }
 .composer-docked .composer-box {
   /* 输入卡与正文同轴同宽(720px):阅读区与输入区形成「一列」 */

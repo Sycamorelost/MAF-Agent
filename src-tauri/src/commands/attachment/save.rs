@@ -74,7 +74,10 @@ pub async fn save_attachment(
 /// 只提取文本、不落盘:供「去 AI 味」工作台等页面把拖入的文件直接填进输入区。
 /// 写临时文件后复用统一提取管线(编码/格式处理一致),用完即删。
 #[tauri::command]
-pub async fn extract_text_preview(file_name: String, data_base64: String) -> Result<String, String> {
+pub async fn extract_text_preview(
+    file_name: String,
+    data_base64: String,
+) -> Result<String, String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&data_base64)
         .map_err(|e| format!("base64 解码失败: {e}"))?;

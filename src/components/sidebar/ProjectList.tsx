@@ -80,37 +80,41 @@ export function ProjectListView({
                 className={`chevron${!isCollapsed ? ' down' : ''}`}
               />
             </div>
-            {!isCollapsed && g.items.length === 0 && (
-              <div className="side-empty-note">
-                暂无会话 ·{' '}
-                <button
-                  className="link-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNewSessionInProject(g.project.id);
-                  }}
-                >
-                  新建
-                </button>
+            {/* 会话列表:抽屉动画展开/收起(与侧栏同一套时长/缓动) */}
+            <div className={`proj-drawer${isCollapsed ? ' closed' : ''}`}>
+              <div className="proj-drawer-inner">
+                {g.items.length === 0 && (
+                  <div className="side-empty-note">
+                    暂无会话 ·{' '}
+                    <button
+                      className="link-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNewSessionInProject(g.project.id);
+                      }}
+                    >
+                      新建
+                    </button>
+                  </div>
+                )}
+                {g.items.map((s) => (
+                  <SessionRowItem
+                    key={s.id}
+                    session={s}
+                    indentClass="side-proj-item"
+                    activeId={activeId}
+                    editingId={editingId}
+                    editingText={editingText}
+                    onNavigate={onSessionNavigate}
+                    onStartRename={onSessionStartRename}
+                    onEditingTextChange={onEditingTextChange}
+                    onCommitRename={onCommitRename}
+                    onCancelRename={onCancelRename}
+                    onContextMenu={onSessionContextMenu}
+                  />
+                ))}
               </div>
-            )}
-            {!isCollapsed &&
-              g.items.map((s) => (
-                <SessionRowItem
-                  key={s.id}
-                  session={s}
-                  indentClass="side-proj-item"
-                  activeId={activeId}
-                  editingId={editingId}
-                  editingText={editingText}
-                  onNavigate={onSessionNavigate}
-                  onStartRename={onSessionStartRename}
-                  onEditingTextChange={onEditingTextChange}
-                  onCommitRename={onCommitRename}
-                  onCancelRename={onCancelRename}
-                  onContextMenu={onSessionContextMenu}
-                />
-              ))}
+            </div>
           </div>
         );
       })}
