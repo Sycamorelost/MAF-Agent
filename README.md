@@ -7,7 +7,7 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 与云端 AI 助手不同，myAgent **不托管任何模型与数据**：你自备 API Key，数据全部存储在本机（SQLite + 纯文本文件），只与你的模型服务商直连。
 
 
-**版本** ：v2.4.1
+**版本** ：v2.5.3
 
 **许可证** ：Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明）
 
@@ -46,19 +46,13 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 ### 专业工作台
 
 - 会话内嵌检查器:产物 / 变更与回滚 / 上下文与记忆 / 工具流水四页签,宽度可拖拽
-- 目标级任务计划面板,步骤进度实时同步
-- 会话按项目文件夹分组管理
+- 目标级任务清单面板:进度自动同步(模型主动回写 + 后端收尾兜底,等待你决策时不打扰),支持手动刷新并带结果反馈
+- 会话按项目文件夹分组管理,项目内会话与项目名对齐、展开收起抽屉动画
 
-### 学习中心
+### 工具与权限
 
-- AI 生成结构化学习计划:意图澄清 → 知识地图 → 阶段设计 → 资料推荐,周维度拆解 + 每日任务
-- 自学材料逐知识点生成(表格/公式/图示),支持「深入研究」一键转为对话
-- 小测(Quiz):选择/判断/计算/填空即时判分,简答与主观题由模型按参考答案批改
-- 掌握度(Mastery)追踪与间隔重复复习(自评 ×0.4 + 测验 ×0.6)
-- 试题库:测验题目自动入库(同计划同题干去重),支持手动加题 / 编辑 / 筛选 / 搜索
-- 组卷自测:勾选题目生成整卷,交卷统一批改,答错可补作重批
-- 学习统计打卡热力图与专注计时器
-- 数据文件化存储(learningcenter/ 纯 JSON,可查看、可迁移),旧版数据库表自动迁移合并
+- 文件操作沙箱:相对路径一律限制在工作区内(拒绝 `..` 越界),输入绝对路径可显式操作其他位置;组件级边界比较,杜绝 `D:\proj` 误判包含 `D:\proj2`
+- MCP 工具权限四档:每步审批 / 低风险自动放行 / 自动审批 / 完全信任;「完全信任」档含高危命令、工作区外读写在内的全部调用直接执行,全程写入本地审计日志
 
 ### 持久记忆
 
@@ -135,8 +129,8 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 |---|---|
 | 桌面框架 | Tauri 2.12（Rust + 系统 WebView2，不捆绑 Chromium） |
 | 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
-| 后端 | Rust（edition 2024，rust 1.90+），约 126 个 IPC 命令 |
-| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 37） |
+| 后端 | Rust（edition 2024，rust 1.90+），约 180 个 IPC 命令 |
+| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 38） |
 | 网络 | reqwest（rustls-tls）+ SSE 流式解析，Rust 层直推前端 |
 | 附件解析 | pdf-extract / docx-rs / calamine / pptxgenjs（全部本地原生） |
 | 密钥保护 | Windows DPAPI + AES-GCM 双路径加密（`provider/keychain.rs`） |
@@ -158,7 +152,8 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 | 数据存储 | 全部本地：SQLite + Markdown/JSON 文件，数据目录由用户自选、可迁移 |
 | 出网范围 | 仅连接用户自选的 LLM API 端点，无任何遥测/上报 |
 | API Key | Windows DPAPI 加密存储，辅以 AES-GCM 密钥链，不落明文；`secrets/` 目录权限收紧为仅当前系统用户可读 |
-| 工具执行 | 高危 shell 命令（格式化/删根/改注册表等）一律人工确认，任何审批档位都不静默执行；外部 MCP 工具默认按中等风险走确认 |
+| 文件操作 | 未绑定项目的会话默认沙箱:相对路径限制在工作区内,绝对路径显式放行;组件级边界比较杜绝前缀误判 |
+| 工具执行 | 审批档位四选一:每步审批 / 低风险自动放行 / 自动审批 / 完全信任;「完全信任」档含高危命令、工作区外操作在内的调用直接执行,全程记入本地审计日志,建议仅在受信任环境使用 |
 | 数据库升级 | 版本升级前自动快照（保留最近 2 份），工具调用记录按会话滚动保留最近 500 条 |
 | 导出 | 导出 PDF 的链接做协议白名单与转义校验，恶意链接降级为纯文本 |
 | CSP | 严格白名单，禁止远程脚本与对象嵌入 |
@@ -211,7 +206,7 @@ pnpm tauri build
 
 ```bash
 cd src-tauri
-cargo test        # Rust 单元测试(约 560 项)
+cargo test        # Rust 单元测试(482 项)
 cargo check       # 静态检查
 ```
 
@@ -239,7 +234,7 @@ myAgent/
 ├── src/                        # 前端源码(React 19 + TS)
 │   ├── components/             # 标题栏、导航、全局搜索等通用组件
 │   ├── lib/                    # IPC 封装、工具函数
-│   ├── pages/                  # chat / study / translate / draw / settings
+│   ├── pages/                  # chat / memory / knowledge / attachments / translate / draw / settings
 │   ├── stores/                 # Zustand 状态
 │   └── styles/                 # 样式
 └── src-tauri/                  # 后端源码(Rust)
@@ -254,7 +249,6 @@ myAgent/
         ├── db/                 # SQLite 会话与分支存储
         ├── provider/           # 服务商模板/Key 轮换/DPAPI 密钥链
         ├── websearch/          # 联网搜索(引擎/抓取/排序)
-        ├── study/              # 学习中心:计划流水线/测验/题库/试卷(文件化存储)
         ├── memory/             # memory.md 读写与监听
         └── settings.rs         # 应用设置
 ```
@@ -276,20 +270,13 @@ data/
 │   └── memory.versions/        # 记忆版本快照
 ├── notes/                      # 知识库 Markdown 笔记(含 11 条预置笔记;preset_seeded.json 记录落盘状态,删除不复活)
 ├── translations/               # 翻译历史
-├── attachments/                # 会话附件
 ├── images/                     # AI 绘画产物
-└── learningcenter/             # 学习中心数据(纯 JSON 文件,可直接查看/迁移)
-    ├── plans/<id>/             # 单个学习计划:plan.json(结构+进度) + trail.jsonl(生成过程事件流)
-    ├── bank/<scope>/<id>.json  # 试题库:scope 为计划 id 或 manual(手动加题)
-    ├── papers/<id>.json        # 试卷:题目快照 + 作答 + 批改结果,自包含不受题库改动影响
-    └── templates/              # 学习内容模板
+└── attachments/                # 会话附件
 ```
 
 **重要**:记忆与笔记均为纯文本 Markdown,你可以用任何编辑器直接修改，应用会通过文件监听实时同步。删除应用前如需保留数据，备份整个数据目录即可。
 
-> 历史版本说明：深度研究功能已整体移除，数据库升级时会自动删除 `research_sessions` 表；历史研究产物文件（`data/research/**`）保留在数据目录中，可自行清理。
->
-> 学习中心迁移（v2.1.0）：旧版 `data/study/` 目录与数据库三表（`question_bank` / `study_papers` / `study_paper_items`）在升级后自动并入 `learningcenter/` —— 目录按集合并（已存在不覆盖）、旧表导出为 JSON 后删表；迁移幂等，失败会在下次启动自动重试，无需手工干预。
+> 历史版本说明：深度研究功能已整体移除，数据库升级时会自动删除 `research_sessions` 表；历史研究产物文件（`data/research/**`）保留在数据目录中，可自行清理。学习中心功能（study）亦已在后续版本中整体移除。
 >
 > 数据库迁移全自动且幂等：升级即建（如 V26 会话预设钉住列、V27 文档块全文索引 `doc_chunks_fts`）,存量数据自动回填；索引表缺失或分词器过旧时自动重建自愈，无需手工干预。
 >
@@ -310,10 +297,11 @@ data/
 
 ## 第三方致谢
 
-本项目包含以下开源作品的衍生内容，均已遵循其许可证(详见 [NOTICE](NOTICE)):
+本项目引用以下开源作品，均已遵循其许可证(详见 [NOTICE](NOTICE)):
 
-- **[Deep-tutor](https://github.com/hershate/Deep-tutor)**(Apache-2.0)—— 学习规划管线，由 FastAPI/React 移植为 Rust/React 并重新实现
 - **[Cherry Studio](https://github.com/CherryHQ/cherry-studio)**(AGPL-3.0)—— 仅参考其服务商管理与桌面助手架构理念，未复制任何代码或资源
+- **[MCP 官方参考服务器](https://github.com/modelcontextprotocol/servers)**(MIT)—— 内置「项目文件 / 长期记忆 / 顺序思考」服务,运行时经 npx 按需启动,不随安装包分发
+- **[agent-search-mcp](https://github.com/lennney/agent-search-mcp)**(Apache-2.0)—— 内置「联网搜索」默认服务,零 API Key 多引擎聚合,运行时经 npx 按需启动,不随安装包分发
 
 ---
 
