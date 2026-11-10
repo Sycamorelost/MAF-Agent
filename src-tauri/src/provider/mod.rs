@@ -1,7 +1,7 @@
 //! 模型抽象层(Provider trait)。
 //!
 //! 对应 plan/01-phase1-mvp.md §3.3:
-//!   - Provider trait:chat_stream 流式;generate_image / translate 预留
+//!   - Provider trait:chat_stream 流式
 //!   - OpenAI 兼容 Provider(base_url + api_key + model)
 //!   - API Key 本地加密存储
 //!   - 内置 Provider 模板
@@ -9,7 +9,6 @@
 //! 设计要点:
 //!   - 一份 Provider 协议,多模型可插拔
 //!   - 流式输出通过 Channel 推到前端(tauri::ipc::Channel)
-//!   - 图像/翻译接口预留默认实现,未接入的 Provider 返回 NotSupported
 
 pub mod custom;
 pub mod keychain;
@@ -224,27 +223,6 @@ pub enum StreamChunk {
 /// 流式响应:Pin<Box<dyn Stream>>。Provider 内部可自由组合 reqwest SSE / 测试 mock。
 pub type ChatStream = Pin<Box<dyn Stream<Item = StreamChunk> + Send>>;
 
-/// 图像生成请求。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImageRequest {
-    /// 图像模型名(如 dall-e-3);由命令层指定,Provider 不再持有“当前模型”状态
-    pub model: String,
-    pub prompt: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub size: Option<String>, // "1024x1024"
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub n: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub style: Option<String>, // vivid / natural
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImageResponse {
-    /// 图像可访问 URL 或 base64 data URI
-    pub url: String,
-    pub revised_prompt: Option<String>,
-}
-
 /// Provider 错误分类,便于前端区分处理。
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
@@ -262,8 +240,6 @@ pub enum ProviderError {
     Server(String),
     #[error("请求参数错误: {0}")]
     BadRequest(String),
-    #[error("该 Provider 不支持此能力: {0}")]
-    NotSupported(String),
     #[error("协议解析失败: {0}")]
     Parse(String),
     #[error("其他: {0}")]
@@ -273,19 +249,8 @@ pub enum ProviderError {
 /// Provider 统一抽象。
 #[async_trait]
 pub trait Provider: Send + Sync {
-    /// 展示名
-    fn display_name(&self) -> &str;
-
     /// 流式对话。所有 Provider 必须实现。
     async fn chat_stream(&self, req: ChatRequest) -> Result<ChatStream, ProviderError>;
-
-    /// 图像生成(预留)。默认 NotSupported。
-    async fn generate_image(&self, _req: ImageRequest) -> Result<ImageResponse, ProviderError> {
-        Err(ProviderError::NotSupported(format!(
-            "{} 不支持图像生成",
-            self.display_name()
-        )))
-    }
 }
 
 /// 子调用 LLM 通道(harness:上下文压缩 / 子智能体委派共用)。

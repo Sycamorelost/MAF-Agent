@@ -109,41 +109,6 @@
   border-radius: var(--radius-m);
 }
 
-/* ============ AI 绘画 ============ */
-
-.draw-grid {
-  max-width: calc(760px * var(--ui-scale));
-  margin: var(--space-4) auto 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(calc(220px * var(--ui-scale)), 1fr));
-  gap: var(--space-3);
-}
-.draw-item {
-  border: 1px solid var(--composer-border);
-  border-radius: var(--radius-m);
-  overflow: hidden;
-  background: var(--bg-main);
-  box-shadow: var(--shadow-card);
-  cursor: zoom-in;
-  padding: 0;
-  transition: box-shadow .15s, border-color .15s;
-}
-.draw-item:hover { border-color: var(--brand-line); box-shadow: var(--shadow-card-h); }
-.draw-item img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
-}
-.draw-item-meta {
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-caption);
-  color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: left;
-}
 .draw-lightbox {
   position: fixed;
   inset: 0;
@@ -158,29 +123,6 @@
   max-width: 92vw;
   max-height: 92vh;
   border-radius: var(--radius-m);
-}
-/* D5:带参数与操作条的预览卡片 */
-.draw-lightbox-inner {
-  background: var(--bg-main); border-radius: var(--radius-l);
-  padding: var(--space-3); max-width: 92vw; max-height: 94vh;
-  display: flex; flex-direction: column; gap: var(--space-2);
-  cursor: default; overflow: auto;
-}
-.draw-lightbox-inner img { max-width: 100%; max-height: 72vh; object-fit: contain; }
-.draw-lightbox-meta .p { font-size: var(--font-caption); color: var(--text-1); line-height: 1.5; }
-.draw-lightbox-meta .m { font-size: var(--font-micro); color: var(--text-4); margin-top: var(--space-1); font-family: var(--font-mono); }
-.draw-lightbox-acts { display: flex; gap: var(--space-2); justify-content: flex-end; }
-
-/* D5:生成中骨架屏 shimmer */
-.dw-card.loading .thumb { position: relative; overflow: hidden; }
-.dw-card.loading .shim {
-  position: absolute; inset: 0;
-  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%);
-  animation: shim 1.4s infinite;
-}
-@keyframes shim {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(100%); }
 }
 
 /* 通用 toast(轻量操作反馈) */

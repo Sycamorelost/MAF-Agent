@@ -32,10 +32,10 @@
 
 .set-content {
   flex: 1; overflow-y: auto; min-width: 0;
-  margin: 10px 10px 10px 0;
+  /* 与左侧导航同高:取消卡片外边距与自身圆角,四角由 .pg-settings 的圆角统一裁切 */
+  margin: 0;
   padding: var(--space-5) var(--pad-x);
   background: var(--bg-surface);
-  border-radius: 12px;
   min-height: 0; }
 
 /* 设置分区切换:复用主面板同一套抽屉动画(同一时长/缓动) */

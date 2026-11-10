@@ -32,7 +32,6 @@ const TPL = (id: string, models: string[]): ipc.ProviderTemplate => ({
   base_url: '',
   models,
   all_models: models,
-  image_models: [],
   docs_url: null,
   notice: null,
   openai_compat: true,

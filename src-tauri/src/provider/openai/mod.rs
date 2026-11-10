@@ -17,14 +17,11 @@ use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 
-use crate::provider::{
-    ChatMessage, ChatRequest, ChatStream, ImageRequest, ImageResponse, Provider, ProviderError,
-};
+use crate::provider::{ChatMessage, ChatRequest, ChatStream, Provider, ProviderError};
 
 /// OpenAI 兼容 Provider。
 pub struct OpenAiCompat {
     pub id: String,
-    pub display_name: String,
     pub base_url: String, // 例如 https://api.openai.com/v1
     pub api_key: String,
     /// 是否发送 `stream_options.include_usage`(用于采集精确 Token 用量)。
@@ -51,13 +48,11 @@ impl OpenAiCompat {
 
     pub fn new(
         id: impl Into<String>,
-        display_name: impl Into<String>,
         base_url: impl Into<String>,
         api_key: impl Into<String>,
     ) -> Self {
         Self {
             id: id.into(),
-            display_name: display_name.into(),
             base_url: base_url.into().trim_end_matches('/').to_string(),
             api_key: api_key.into(),
             stream_options: false,
@@ -107,10 +102,6 @@ impl OpenAiCompat {
 
 #[async_trait]
 impl Provider for OpenAiCompat {
-    fn display_name(&self) -> &str {
-        &self.display_name
-    }
-
     async fn chat_stream(&self, req: ChatRequest) -> Result<ChatStream, ProviderError> {
         let url = format!("{}/chat/completions", self.base_url);
 
@@ -174,43 +165,5 @@ impl Provider for OpenAiCompat {
 
         // SSE 解析:按行读取,提取 data: 行,喂给 parse_chunk(实现见 chunk 模块)。
         Ok(chunk::sse_stream(resp))
-    }
-
-    /// 图像生成:POST {base_url}/images/generations。
-    /// 响应兼容两种形态:data[0].b64_json(包成 data URI)或 data[0].url。
-    async fn generate_image(&self, req: ImageRequest) -> Result<ImageResponse, ProviderError> {
-        let url = format!("{}/images/generations", self.base_url);
-
-        let mut body = json!({
-            "model": req.model,
-            "prompt": req.prompt,
-            "n": req.n.unwrap_or(1),
-        });
-        if let Some(size) = &req.size {
-            body["size"] = json!(size);
-        }
-        if let Some(style) = &req.style {
-            body["style"] = json!(style);
-        }
-
-        let resp = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| ProviderError::Network(format!("{e}")))?;
-
-        if !resp.status().is_success() {
-            return Err(Self::map_http_error(resp).await);
-        }
-
-        let v: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| ProviderError::Parse(format!("{e}")))?;
-        Self::parse_image_response(&v)
     }
 }

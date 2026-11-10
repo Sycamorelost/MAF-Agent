@@ -399,17 +399,24 @@
 }
 
 /* 会话产物卡:AI 回复中提到的本地文件,点击在文件管理器中定位 */
+/* 固定一行 3 列、卡片同高;超过 3 个时容器固定高度内部滚动,不撑占会话窗口 */
 .out-cards {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-2);
   margin-top: var(--space-2);
   max-width: 100%;
+  max-height: calc(66px * var(--ui-scale)); /* 一行完整 + 次行露边提示可滚动 */
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 .out-card {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-2);
+  height: calc(50px * var(--ui-scale));
+  box-sizing: border-box;
+  min-width: 0;
   padding: var(--space-2) var(--space-3);
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -419,6 +426,7 @@
   text-align: left;
   transition: border-color .12s, background .12s;
 }
+.out-card > svg { flex: none; }
 .out-card:hover { border-color: var(--brand); background: var(--bg-hover); }
 .out-card-info { display: flex; flex-direction: column; min-width: 0; }
 .out-card-name {
@@ -482,34 +490,22 @@
   white-space: nowrap;
   pointer-events: none;
 }
-.out-card-image { flex-direction: column; align-items: stretch; padding: var(--space-2); }
 .out-thumb {
-  width: calc(200px * var(--ui-scale));
-  max-height: calc(160px * var(--ui-scale));
+  width: calc(30px * var(--ui-scale));
+  height: calc(30px * var(--ui-scale));
+  flex: none;
   object-fit: cover;
   border-radius: var(--radius-s);
   cursor: zoom-in;
   display: block;
 }
 .out-thumb-empty {
-  height: calc(90px * var(--ui-scale));
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-4);
   font-size: var(--font-micro);
   background: var(--bg-main);
-  border-radius: var(--radius-s);
-}
-.out-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-  min-width: 0;
-  color: var(--text-3);
-  font-size: var(--font-micro);
 }
 
 /* 消息 hover 操作工具条 */

@@ -187,11 +187,13 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .sidebar{
   position:relative;
   width:var(--sidebar-w);flex:0 0 var(--sidebar-w);height:100%;
-  background:var(--bg-side);
+  /* 融入最底层:不用 --bg-side 独立铺色,透出身后 .window 的 --bg-main,
+     与主面板同一平面,不再呈现独立悬浮图层 */
+  background:transparent;
   display:flex;flex-direction:column;
   /* 顶部不留 padding:「新对话」按钮与右侧主面板上端同高(主面板贴 .body 顶);
      右侧留白收窄一半,列表文字更贴近主面板 */
-  padding:0 calc(var(--pad-x-narrow) * .5) calc(var(--space-3) * .5) var(--pad-x-narrow);
+  padding:0 calc(var(--pad-x-narrow) * .25) calc(var(--space-3) * .5) calc(var(--pad-x-narrow) * .5);
   overflow:hidden;
   transition:transform var(--drawer-dur) var(--drawer-ease);
 }
@@ -214,7 +216,7 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
   display:flex;align-items:center;justify-content:center;gap:var(--space-1);
   width:100%;height:calc(36px * var(--ui-scale));flex:none;
   border:1px solid var(--border);border-radius:var(--radius-m);
-  background:#fff;color:var(--text-1);
+  background:var(--bg-surface);color:var(--text-1);
   font-family:var(--font);font-size:var(--font-sub);font-weight:600;
   cursor:pointer;transition:background .15s,transform .1s;
 }
@@ -291,8 +293,8 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 
 /* 主区 stage */
 .stage{flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:var(--space-10) var(--pad-x) var(--space-4);display:flex;flex-direction:column;align-items:center}
-.stage::-webkit-scrollbar{width:8px}
-.stage::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.stage::-webkit-scrollbar{width:4px}
+.stage::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:2px}
 .stage::-webkit-scrollbar-thumb:hover{background:var(--text-3)}
 
 /* 欢迎语 */

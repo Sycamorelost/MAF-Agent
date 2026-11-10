@@ -252,9 +252,11 @@ mod tests {
 
     #[test]
     fn attachment_quota_clamped_to_range() {
-        let mut s = AppSettings::default();
-        s.attachment_session_max_files = 0;
-        s.attachment_session_max_mb = 0;
+        let mut s = AppSettings {
+            attachment_session_max_files: 0,
+            attachment_session_max_mb: 0,
+            ..Default::default()
+        };
         let q = AttachmentQuota {
             max_files: s.attachment_session_max_files.clamp(
                 MIN_ATTACHMENT_SESSION_MAX_FILES,
@@ -288,8 +290,10 @@ mod tests {
 
     #[test]
     fn chat_timeout_minutes_clamped_to_range() {
-        let mut s = AppSettings::default();
-        s.chat_timeout_minutes = 0;
+        let mut s = AppSettings {
+            chat_timeout_minutes: 0,
+            ..Default::default()
+        };
         assert_eq!(
             s.chat_timeout_minutes
                 .clamp(MIN_CHAT_TIMEOUT_MINUTES, MAX_CHAT_TIMEOUT_MINUTES),

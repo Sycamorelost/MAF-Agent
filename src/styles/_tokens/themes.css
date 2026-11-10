@@ -9,8 +9,8 @@
   --bg-frame:     #DCE3EC;
   --bg-main:      #F4F6FA;
   --bg-main-rgb:  244,246,250;
-  --bg-surface:   #FFFFFF;
-  --bg-surface-rgb: 255,255,255;
+  --bg-surface:   #FAFBFE;
+  --bg-surface-rgb: 250,251,254;
   --bg-side:      #EEF1F6;
   --bg-hover:     #E6EAF2;
   --bg-active:    #DDE2EC;
@@ -61,8 +61,8 @@
   --bg-frame:     #E0E6E1;
   --bg-main:      #F1F4F1;
   --bg-main-rgb:  241,244,241;
-  --bg-surface:   #FFFFFF;
-  --bg-surface-rgb: 255,255,255;
+  --bg-surface:   #F9FBF9;
+  --bg-surface-rgb: 249,251,249;
   --bg-side:      #E6EBE6;
   --bg-hover:     #DCE4DC;
   --bg-active:    #D0D8D0;
@@ -86,8 +86,8 @@
   --bg-frame:     #EDE4D8;
   --bg-main:      #FBF6EF;
   --bg-main-rgb:  251,246,239;
-  --bg-surface:   #FFFFFF;
-  --bg-surface-rgb: 255,255,255;
+  --bg-surface:   #FDFAF4;
+  --bg-surface-rgb: 253,250,244;
   --bg-side:      #F0E8DC;
   --bg-hover:     #E8DEC8;
   --bg-active:    #DDCEB6;

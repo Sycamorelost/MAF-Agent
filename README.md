@@ -69,19 +69,6 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 - **一键导入预置(v2.3.0)**：被删的预置笔记一键找回;改过的条目按章节与表格首列逐条合并——你的内容一字不动,只补缺漏的行/表格/章节;导入结果弹窗按「新恢复 / 已合并 / 完全重复」三组明细展示,可滚动逐条核对
 - 标签独立为胶囊样式、笔记摘要剥离 Markdown 符号(v2.3.1);全应用删除操作统一使用应用内确认框,确认前不再先执行删除(v2.3.1)
 
-### 翻译
-
-- 8 种语言互译，源语言自动检测
-- 输入即译(防抖自动触发)
-- 术语表(Glossary)支持：翻译时自动注入命中词条,保证专有名词译法一致
-- **预置术语表(v2.3.1)**：内置 8 类专业术语表(IT / AI / 学术 / 法律 / 金融 / 医学 / 商务 / 通用,参照微软语言门户、术语在线、Google 机器学习术语表、IASB 中文译本、WHO ICD-11、香港律政司法律词汇等权威来源,共 350 词条、中英双向展开 699 条);设置页「一键导入预置术语」合并不覆盖、可反复点击,被删词条自动补回;命中过多时按词长优先注入,大词表支持搜索与分段渲染
-- 最近 100 条历史记录，译文可一键发送到对话
-
-### AI 绘画
-
-- 文生图，历史缩略图管理
-- 本地缩略图生成(Rust 侧 PNG 解码 + JPEG 编码)
-
 ### 全局搜索
 
 - `Ctrl+K` 唤起，本地全文检索会话消息、记忆、知识库
@@ -138,7 +125,7 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 
 **架构要点**
 
-- 复用系统 WebView2 而非捆绑 Chromium：安装包约 **12–16 MB**（NSIS / MSI），显著小于 Electron 系同类产品
+- 复用系统 WebView2 而非捆绑 Chromium：安装包约 **12–18 MB**（NSIS 12 MB / MSI 18 MB），显著小于 Electron 系同类产品
 - 附件解析、搜索排序、流式转发、密钥链等重逻辑全部在 Rust 原生层完成
 - 严格 CSP 白名单：`default-src 'self'; object-src 'none'; base-uri 'none'`，无远程脚本
 - 前端构建产物约 8.4 MB
@@ -230,11 +217,11 @@ myAgent/
 ├── index.html                  # Vite 入口
 ├── package.json                # 前端依赖与脚本
 ├── vite.config.ts              # Vite 配置(端口 1420)
-├── tutorials/                  # 应用内教程(聊天记忆/绘图/翻译)
+├── tutorials/                  # 应用内教程(聊天记忆)
 ├── src/                        # 前端源码(React 19 + TS)
 │   ├── components/             # 标题栏、导航、全局搜索等通用组件
 │   ├── lib/                    # IPC 封装、工具函数
-│   ├── pages/                  # chat / memory / knowledge / attachments / translate / draw / settings
+│   ├── pages/                  # chat / memory / knowledge / attachments / settings
 │   ├── stores/                 # Zustand 状态
 │   └── styles/                 # 样式
 └── src-tauri/                  # 后端源码(Rust)
@@ -269,14 +256,12 @@ data/
 │   ├── memory.md               # 会话记忆(可直接编辑)
 │   └── memory.versions/        # 记忆版本快照
 ├── notes/                      # 知识库 Markdown 笔记(含 11 条预置笔记;preset_seeded.json 记录落盘状态,删除不复活)
-├── translations/               # 翻译历史
-├── images/                     # AI 绘画产物
 └── attachments/                # 会话附件
 ```
 
 **重要**:记忆与笔记均为纯文本 Markdown,你可以用任何编辑器直接修改，应用会通过文件监听实时同步。删除应用前如需保留数据，备份整个数据目录即可。
 
-> 历史版本说明：深度研究功能已整体移除，数据库升级时会自动删除 `research_sessions` 表；历史研究产物文件（`data/research/**`）保留在数据目录中，可自行清理。学习中心功能（study）亦已在后续版本中整体移除。
+> 历史版本说明：深度研究功能已整体移除，数据库升级时会自动删除 `research_sessions` 表；历史研究产物文件（`data/research/**`）保留在数据目录中，可自行清理。学习中心（study）、独立翻译页与 AI 绘画页亦已在后续版本中整体移除。
 >
 > 数据库迁移全自动且幂等：升级即建（如 V26 会话预设钉住列、V27 文档块全文索引 `doc_chunks_fts`）,存量数据自动回填；索引表缺失或分词器过旧时自动重建自愈，无需手工干预。
 >

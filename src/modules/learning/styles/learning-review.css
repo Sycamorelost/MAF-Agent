@@ -1,0 +1,146 @@
+/* ===== 错题 ===== */
+.lrn-wrong {
+  gap: var(--space-2);
+}
+
+/* ===== 规划周视图 ===== */
+.lrn-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  gap: var(--space-2);
+  overflow-x: auto;
+}
+
+.lrn-week-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 180px;
+  padding: var(--space-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+
+.lrn-week-col.is-today {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.lrn-week-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-sub);
+  color: var(--text-1);
+}
+
+.lrn-plan-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: var(--bg-main);
+  border-radius: var(--radius-s);
+}
+
+.lrn-plan-node {
+  font-size: var(--font-mini, 12px);
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+/* ===== Markdown 正文 ===== */
+.lrn-md {
+  font-size: var(--font-sub);
+  line-height: 1.75;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.lrn-md > :first-child {
+  margin-top: 0;
+}
+
+.lrn-md > :last-child {
+  margin-bottom: 0;
+}
+
+.lrn-md h1,
+.lrn-md h2,
+.lrn-md h3,
+.lrn-md h4 {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--font-body, 14px);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.lrn-md p {
+  margin: var(--space-1) 0;
+}
+
+.lrn-md ul,
+.lrn-md ol {
+  margin: var(--space-1) 0;
+  padding-left: var(--space-5, 20px);
+}
+
+.lrn-md code {
+  padding: 1px 5px;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-mini, 12px);
+  background: var(--bg-hover);
+  border-radius: var(--radius-s);
+}
+
+.lrn-md pre {
+  overflow: auto;
+  padding: var(--space-2);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+
+.lrn-md pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.lrn-md blockquote {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--brand-line);
+  color: var(--text-2);
+}
+
+.lrn-md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-mini, 12px);
+}
+
+.lrn-md th,
+.lrn-md td {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.lrn-md img {
+  max-width: 100%;
+}
+
+@media (max-width: 860px) {
+  .lrn-tree-layout,
+  .lrn-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lrn-week {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+}

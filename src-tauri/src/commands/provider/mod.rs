@@ -10,7 +10,6 @@ pub(crate) mod compress;
 pub(crate) mod context_budget;
 pub(crate) mod event_log;
 pub(crate) mod failover;
-pub(crate) mod image;
 pub(crate) mod keys;
 pub(crate) mod models;
 pub(crate) mod pricing;
@@ -21,10 +20,6 @@ pub(crate) mod usage;
 // ---------- 命令与对外类型(保持 crate::commands::provider::xxx 原路径可用)----------
 
 pub use chat::{ChatStreamInput, chat_stream};
-pub use image::{
-    GenerateImageInput, ImageListItem, ImageMeta, ImageResultItem, generate_image, list_images,
-    read_image,
-};
 pub use keys::{
     KeySlotView, delete_api_key, delete_provider_key, get_rotation_configs, has_api_key,
     list_provider_keys, list_stored_provider_ids, save_api_key, save_provider_key,
@@ -49,7 +44,6 @@ pub(crate) use assembly::{
     build_provider, build_provider_with_stream_options, validate_base_url_scheme,
 };
 pub(crate) use failover::is_stream_options_rejected;
-pub(crate) use image::download_image_checked;
 pub(crate) use keys::resolve_spec;
 
 pub use crate::provider::model_cards::{load_model_cache, save_model_cache};

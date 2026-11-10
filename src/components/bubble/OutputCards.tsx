@@ -166,18 +166,25 @@ function ImageCard({ file, sessionId }: { file: CardFile; sessionId?: string }) 
   }, [file.path, sessionId]);
 
   return (
-    <div className="out-card out-card-image">
+    <div className="out-card">
       {url ? (
-        <img className="out-thumb" src={url} alt={file.name} onClick={() => setZoom(true)} />
+        <img
+          className="out-thumb"
+          src={url}
+          alt={file.name}
+          title="点击放大"
+          onClick={() => setZoom(true)}
+        />
       ) : (
-        <div className="out-thumb out-thumb-empty">{err ? '无法预览' : '加载图片…'}</div>
+        <div className="out-thumb out-thumb-empty">{err ? '无法预览' : '…'}</div>
       )}
-      <div className="out-card-foot">
+      <span className="out-card-info">
         <span className="out-card-name" title={file.path}>
           {file.name}
         </span>
-        <CardActions file={file} sessionId={sessionId} />
-      </div>
+        <span className="out-card-kind">{file.kind ?? '图片'}</span>
+      </span>
+      <CardActions file={file} sessionId={sessionId} />
       {zoom && url && (
         <div className="draw-lightbox" onClick={() => setZoom(false)}>
           <img src={url} alt={file.name} />

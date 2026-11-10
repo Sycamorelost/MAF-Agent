@@ -1,0 +1,226 @@
+/* ===== 知识树 ===== */
+.lrn-tree-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+}
+
+.lrn-tree {
+  max-height: calc(560px * var(--ui-scale));
+  overflow: auto;
+}
+
+.lrn-tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+
+.lrn-tree-node {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: var(--font-sub);
+  text-align: left;
+  color: var(--text-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lrn-tree-node:hover {
+  background: var(--bg-hover);
+}
+
+.lrn-tree-node.is-active {
+  color: var(--brand-deep);
+  background: var(--brand-soft);
+  border-color: var(--brand-line);
+}
+
+.lrn-detail {
+  min-height: 280px;
+}
+
+/* ===== 材料 ===== */
+.lrn-split {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2.2fr);
+  gap: var(--space-2);
+  align-items: start;
+}
+
+.lrn-material-list {
+  max-height: calc(620px * var(--ui-scale));
+  overflow: auto;
+}
+
+.lrn-reader {
+  min-height: 320px;
+}
+
+.lrn-material-item {
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--bg-surface);
+}
+
+.lrn-material-item + .lrn-material-item {
+  margin-top: var(--space-2);
+}
+
+.lrn-material-item > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: var(--font-sub);
+  color: var(--text-1);
+}
+
+.lrn-material-inline {
+  margin-top: var(--space-2);
+  background: var(--bg-main);
+}
+
+/* ===== 题库 / 考试题 ===== */
+.lrn-question,
+.lrn-exam-item {
+  gap: var(--space-2);
+}
+
+.lrn-options {
+  margin: 0;
+  padding-left: var(--space-5, 20px);
+  font-size: var(--font-sub);
+  color: var(--text-2);
+  line-height: 1.8;
+}
+
+.lrn-options-choose {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lrn-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 6px 10px;
+  font-size: var(--font-sub);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  cursor: pointer;
+}
+
+.lrn-choice:hover {
+  background: var(--bg-hover);
+}
+
+.lrn-choice:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.lrn-choice-letter {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--brand);
+}
+
+.lrn-details {
+  font-size: var(--font-sub);
+  color: var(--text-2);
+}
+
+.lrn-details > summary {
+  cursor: pointer;
+  color: var(--text-3);
+}
+
+.lrn-answer {
+  margin: 4px 0;
+  font-size: var(--font-sub);
+  color: var(--ok);
+}
+
+.lrn-answer-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2);
+  background: var(--bg-main);
+  border-radius: var(--radius-m);
+}
+
+.lrn-score-card {
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.lrn-score {
+  font-size: calc(var(--font-title, 17px) + 14px);
+  color: var(--brand);
+}
+
+.lrn-manual {
+  background: var(--bg-main);
+}
+
+.lrn-submit-bar {
+  position: sticky;
+  bottom: var(--space-2);
+  padding: var(--space-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+
+.lrn-answer-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lrn-answer-dot {
+  min-width: 26px;
+  padding: 2px 6px;
+  font-size: var(--font-mini, 12px);
+  color: var(--text-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.lrn-answer-dot.is-done {
+  color: var(--brand-deep);
+  background: var(--brand-soft);
+  border-color: var(--brand-line);
+}
+
+/* ===== 组卷预览 / 专题多选 ===== */
+.lrn-preview {
+  background: var(--bg-main);
+}
+
+.lrn-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--space-2);
+}
+

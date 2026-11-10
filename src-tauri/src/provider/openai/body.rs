@@ -2,7 +2,7 @@
 
 use serde_json::json;
 
-use crate::provider::{ChatMessage, EffortLevel, ImageResponse, ProviderError, ReasoningSpec};
+use crate::provider::{ChatMessage, EffortLevel, ReasoningSpec};
 
 use super::OpenAiCompat;
 
@@ -165,34 +165,5 @@ impl OpenAiCompat {
                 }
             }
         }
-    }
-
-    /// 解析 images/generations 响应 JSON,兼容 b64_json 与 url 两种返回。
-    pub(super) fn parse_image_response(
-        v: &serde_json::Value,
-    ) -> Result<ImageResponse, ProviderError> {
-        let item = v
-            .get("data")
-            .and_then(|d| d.get(0))
-            .ok_or_else(|| ProviderError::Parse("响应缺少 data[0]".into()))?;
-        let revised = item
-            .get("revised_prompt")
-            .and_then(|r| r.as_str())
-            .map(|s| s.to_string());
-        if let Some(b64) = item.get("b64_json").and_then(|b| b.as_str()) {
-            return Ok(ImageResponse {
-                url: format!("data:image/png;base64,{b64}"),
-                revised_prompt: revised,
-            });
-        }
-        if let Some(u) = item.get("url").and_then(|u| u.as_str()) {
-            return Ok(ImageResponse {
-                url: u.to_string(),
-                revised_prompt: revised,
-            });
-        }
-        Err(ProviderError::Parse(
-            "data[0] 既无 b64_json 也无 url".into(),
-        ))
     }
 }
