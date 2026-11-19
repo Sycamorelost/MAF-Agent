@@ -29,4 +29,16 @@ describe('inlineMd 链接安全', () => {
       '&lt;b&gt;粗&lt;/b&gt; 与 <code>code</code>',
     );
   });
+
+  it('行内 LaTeX 渲染为 KaTeX,不再保留 $ 记号', () => {
+    const out = inlineMd('由 $E=mc^2$ 可得');
+    expect(out).toContain('class="katex"');
+    expect(out).not.toContain('$');
+    expect(out).toContain('由');
+  });
+
+  it('非法公式不抛出,按 KaTeX 错误样式降级', () => {
+    expect(() => inlineMd('$\\frac{1}{$')).not.toThrow();
+    expect(inlineMd('$\\frac{1}{$')).toContain('katex');
+  });
 });

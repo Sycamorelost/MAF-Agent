@@ -122,6 +122,8 @@ impl SearchEngine for DeepseekSearch {
 
     async fn search(&self, query: &str, max_results: u32) -> Result<Vec<RawSearchResult>, String> {
         let url = format!("{}/v1/tools/search", self.base_url);
+        // DeepSeek 搜索接口限制 query ≤128 字符;过长查询(如整段用户输入)直接截断
+        let query: String = query.chars().take(128).collect();
         let resp = execute(
             &self.client,
             self.client

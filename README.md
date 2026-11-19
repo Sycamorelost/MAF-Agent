@@ -4,7 +4,7 @@
 
 myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不做模型托管，也不做数据中转：你填入自己的 OpenAI 兼容端点与 API Key，应用只与该端点直连；其余数据（会话、分支、记忆、笔记、附件、产物、用量）写入本地 SQLite 与纯文本文件。
 
-**当前版本**：v2.6.1
+**当前版本**：v2.8.0
 **许可证**：Apache-2.0（第三方衍生声明见 [NOTICE](NOTICE)）
 **平台**：Windows 10 / 11（64 位）
 
@@ -34,10 +34,10 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 |---|---|
 | 形态 | 无边框主窗口 + 托盘常驻；双击托盘图标弹出贴任务栏的窄版小窗 |
 | 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
-| 后端 | Rust（edition 2024，rust-version 1.90），184 个 `#[tauri::command]` IPC 入口 |
+| 后端 | Rust（edition 2024，rust-version 1.90），180 个 `#[tauri::command]` IPC 入口 |
 | 数据库 | SQLite（rusqlite bundled），迁移版本 `SCHEMA_VERSION = 38` |
 | 模型接入 | OpenAI 兼容协议，内置 OpenAI / DeepSeek / Kimi / 通义千问 / 智谱 GLM 模板，可自定义端点 |
-| 工具 | 内置 35 个（18 只读 / 11 写 / 6 GUI 自动化）+ 外部 MCP Server |
+| 工具 | 内置 38 个（19 只读 / 13 写 / 6 GUI 自动化）+ 外部 MCP Server |
 | 渲染 | react-markdown + KaTeX + Mermaid + ECharts + highlight.js |
 
 安装包约 17 MB（NSIS），前端构建产物约 8.7 MB。体积主要来自复用系统 WebView2，而不是捆绑 Chromium。
@@ -68,7 +68,6 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 - 会话右侧检查器展示工具流水：工具名、参数摘要、耗时与关联任务，点击可跳到来源消息；参数与输出均脱敏。面板宽度可拖拽（240–520 px），收起后由会话头按钮重新展开。
 - 目标级任务清单：模型通过 `todo_write` / `todo_read` 维护；若回合结束时清单仍未同步，后端会追加一轮提醒模型更新，达到工具轮次上限则跳过。面板支持手动刷新。
 
-<<<<<<< HEAD
 ### 产物与导出
 
 - 模型调用 `present` 工具显式声明交付文件，前端渲染交付列表；未声明但正文出现的路径也会被识别。
@@ -76,14 +75,20 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 - 会话可导出 Markdown；PDF 通过 WebView 调起系统打印对话框，在打印机中选择「另存为 PDF」。导出前的链接做协议白名单与转义校验，非法链接降级为纯文本。
 - 表格类产物可导出 DOCX / XLSX（`fs_export_docx`、`fs_export_xlsx`）。
 
+### 媒体生成与识别
+
+- `image_generate` 调用设置中配置的图像服务商（OpenAI 兼容 `/images/generations`），结果保存到 `outputs/images/` 并自动登记为图片交付卡；服务商与模型在「设置 → 能力 → 媒体能力」中选择。
+- `slides_export` 把结构化大纲导出为 16:9 的 `.pptx`（每页标题、要点、可选配图）；生成失败时回退导出同名 Markdown 大纲，不静默丢内容。
+- `ocr_extract` 用 Windows 系统 OCR 读取图片文字，支持中英混排，结果按视觉顺序返回；依赖系统已安装的 OCR 语言包。
+
 ### 工具与审批
 
 内置工具按用途分三类：
 
 | 类别 | 数量 | 代表工具 |
 |---|---|---|
-| 只读 | 18 | `fs_read` `fs_list` `fs_grep` `file_extract` `zip_list` `doc_search` `doc_read` `doc_list` `web_fetch` `sys_overview` `sys_processes` `sys_disks` `sys_networks` `get_now` `present` `todo_read` / `todo_write` `delegate` |
-| 写入 / 执行 | 11 | `shell_exec` `fs_write` `fs_edit` `fs_write_begin` `fs_write_chunk` `fs_write_finish` `fs_delete` `fs_export_docx` `fs_export_xlsx` `fs_restore` `zip_extract` |
+| 只读 | 19 | `fs_read` `fs_list` `fs_grep` `file_extract` `zip_list` `doc_search` `doc_read` `doc_list` `web_fetch` `sys_overview` `sys_processes` `sys_disks` `sys_networks` `ocr_extract` `get_now` `present` `todo_read` / `todo_write` `delegate` |
+| 写入 / 执行 | 13 | `shell_exec` `fs_write` `fs_edit` `fs_write_begin` `fs_write_chunk` `fs_write_finish` `fs_delete` `fs_export_docx` `fs_export_xlsx` `image_generate` `slides_export` `fs_restore` `zip_extract` |
 | GUI 自动化 | 6 | `ui_list_windows` `ui_find_elements` `ui_invoke` `ui_set_value` `ui_type_text` `ui_focus_window` |
 
 - `todo_write` 与 `present` 只写会话内的任务清单和产物索引，不改动磁盘文件，因此计入只读类。
@@ -91,7 +96,7 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 - 工作区档支持附加自动放行名单，条目可写 `server::tool` 或只写工具名。
 - shell 默认只放行只读命令白名单；解释器与写操作被拒绝。格式化、删根、改注册表等高危命令在逐次审批与工作区档下强制人工确认，模型写入的 `confirm` 参数不能替代确认；完全信任档下不再询问，只记审计。
 - 文件沙箱：相对路径限制在当前会话工作区内，拒绝 `..` 越界；绝对路径可显式操作其他位置。边界比较按路径组件进行，`D:\proj` 不会误判包含 `D:\proj2`。
-- 工具规格按需下发，只影响每轮注入量，不改变可用能力：只读工具全量注入；写工具中 6 个高频项（`shell_exec`、`fs_write`、`fs_edit` 与分块写入三件套）常驻，5 个低频项（删除、DOCX / XLSX 导出、备份恢复、解压）仅在会话历史调用过时注入；GUI 工具只在「完全信任」档注入。
+- 工具规格按需下发，只影响每轮注入量，不改变可用能力：只读工具全量注入；写工具中 8 个高频项（`shell_exec`、`fs_write`、`fs_edit`、分块写入三件套与 `image_generate`、`slides_export`）常驻，5 个低频项（删除、DOCX / XLSX 导出、备份恢复、解压）仅在会话历史调用过时注入；GUI 工具只在「完全信任」档注入。
 - 外部 MCP 工具按 server 粒度裁剪：该 server 在会话历史上被调用过则全量下发；未调用过时，工具数不超过 3 个的 server 全量下发，超过 3 个的只下发名称含 `read` / `list` / `search` / `get` / `find` / `think` / `fetch` / `extract` 的核心子集，无命中则取前 3 个。
 
 ### MCP
@@ -122,14 +127,13 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 
 - 本地解析，不经云端：PDF、DOCX、XLSX（兼容 xls / ods）、PPTX、EPUB、HTML。
 - 附件中心统一管理大小配额、拒绝记录与清理；解析结果以块数与摘要形式注入上下文，不重复注入全文。
+- 从附件中心插入会话时可预览：左侧列表、右侧展示文件名、来源会话、解析状态与摘要，窄窗口自动收起预览栏。
 - 拖拽入会话或从附件中心插入，两者走同一解析链路。
 
-=======
->>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
 ### 全局搜索
 
 - `Ctrl+K` 或标题栏放大镜唤起居中搜索面板，`Esc` 或点击遮罩关闭。
-- 检索范围：会话标题、消息全文（FTS5）、`memory.md`、知识库笔记。结果分组展示并支持跳转定位。
+- 检索范围：会话标题、消息全文（FTS5）、`memory.md`、知识库笔记、附件解析内容（文件名 / 摘要 / 提取正文）。结果按来源分组展示并支持跳转定位。
 
 ### 智能体
 
@@ -148,7 +152,7 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 | 档位 | 定位 | 工具 | 上下文 | 检索 |
 |---|---|---|---|---|
 | 经济 | 快问快答、弱模型 | 7 个：`get_now` `fs_read` `fs_list` `doc_search` `doc_read` `present` `shell_exec` | 20 条 / 24k 字符 | 3-gram，Top-3 |
-| 标准 | 日常默认 | 13 个：常用读写与文档解析，无子代理、删除、GUI | 40 条 / 48k 字符 | 3-gram + 向量，Top-5 |
+| 标准 | 日常默认 | 15 个：常用读写、文档解析与媒体生成，无子代理、删除、GUI | 40 条 / 48k 字符 | 3-gram + 向量，Top-5 |
 | 深度 | 长文档、多步调研 | 全量 | 30 条 / 48k 字符 | 3-gram + 向量 + 重排，Top-5 |
 | 代码 | 改码与重构 | 全量 | 40 条 / 64k 字符 | 3-gram，Top-5 |
 
@@ -165,7 +169,7 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 
 ### 设置
 
-- 分组：模型（服务商 / 智能体管理 / 记忆管理）、能力（联网搜索）、界面（外观与首页 / 导航菜单 / 运行时预设）、扩展（MCP 工具）、数据（用量统计 / 存储位置 / 关于）。
+- 分组：模型（服务商 / 智能体管理 / 记忆管理）、能力（联网搜索 / 媒体能力）、界面（外观与首页 / 导航菜单 / 运行时预设）、扩展（MCP 工具）、数据（用量统计 / 存储位置 / 关于）。
 - 外观可调整主题、字号与首页提示语；导航菜单可拖拽排序，并可隐藏记忆库、知识库、附件入口。
 - 存储位置支持整体迁移数据目录，迁移时同步改写数据库中附件记录的绝对路径。
 
@@ -184,10 +188,10 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 | MCP | rmcp 3（stdio + Streamable HTTP） |
 | Token 估算 | tiktoken 4（纯 Rust，内置多厂商 BPE） |
 | GUI 自动化 | windows 0.62（UI Automation / SendInput / 窗口枚举），仅 Windows 目标 |
+| 媒体 | 图片生成（OpenAI 兼容 HTTP）、演示文稿（ppt-rs）、OCR（Windows.Media.Ocr） |
 
 架构要点：
 
-<<<<<<< HEAD
 - 附件解析、检索排序、流式转发、密钥链、工具调度都在 Rust 侧完成，前端只负责渲染与交互。
 - CSP 为白名单制，原始配置：
 
@@ -208,12 +212,6 @@ object-src 'none'; base-uri 'none'; frame-ancestors 'none'
 3. 请求发往用户配置的服务商端点，SSE 增量回传，前端边接收边渲染。
 4. 模型返回工具调用时，由后端 `dispatcher` 做风险评估与审批判定，执行后把结果作为 tool 消息续接，循环至模型不再调用工具。
 5. 回合结束后落库 `messages`、`usage_record`、`tool_call_log`，并同步任务清单与产物登记。
-=======
-- 复用系统 WebView2 而非捆绑 Chromium：安装包约 **12–18 MB**（NSIS 12 MB / MSI 18 MB），显著小于 Electron 系同类产品
-- 附件解析、搜索排序、流式转发、密钥链等重逻辑全部在 Rust 原生层完成
-- 严格 CSP 白名单：`default-src 'self'; object-src 'none'; base-uri 'none'`，无远程脚本
-- 前端构建产物约 8.4 MB
->>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
 
 ---
 
@@ -276,7 +274,7 @@ cd src-tauri
 cargo test                 # Rust 单元与集成测试，500+ 项
 cargo check                # 静态检查
 cd ..
-pnpm test                  # 前端 32 个测试文件
+pnpm test                  # 前端 35 个测试文件
 npx tsc -b                 # 类型检查
 ```
 
@@ -297,7 +295,6 @@ npx tsc -b                 # 类型检查
 
 ```text
 myAgent/
-<<<<<<< HEAD
 ├── index.html
 ├── package.json
 ├── vite.config.ts
@@ -310,21 +307,6 @@ myAgent/
 │   └── styles/                   # 按域拆分的 CSS
 └── src-tauri/
     ├── tauri.conf.json
-=======
-├── index.html                  # Vite 入口
-├── package.json                # 前端依赖与脚本
-├── vite.config.ts              # Vite 配置(端口 1420)
-├── tutorials/                  # 应用内教程(聊天记忆)
-├── src/                        # 前端源码(React 19 + TS)
-│   ├── components/             # 标题栏、导航、全局搜索等通用组件
-│   ├── lib/                    # IPC 封装、工具函数
-│   ├── pages/                  # chat / memory / knowledge / attachments / settings
-│   ├── stores/                 # Zustand 状态
-│   └── styles/                 # 样式
-└── src-tauri/                  # 后端源码(Rust)
-    ├── tauri.conf.json         # 窗口、CSP、打包配置
-    ├── resources/aiflavor/     # AI 味检测语料资源
->>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
     └── src/
         ├── commands/             # IPC 命令（provider / mcp / memory / attachment / ...）
         ├── db/                   # SQLite schema、迁移、查询
@@ -356,21 +338,14 @@ data/
 ├── presets.json                # 可选：覆盖内置预设
 ├── secrets/                    # DPAPI / AES-GCM 加密的凭据
 ├── conversations/<id>/
-<<<<<<< HEAD
 │   ├── memory.md
 │   └── memory.versions/
 ├── notes/                      # 知识库 Markdown
-=======
-│   ├── memory.md               # 会话记忆(可直接编辑)
-│   └── memory.versions/        # 记忆版本快照
-├── notes/                      # 知识库 Markdown 笔记(含 11 条预置笔记;preset_seeded.json 记录落盘状态,删除不复活)
->>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
 └── attachments/                # 会话附件
 ```
 
 主要数据表：
 
-<<<<<<< HEAD
 | 表 | 用途 |
 |---|---|
 | `sessions` / `messages` / `branches` | 会话、消息、分支树 |
@@ -386,15 +361,6 @@ data/
 迁移全自动且幂等：磁盘 `user_version` 落后时按版本顺序补迁移，存量数据回填；索引表缺失或分词器过旧会重建。深度研究、学习中心、翻译、绘画页面已从界面移除，其中研究相关的 `research_sessions` 表在 V23 迁移中删除；`data/research/**`、`data/images/**` 等历史文件仍保留在数据目录，可自行删除。
 
 记忆与笔记均为纯文本，可用任意编辑器修改。备份整个数据目录即可迁移全部数据。
-=======
-> 历史版本说明：深度研究功能已整体移除，数据库升级时会自动删除 `research_sessions` 表；历史研究产物文件（`data/research/**`）保留在数据目录中，可自行清理。学习中心（study）、独立翻译页与 AI 绘画页亦已在后续版本中整体移除。
->
-> 数据库迁移全自动且幂等：升级即建（如 V26 会话预设钉住列、V27 文档块全文索引 `doc_chunks_fts`）,存量数据自动回填；索引表缺失或分词器过旧时自动重建自愈，无需手工干预。
->
-> 迁移前快照（v2.2.0）：检测到磁盘版本落后时，迁移前自动用 `VACUUM INTO` 生成 `metaagent-v<旧版本>-<时间戳>.db.bak` 快照（保留最近 2 份），升级异常时可手工回滚。
->
-> 预置知识库（v2.3.0，v2.3.1 扩充至 11 条）：首次启动在 `notes/` 落盘 11 条预置内容并写入 `preset_seeded.json` 标记；标记存在期间被删除的预置不会自动复活，需要找回时用知识库页的「导入预置」一键恢复（合并不覆盖,完全重复的跳过）。
->>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
 
 ---
 
@@ -413,7 +379,7 @@ data/
 ## 已知限制
 
 - 仅提供 Windows 构建；GUI 自动化依赖 Windows UI Automation。
-- 附件解析在本地完成，扫描件 PDF（纯图片）没有 OCR，只能提取内嵌文本层。
+- 附件解析不做 OCR：扫描件 PDF（纯图片）只能提取内嵌文本层；需要读取图片文字时，把图片单独拖入会话后用 `ocr_extract` 识别，识别语言取决于系统已安装的 OCR 语言包。
 - 会话导出 PDF 依赖系统 WebView2 打印，分页与字体由系统渲染决定，不同机器可能略有差异。
 - 用量成本估算基于内置计价表，自定义端点需手动维护单价，否则按 0 成本统计。
 - 工具调用日志按会话保留 500 条，超出后最早的记录被覆盖。
@@ -425,6 +391,7 @@ data/
 - **[Cherry Studio](https://github.com/CherryHQ/cherry-studio)**（AGPL-3.0）—— 仅参考服务商管理与桌面助手架构思路，未复制代码或资源
 - **[MCP 官方参考服务器](https://github.com/modelcontextprotocol/servers)**（MIT）—— 内置项目文件 / 长期记忆 / 顺序思考服务，运行时经 npx 启动
 - **[agent-search-mcp](https://github.com/lennney/agent-search-mcp)**（Apache-2.0）—— 内置联网搜索服务，运行时经 npx 启动
+- **[ppt-rs](https://crates.io/crates/ppt-rs)**（Apache-2.0）—— 生成 `.pptx` 演示文稿
 - 其余 Rust 与前端依赖的许可证见 `NOTICE` 与各 crate 元数据
 
 ---

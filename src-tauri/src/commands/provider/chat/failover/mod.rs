@@ -1,10 +1,16 @@
-//! 带多 Key 轮换与故障转移的流式对话主循环。
+﻿//! 带多 Key 轮换与故障转移的流式对话主循环。
+
+mod guards;
+mod runner;
+mod stream;
+mod types;
+mod usage;
 
 use std::time::{Duration, Instant};
 
 use tauri::ipc::Channel;
 
-use crate::db::usage::{self, UsageRecord};
+use crate::db::usage as db_usage;
 use crate::provider::{
     ChatMessage, ChatRequest, StreamChunk, ToolCall, keychain,
     rotation::{self, KeyCandidate, RotationConfig, RotationState},
@@ -17,50 +23,13 @@ use super::super::failover::{
     next_request_id,
 };
 use super::super::keys::{ChatSpec, build_openai, key_candidates, rotation_group, slot_label};
-use super::super::pricing::{PricingCtx, cost_nano_of};
-use super::super::stream::{StreamCancelState, run_cancellable};
+use super::super::stream::StreamCancelState;
 use super::context::{context_over_budget, prune_context};
+use guards::{remaining_budget, todos_sync_needed};
+use stream::{StreamOutcome, consume_stream};
+use usage::{record_failure, record_success};
 
-/// P2(选项 B):整体生成的总时长上限 —— 覆盖连接、首字等待、流式输出与各轮工具调用。
-/// 时长由设置「生成时长」决定(默认 10 分钟,1..=1440),大工程可调大。
-/// 不额外设首字/空闲分段超时(长任务不会被中途的慢思考误杀),只在总时长到点后收口。
-/// 超时会向前端补 `Error`(而不是静默关闭 channel),前端据此保留已生成内容(P1)。
-/// 任务清单同步提醒的触发条件:会话存在未完成任务(in_progress/pending)。
-/// 读库失败按「不需要」处理,绝不因面板状态影响主流。
-fn todos_sync_needed(session_id: &Option<String>) -> bool {
-    let Some(sid) = session_id.as_deref() else {
-        return false;
-    };
-    let Ok(conn) = crate::db::conn().lock() else {
-        return false;
-    };
-    crate::db::todos::list(&conn, sid)
-        .map(|items| {
-            items
-                .iter()
-                .any(|t| matches!(t.status.as_str(), "in_progress" | "pending"))
-        })
-        .unwrap_or(false)
-}
-
-/// 收尾答复是否在等待用户决策:尾部出现疑问标点即视为阻塞于用户输入,
-/// 此时任务清单未更新是正确状态,不做「先同步清单」补轮(否则会空转刷屏)。
-fn awaiting_user_decision(text: &str) -> bool {
-    let tail: String = text.chars().rev().take(240).collect();
-    tail.contains('？') || tail.contains('?')
-}
-
-fn remaining_budget(started: &Instant, total: Duration) -> Duration {
-    total.saturating_sub(started.elapsed())
-}
-
-/// 用量归因上下文(与 Key 选择无关,仅影响落库内容)。
-pub(super) struct Attribution {
-    pub(super) session_id: Option<String>,
-    pub(super) agent_id: Option<String>,
-    pub(super) agent_name: Option<String>,
-    pub(super) pricing: Option<PricingCtx>,
-}
+pub(crate) use types::Attribution;
 
 /// 带轮换的流式对话:按候选 Key 逐个尝试,遇限流/5xx/网络错误则冷却并换下一把。
 /// 候选池可能包含同 base_url 编组内其他 Provider 的 Key(Phase 3)。
@@ -85,8 +54,6 @@ pub(super) fn spawn_chat_with_failover(
     // panic 兜底用的 channel 副本(必须在使用 work 之前克隆)
     let panic_channel = channel.clone();
     let work = async move {
-        use futures::StreamExt;
-
         let group = rotation_group(&spec.provider_id, &spec.base_url);
         let request_id = next_request_id();
         let started = Instant::now();
@@ -105,7 +72,6 @@ pub(super) fn spawn_chat_with_failover(
         // 收尾同步:nudged=已补过一轮(至多一轮,防死循环);
         // pending=最终 Done 已就绪、待注入提醒(注入后立即复位,绝不二次触发)
         let mut todo_nudged = false;
-        let mut todo_sync_pending = false;
         let data_dir = crate::paths::data_dir();
         // harness 子调用通道(上下文压缩 / delegate 委派):取最小槽位 Key 构造一次,全程复用;
         // 无 Key 时为 None,子功能自动降级,主对话不受影响
@@ -199,7 +165,7 @@ pub(super) fn spawn_chat_with_failover(
                         break;
                     }
                 };
-                let masked = usage::mask_key(&key);
+                let masked = db_usage::mask_key(&key);
                 let provider = build_openai(&spec, &key, stream_options);
 
                 // P1-4:即将发起 HTTPS 连接(TLS 握手 + 排队等 2xx),知会前端推进占位文案
@@ -216,114 +182,20 @@ pub(super) fn spawn_chat_with_failover(
                 match connect {
                     Ok(Ok(mut stream)) => {
                         // 首次 2xx 后即锁定该 Key:stream 期间绝不换 Key
-                        let mut first_token_ms: Option<i64> = None;
-                        let mut toks: (Option<u32>, Option<u32>, Option<u32>) = (None, None, None);
-                        let mut reasoning_toks: Option<u32> = None;
-                        let mut cached_toks: Option<u32> = None;
-                        let mut stream_err: Option<String> = None;
-                        // Phase 5e:本轮累积的正文(组装 assistant 消息用)+ 模型请求的工具调用
-                        let mut assistant_text = String::new();
-                        let mut pending_calls: Option<Vec<ToolCall>> = None;
-                        // 本轮是否已下发给前端一个 done(部分中转站流末尾不带 done)
-                        let mut saw_done = false;
-                        // P2:每个 chunk 只受「剩余总预算」约束(不按空闲时长打断长思考)
-                        let mut timed_out = false;
-                        loop {
-                            let chunk = match tokio::time::timeout(
-                                remaining_budget(&started, total_timeout),
-                                stream.next(),
-                            )
-                            .await
-                            {
-                                Ok(Some(c)) => c,
-                                Ok(None) => break,
-                                Err(_) => {
-                                    timed_out = true;
-                                    break;
-                                }
-                            };
-                            match &chunk {
-                                StreamChunk::Usage {
-                                    input_tokens,
-                                    output_tokens,
-                                    total_tokens,
-                                    reasoning_tokens,
-                                    cached_tokens,
-                                } => {
-                                    toks = (*input_tokens, *output_tokens, *total_tokens);
-                                    if reasoning_toks.is_none() {
-                                        reasoning_toks = *reasoning_tokens;
-                                    }
-                                    if cached_toks.is_none() {
-                                        cached_toks = *cached_tokens;
-                                    }
-                                    continue; // 仅后端采集,不转发前端
-                                }
-                                // 思考流也算首响(用户感知的第一字来自思考阶段)
-                                StreamChunk::Delta { content } => {
-                                    assistant_text.push_str(content);
-                                    if first_token_ms.is_none() {
-                                        first_token_ms = Some(started.elapsed().as_millis() as i64);
-                                    }
-                                }
-                                StreamChunk::Reasoning { .. } => {
-                                    if first_token_ms.is_none() {
-                                        first_token_ms = Some(started.elapsed().as_millis() as i64);
-                                    }
-                                }
-                                // 工具调用请求:仅后端消费,由 dispatcher 审批+执行后以 ToolCallResult 推前端
-                                StreamChunk::ToolCalls { calls } => {
-                                    pending_calls = Some(calls.clone());
-                                    continue;
-                                }
-                                StreamChunk::Done {
-                                    prompt_tokens,
-                                    completion_tokens,
-                                    reasoning_tokens,
-                                    cached_tokens,
-                                    ..
-                                } => {
-                                    if toks.2.is_none() {
-                                        let i = toks.0.or(*prompt_tokens);
-                                        let o = toks.1.or(*completion_tokens);
-                                        toks = (i, o, i.zip(o).map(|(a, b)| a + b));
-                                    }
-                                    if reasoning_toks.is_none() {
-                                        reasoning_toks = *reasoning_tokens;
-                                    }
-                                    if cached_toks.is_none() {
-                                        cached_toks = *cached_tokens;
-                                    }
-                                    // 本轮请求了工具调用:这个 done 只代表"本轮生成结束",
-                                    // 整条流还没结束(后面还有工具结果 + 下一轮正文)。
-                                    // 若现在转发,前端会立即收流,后续 delta 会挂到已结束的流上,
-                                    // 表现为最后一条回复一直显示"闪烁光标"且不落库。
-                                    saw_done = true;
-                                    if pending_calls.is_some() {
-                                        continue;
-                                    }
-                                    // 任务清单收尾同步:最终答复已就绪但面板仍有未完成项 → 吞掉这个 Done,
-                                    // 由下方补一轮「先同步清单」提醒(至多一轮),保证进度与答复一致;
-                                    // 答复在等用户决策(疑问句收尾)时不补轮 —— 此时清单停滞是正确状态
-                                    if !todo_nudged
-                                        && stream_err.is_none()
-                                        && !awaiting_user_decision(&assistant_text)
-                                        && todos_sync_needed(&attr.session_id)
-                                    {
-                                        todo_sync_pending = true;
-                                        continue;
-                                    }
-                                }
-                                StreamChunk::Error { message } => {
-                                    stream_err = Some(message.clone())
-                                }
-                                // Phase 5e 新增的两个变体:不影响 token 采集,直接转发前端
-                                _ => {}
-                            }
-                            if channel.send(chunk).is_err() {
-                                break; // 前端已关闭 channel
-                            }
-                        }
+                        let StreamOutcome {
+                            mut assistant_text,
+                            mut reasoning_text,
+                            mut pending_calls,
+                            toks,
+                            reasoning_toks,
+                            cached_toks,
+                            stream_err,
+                            saw_done,
+                            timed_out,
+                            first_token_ms,
+                            todo_sync_pending,
+                        } = consume_stream(&mut stream, &channel, &started, total_timeout, &attr, todo_nudged)
+                            .await;
                         // P2:超时收口 —— 补一个明确的 Error,前端据此保留已生成内容(P1)。
                         // 不执行已请求的工具:结果不完整时执行写入类工具风险更高。
                         if timed_out {
@@ -334,58 +206,36 @@ pub(super) fn spawn_chat_with_failover(
                             let _ = channel.send(StreamChunk::Error { message: msg });
                             return;
                         }
-                        // 成本(纳元):有定价但 token 不足无法拆分时记 unpriced,不写 0 元假账
-                        let cost_nano = attr
-                            .pricing
-                            .as_ref()
-                            .and_then(|p| cost_nano_of(p, toks.0, toks.1, cached_toks));
-                        let (pricing_snapshot, cost_source) = match (&attr.pricing, cost_nano) {
-                            (Some(p), Some(_)) => {
-                                (Some(p.snapshot.clone()), Some(p.source.clone()))
-                            }
-                            (Some(p), None) => (Some(p.snapshot.clone()), Some("unpriced".into())),
-                            (None, _) => (None, Some("none".into())),
-                        };
-                        usage::record(&UsageRecord {
-                            request_id: request_id.clone(),
-                            session_id: attr.session_id.clone(),
-                            provider_id: cand.provider_id.clone(),
-                            provider_name,
-                            model_id: spec.model.clone(),
-                            slot_id: cand.slot,
-                            slot_label: label,
-                            key_masked: Some(masked),
-                            status: if stream_err.is_none() {
-                                "success"
-                            } else {
-                                "failed"
-                            }
-                            .into(),
-                            error_kind: stream_err.as_ref().map(|_| "stream".to_string()),
-                            input_tokens: toks.0,
-                            output_tokens: toks.1,
-                            total_tokens: toks.2,
-                            reasoning_tokens: reasoning_toks,
-                            cached_tokens: cached_toks,
+                        record_success(
+                            &request_id,
+                            &started,
+                            &spec,
+                            &cand,
+                            provider_name.clone(),
+                            label.clone(),
+                            masked.clone(),
+                            &attr,
+                            toks,
+                            reasoning_toks,
+                            cached_toks,
                             first_token_ms,
-                            total_ms: Some(started.elapsed().as_millis() as i64),
-                            agent_id: attr.agent_id.clone(),
-                            agent_name: attr.agent_name.clone(),
-                            cost_nano,
-                            pricing_snapshot,
-                            cost_source,
-                        });
+                            stream_err.as_ref(),
+                        );
 
                         // 任务清单收尾同步:正文已就绪 → 回填 assistant 正文与同步提醒,
                         // 补一轮让模型先调用 todo_write 对齐面板进度,再真正结束
                         if todo_sync_pending && pending_calls.is_none() {
-                            todo_sync_pending = false;
                             if stream_err.is_none() && round < MAX_TOOL_ROUNDS {
                                 todo_nudged = true;
                                 round += 1;
                                 req.messages.push(ChatMessage {
                                     role: "assistant".into(),
                                     content: std::mem::take(&mut assistant_text),
+                                    reasoning_content: if reasoning_text.is_empty() {
+                                        None
+                                    } else {
+                                        Some(std::mem::take(&mut reasoning_text))
+                                    },
                                     ..Default::default()
                                 });
                                 req.messages.push(ChatMessage {
@@ -410,10 +260,10 @@ pub(super) fn spawn_chat_with_failover(
                         if let Some(calls) = pending_calls.take() {
                             if round >= MAX_TOOL_ROUNDS {
                                 let _ = channel.send(StreamChunk::Delta {
-                                content: format!(
-                                    "\n\n> 已达到 {MAX_TOOL_ROUNDS} 轮工具调用上限,后续工具调用已停止,请基于已有信息作答。\n"
-                                ),
-                            });
+                                    content: format!(
+                                        "\n\n> 已达到 {MAX_TOOL_ROUNDS} 轮工具调用上限,后续工具调用已停止,请基于已有信息作答。\n"
+                                    ),
+                                });
                                 // 收流必须由这里补一个 done,否则前端一轮都等不到结束信号
                                 let _ = channel.send(StreamChunk::Done {
                                     finish_reason: Some("tool_round_limit".into()),
@@ -441,14 +291,23 @@ pub(super) fn spawn_chat_with_failover(
                             )
                             .await;
                             req.messages.extend(outcome.new_messages);
+                            // 回填本轮思考内容(DeepSeek 思考模式 + 工具调用要求原样回传)
+                            if !reasoning_text.is_empty() {
+                                if let Some(first) = req.messages.iter_mut().rev().find(|m| {
+                                    m.role == "assistant" && m.reasoning_content.is_none()
+                                }) {
+                                    first.reasoning_content =
+                                        Some(std::mem::take(&mut reasoning_text));
+                                }
+                            }
                             // 工具全部失败且非用户拒绝(如 server 未启用/执行报错)→ 提醒模型别再重试同一工具
                             if !outcome.all_ok && !outcome.denied {
                                 req.messages.push(ChatMessage {
-                                role: "system".into(),
-                                content: "上一轮工具调用未成功。请勿重复调用同一工具,直接基于现有信息回答用户。"
-                                    .into(),
-                                ..Default::default()
-                            });
+                                    role: "system".into(),
+                                    content: "上一轮工具调用未成功。请勿重复调用同一工具,直接基于现有信息回答用户。"
+                                        .into(),
+                                    ..Default::default()
+                                });
                             }
                             // 任务清单多轮未同步:随下一轮请求顺带提醒(不额外消耗轮次)
                             todo_idle_rounds = if wrote_todos { 0 } else { todo_idle_rounds + 1 };
@@ -496,28 +355,17 @@ pub(super) fn spawn_chat_with_failover(
 
                         let retryable = is_retryable(&e);
                         let kind = error_kind(&e);
-                        usage::record(&UsageRecord {
-                            request_id: request_id.clone(),
-                            session_id: attr.session_id.clone(),
-                            provider_id: cand.provider_id.clone(),
+                        record_failure(
+                            &request_id,
+                            &started,
+                            &spec,
+                            &cand,
                             provider_name,
-                            model_id: spec.model.clone(),
-                            slot_id: cand.slot,
-                            slot_label: label,
-                            key_masked: Some(masked),
-                            status: if kind == "rate_limited" {
-                                "rate_limited"
-                            } else {
-                                "failed"
-                            }
-                            .into(),
-                            error_kind: Some(kind.to_string()),
-                            total_ms: Some(started.elapsed().as_millis() as i64),
-                            agent_id: attr.agent_id.clone(),
-                            agent_name: attr.agent_name.clone(),
-                            cost_source: Some("none".into()),
-                            ..Default::default()
-                        });
+                            label,
+                            masked,
+                            &attr,
+                            kind,
+                        );
                         last_error = Some(e.to_string());
                         if !retryable {
                             break; // 鉴权/参数等致命错误:不再换 Key
@@ -547,21 +395,5 @@ pub(super) fn spawn_chat_with_failover(
             return;
         }
     };
-    // 终态兜底:后台任务 panic 时 Tokio 只会吞掉 JoinHandle 的 panic,channel 静默关闭,
-    // 前端 `done` 永不 resolve(表现为「思考/工具调用之后再无任何反应」)。
-    // 这里 catch_unwind 后补发一个 Error chunk,保证前端一定收口。
-    tauri::async_runtime::spawn(async move {
-        use futures::FutureExt;
-        let fut = run_cancellable(cancel_state, cancel_id, cancel_rx, work);
-        if std::panic::AssertUnwindSafe(fut)
-            .catch_unwind()
-            .await
-            .is_err()
-        {
-            log::error!("chat stream task panicked; emit Error chunk to close the stream");
-            let _ = panic_channel.send(StreamChunk::Error {
-                message: "对话流异常中断(内部错误),请重试".into(),
-            });
-        }
-    });
+    runner::launch(work, panic_channel, cancel_state, cancel_id, cancel_rx);
 }

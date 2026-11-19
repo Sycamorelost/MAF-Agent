@@ -6,7 +6,7 @@ use super::tool;
 use crate::provider::ToolDef;
 
 pub fn readonly_tool_defs() -> Vec<ToolDef> {
-    vec![
+    let mut defs = vec![
         tool(
             "get_now",
             "获取当前本地日期、时间、时区与星期。",
@@ -199,5 +199,7 @@ pub fn readonly_tool_defs() -> Vec<ToolDef> {
                 "required": ["path"]
             }),
         ),
-    ]
+    ];
+    defs.extend(super::media::readonly_media_tool_defs());
+    defs
 }

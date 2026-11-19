@@ -2,16 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAgentsStore } from '../../stores/agents';
 import { useProvidersStore } from '../../stores/providers';
 import * as ipc from '../../lib/ipc';
-import { agentIconComponent } from '../../components/icons';
-import { uiConfirm } from '../../components/confirmService';
-import {
-  AgentEditorForm,
-  emptyEditor,
-  toLines,
-  CAT_LABEL,
-  CAT_ORDER,
-  type EditorState,
-} from '../../components/agent/AgentCard';
+import { emptyEditor, toLines, CAT_LABEL, CAT_ORDER, type EditorState } from '../../components/agent/AgentCard';
+import { AgentGrid, type AgentGroup } from './AgentGrid';
+import { AgentEditorDialog } from './AgentEditorDialog';
+import { AgentVariantDialog, type VariantDraft } from './AgentVariantDialog';
 
 /** 设置页 → 智能体管理:列表 / 新建 / 编辑 / 删除 / 创建变体。 */
 export function AgentsView() {
@@ -25,13 +19,7 @@ export function AgentsView() {
   /** 简单/高级模式(默认简单;编辑已存在智能体时跟随其复杂度)。 */
   const [advanced, setAdvanced] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [variant, setVariant] = useState<null | {
-    baseId: string;
-    name: string;
-    model: string;
-    strategy: ipc.AgentTemplate['memory_strategy'];
-    suffix: string;
-  }>(null);
+  const [variant, setVariant] = useState<VariantDraft | null>(null);
 
   useEffect(() => {
     if (!loaded) load();
@@ -44,7 +32,7 @@ export function AgentsView() {
     return Array.from(set);
   }, [providers]);
 
-  const groups = useMemo(() => {
+  const groups = useMemo<AgentGroup[]>(() => {
     const q = query.trim().toLowerCase();
     const list = q
       ? templates.filter(
@@ -191,6 +179,20 @@ export function AgentsView() {
     }
   };
 
+  const onExport = async (t: ipc.AgentTemplate) => {
+    try {
+      const path = await ipc.exportAgentToFile(t.agent_id);
+      if (path) {
+        setMsg(`已导出「${t.name}」到:${path}`);
+        window.setTimeout(() => setMsg(null), 2600);
+      }
+      // 用户取消(path 为 null)不提示
+    } catch (err) {
+      setMsg(`导出失败:${err instanceof Error ? err.message : String(err)}`);
+      window.setTimeout(() => setMsg(null), 2600);
+    }
+  };
+
   return (
     <div className="set-block">
       <div className="set-head">智能体管理</div>
@@ -255,255 +257,38 @@ export function AgentsView() {
         />
       </div>
 
-      {groups.map((g) => (
-        <div key={g.cat} style={{ marginBottom: 'var(--space-4)' }}>
-          <div className="agent-cat">{g.label}</div>
-          <div className="agent-grid">
-            {g.items.map((t) => {
-              const Icon = agentIconComponent(t.icon);
-              return (
-                <div key={t.agent_id} className="agent-card">
-                  <div className="agent-card-head">
-                    <Icon size={18} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="agent-card-name">{t.name}</div>
-                      <div className="agent-card-desc">{t.description}</div>
-                    </div>
-                    {t.builtin ? (
-                      <span className="agent-card-badge">内置</span>
-                    ) : t.overrides_builtin ? (
-                      <span className="agent-card-badge">已覆盖</span>
-                    ) : t.base_agent ? (
-                      <span className="agent-card-badge">变体</span>
-                    ) : null}
-                  </div>
-                  <div className="agent-card-meta">
-                    <span>模型 {t.recommended_model || '跟随全局'}</span>
-                    <span>·</span>
-                    <span>
-                      {t.memory_strategy === 'none' ? '不注入记忆' : `注入 ${t.memory_strategy}`}
-                    </span>
-                  </div>
-                  <div className="agent-card-actions">
-                    <button
-                      type="button"
-                      className="btn ghost micro"
-                      onClick={async () => {
-                        try {
-                          const path = await ipc.exportAgentToFile(t.agent_id);
-                          if (path) {
-                            setMsg(`已导出「${t.name}」到:${path}`);
-                            window.setTimeout(() => setMsg(null), 2600);
-                          }
-                          // 用户取消(path 为 null)不提示
-                        } catch (err) {
-                          setMsg(`导出失败:${err instanceof Error ? err.message : String(err)}`);
-                          window.setTimeout(() => setMsg(null), 2600);
-                        }
-                      }}
-                    >
-                      导出
-                    </button>
-                    {t.builtin ? (
-                      <>
-                        <button
-                          type="button"
-                          className="btn ghost micro"
-                          onClick={() => openEdit(t)}
-                        >
-                          编辑
-                        </button>
-                        <button
-                          type="button"
-                          className="btn ghost micro"
-                          onClick={() => openVariant(t)}
-                        >
-                          创建变体
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="btn ghost micro"
-                          onClick={() => openEdit(t)}
-                        >
-                          编辑
-                        </button>
-                        {t.overrides_builtin && (
-                          <button
-                            type="button"
-                            className="btn ghost micro"
-                            onClick={async () => {
-                              if (
-                                await uiConfirm({
-                                  title: '恢复内置',
-                                  message: `恢复内置智能体「${t.name}」的原始配置?`,
-                                  confirmText: '恢复',
-                                })
-                              )
-                                remove(t.agent_id);
-                            }}
-                          >
-                            恢复内置
-                          </button>
-                        )}
-                        {!t.overrides_builtin && (
-                          <button
-                            type="button"
-                            className="btn ghost micro"
-                            onClick={async () => {
-                              if (
-                                await uiConfirm({
-                                  title: '删除智能体',
-                                  message: `删除自定义智能体「${t.name}」?`,
-                                  danger: true,
-                                  confirmText: '删除',
-                                })
-                              )
-                                remove(t.agent_id);
-                            }}
-                          >
-                            删除
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="btn ghost micro"
-                          onClick={() => openVariant(t)}
-                        >
-                          创建变体
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      {groups.length === 0 && (
-        <div style={{ textAlign: 'center', color: 'var(--text-4)', padding: 'var(--space-6)' }}>
-          未找到匹配的智能体
-        </div>
-      )}
+      <AgentGrid
+        groups={groups}
+        onExport={onExport}
+        onEdit={openEdit}
+        onCreateVariant={openVariant}
+        onRemove={(t) => remove(t.agent_id)}
+      />
 
       {/* 编辑器 */}
       {editor && (
-        <div className="dialog-mask" onClick={() => setEditor(null)}>
-          <div
-            className="dialog"
-            onClick={(e) => e.stopPropagation()}
-            style={{ width: 'min(calc(560px * var(--ui-scale)), 92vw)', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}
-          >
-            <div className="dialog-head">
-              {editor.mode === 'edit' ? '编辑智能体' : '新建智能体'}
-            </div>
-            <div className="dialog-body" style={{ overflow: 'auto', flex: 1 }}>
-              <label className="agent-check" style={{ marginBottom: 'var(--space-3)' }}>
-                <input
-                  type="checkbox"
-                  checked={advanced}
-                  onChange={(e) => setAdvanced(e.target.checked)}
-                />
-                高级模式(展示输入提示、记忆提炼等高级字段)
-              </label>
-              <AgentEditorForm
-                editor={editor}
-                saving={saving}
-                onChange={setEditor}
-                onCancel={() => setEditor(null)}
-                onSubmit={onSubmitEditor}
-                advanced={advanced}
-                availableModels={availableModels}
-              />
-            </div>
-          </div>
-        </div>
+        <AgentEditorDialog
+          editor={editor}
+          saving={saving}
+          advanced={advanced}
+          availableModels={availableModels}
+          onToggleAdvanced={setAdvanced}
+          onChange={setEditor}
+          onClose={() => setEditor(null)}
+          onSubmit={onSubmitEditor}
+        />
       )}
 
       {/* 变体创建表单 */}
       {variant && (
-        <div className="dialog-mask" onClick={() => setVariant(null)}>
-          <div
-            className="dialog"
-            onClick={(e) => e.stopPropagation()}
-            style={{ width: 'min(calc(520px * var(--ui-scale)), 92vw)' }}
-          >
-            <div className="dialog-head">创建变体</div>
-            <div className="dialog-body">
-              <form onSubmit={onCreateVariant} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                <div>
-                  <label className="lbl">名称</label>
-                  <input
-                    className="input"
-                    value={variant.name}
-                    onChange={(e) => setVariant({ ...variant, name: e.target.value })}
-                    placeholder="如:产品助手-深度版"
-                  />
-                </div>
-                <div>
-                  <label className="lbl">推荐模型</label>
-                  {availableModels.length > 0 ? (
-                    <select
-                      className="input"
-                      value={variant.model}
-                      onChange={(e) => setVariant({ ...variant, model: e.target.value })}
-                    >
-                      <option value="">跟随全局当前模型</option>
-                      {availableModels.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      className="input"
-                      value={variant.model}
-                      onChange={(e) => setVariant({ ...variant, model: e.target.value })}
-                      placeholder="如 gpt-5.2"
-                    />
-                  )}
-                </div>
-                <div>
-                  <label className="lbl">记忆注入策略</label>
-                  <select
-                    className="input"
-                    value={variant.strategy}
-                    onChange={(e) =>
-                      setVariant({ ...variant, strategy: e.target.value as ipc.AgentTemplate['memory_strategy'] })
-                    }
-                  >
-                    <option value="full">full — 注入完整记忆</option>
-                    <option value="summary">summary — 只注入摘要</option>
-                    <option value="none">none — 不注入记忆</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="lbl">system_prompt 追加后缀</label>
-                  <textarea
-                    className="input"
-                    rows={3}
-                    value={variant.suffix}
-                    onChange={(e) => setVariant({ ...variant, suffix: e.target.value })}
-                    placeholder="追加到原 system prompt 末尾的约束/风格…"
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
-                  <button type="button" className="btn ghost" onClick={() => setVariant(null)}>
-                    取消
-                  </button>
-                  <button type="submit" className="btn primary" disabled={saving}>
-                    {saving ? '保存中…' : '保存变体'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+        <AgentVariantDialog
+          variant={variant}
+          availableModels={availableModels}
+          saving={saving}
+          onChange={setVariant}
+          onClose={() => setVariant(null)}
+          onSubmit={onCreateVariant}
+        />
       )}
     </div>
   );

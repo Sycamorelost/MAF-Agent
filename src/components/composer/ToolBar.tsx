@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { ReasoningCapability } from '../../lib/ipc';
 import { THINKING_LEVEL_LABEL, effortHint } from '../../lib/thinkingHint';
 import type { ThinkingLevel, ThinkingSelection } from '../../stores/thinking';
+import { usePinMenu } from './usePinMenu';
 import {
   IconAttach,
   IconBrain,
@@ -67,12 +68,21 @@ export default function ToolBar({
   /** 附件来源浮层:本地上传 / 从附件中心导入 */
   const [srcMenu, setSrcMenu] = useState(false);
   /**
-   * 思考强度浮层的定位:固定定位,左边缘与「思考」chip 对齐(窄窗内自动钳制在窗口内)。
-   * 这里实测 chip 的矩形,换算出浮层距窗口底部的距离、左偏移与可用最大高度,
-   * 保证窄窗/矮窗都能完整显示(放不下时内部滚动),不被窗口左缘裁掉。
+   * 浮层定位:实测锚点矩形,换算 fixed 坐标与可用高度(见 usePinMenu)。
+   * 两个浮层都渲染到 document.body,避免被顶部任务条或输入区容器裁切。
    */
   const thinkBtnRef = useRef<HTMLButtonElement>(null);
-  const [thinkPos, setThinkPos] = useState({ bottom: 8, maxH: 240, left: 8 });
+  const thinkMenuRef = useRef<HTMLDivElement>(null);
+  const think = usePinMenu(thinkMenu, thinkBtnRef, thinkMenuRef, {
+    minHeight: 160,
+    fallbackWidth: 300,
+  });
+  const srcBtnRef = useRef<HTMLButtonElement>(null);
+  const srcMenuRef = useRef<HTMLDivElement>(null);
+  const src = usePinMenu(srcMenu, srcBtnRef, srcMenuRef, {
+    minHeight: 120,
+    fallbackWidth: 176,
+  });
   /**
    * 工具条紧凑态:工作台态 chip 变多(联网/思考/权限/智能体/模式),再加上右侧
    * 「模型 + 发送」,输入条可用宽度不足时会把 mode chip 挤到第二行。
@@ -82,25 +92,6 @@ export default function ToolBar({
   const barRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(false);
-
-  const syncThinkPos = () => {
-    const r = thinkBtnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    // 浮层底边贴在 chip 顶边上方 8px;可用高度 = 窗口顶部到浮层底边的距离
-    const bottom = Math.max(8, window.innerHeight - r.top + 8);
-    // 左边缘从 chip 左边缘起算,超出窗口时向回收,最少留 8px
-    const menuW = Math.min(300, window.innerWidth - 24);
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - menuW - 8));
-    setThinkPos({ bottom, maxH: Math.max(140, window.innerHeight - bottom - 12), left });
-  };
-
-  useEffect(() => {
-    if (!thinkMenu) return;
-    syncThinkPos();
-    window.addEventListener('resize', syncThinkPos);
-    return () => window.removeEventListener('resize', syncThinkPos);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thinkMenu]);
 
   /**
    * 紧凑态判定:按 chip 实测总宽 + 右侧「模型(带名) + 发送」预留 200px 与工具条宽比较。
@@ -137,6 +128,7 @@ export default function ToolBar({
         <>
           <span className="attach-src-wrap">
             <button
+              ref={srcBtnRef}
               type="button"
               className="tool-plus"
               onClick={() => {
@@ -150,10 +142,19 @@ export default function ToolBar({
             >
               <IconPlus size={15} />
             </button>
-            {srcMenu && onOpenAttachmentCenter && (
+            {srcMenu && onOpenAttachmentCenter && createPortal(
               <>
                 <div className="pin-backdrop" onClick={() => setSrcMenu(false)} />
-                <div className="pin-menu attach-src-menu">
+                <div
+                  ref={srcMenuRef}
+                  className={`pin-menu pin-menu-portal attach-src-menu ${src.pos.placement}`}
+                  style={{
+                    top: src.pos.top,
+                    bottom: src.pos.bottom,
+                    left: src.pos.left,
+                    maxHeight: src.pos.maxHeight,
+                  }}
+                >
                   <div className="pin-menu-title">添加附件</div>
                   <button
                     type="button"
@@ -178,7 +179,8 @@ export default function ToolBar({
                     <span>从附件中心导入</span>
                   </button>
                 </div>
-              </>
+              </>,
+              document.body,
             )}
           </span>
           <input
@@ -232,7 +234,6 @@ export default function ToolBar({
                   if (cap.can_disable) thinking.onSelect({ ...sel, on: !sel.on });
                   return;
                 }
-                if (!thinkMenu) syncThinkPos();
                 setThinkMenu((v) => !v);
               }}
               disabled={disabled || (locked && noLevels)}
@@ -253,8 +254,14 @@ export default function ToolBar({
                 <>
                   <div className="pin-backdrop" onClick={() => setThinkMenu(false)} />
                   <div
-                    className="pin-menu think-menu"
-                    style={{ bottom: thinkPos.bottom, left: thinkPos.left, maxHeight: thinkPos.maxH }}
+                    ref={thinkMenuRef}
+                    className={`pin-menu pin-menu-portal think-menu ${think.pos.placement}`}
+                    style={{
+                      top: think.pos.top,
+                      bottom: think.pos.bottom,
+                      left: think.pos.left,
+                      maxHeight: think.pos.maxHeight,
+                    }}
                   >
                     <div className="pin-menu-title">思考强度(实际发送参数)</div>
                     {(['light', 'medium', 'high', 'ultra'] as ThinkingLevel[]).map((lv) => (

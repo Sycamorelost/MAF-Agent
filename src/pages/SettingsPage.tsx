@@ -10,6 +10,7 @@ import { UsageView } from './settings/UsageView';
 import { ProvidersView } from './settings/ProvidersView';
 import { MemoryView } from './settings/MemoryView';
 import { SearchView } from './settings/SearchView';
+import { MediaView } from './settings/MediaView';
 import { StorageView } from './settings/StorageView';
 import { AboutView } from './settings/AboutView';
 import { NavMenuView } from './settings/NavMenuView';
@@ -139,8 +140,7 @@ export default function SettingsPage() {
     />
   );
 
-  const memoryView = (
-    <MemoryView
+  const memoryView = (    <MemoryView
       settings={settings}
       keyedTemplates={keyedTemplates}
       settingsSaved={settingsSaved}
@@ -163,6 +163,17 @@ export default function SettingsPage() {
       onDraftChange={patchSearchDraft}
       onSaveSearch={onSaveSearch}
       onTestSearch={onTestSearch}
+    />
+  );
+
+  const mediaView = (
+    <MediaView
+      settings={settings}
+      keyedTemplates={keyedTemplates}
+      settingsSaved={settingsSaved}
+      savingSettings={savingSettings}
+      onPatchSettings={patchSettings}
+      onSaveSettings={onSaveSettings}
     />
   );
 
@@ -200,6 +211,7 @@ export default function SettingsPage() {
     providers: providersView,
     memory: memoryView,
     search: searchView,
+    media: mediaView,
     appearance: <AppearanceView />,
     navmenu: navmenuView,
     presets: (

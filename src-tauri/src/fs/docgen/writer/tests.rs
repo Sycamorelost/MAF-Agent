@@ -3,7 +3,7 @@ use super::table::column_widths;
 
 fn widths_of(cells: &[&str]) -> Vec<usize> {
     let header: Vec<String> = cells.iter().map(|s| s.to_string()).collect();
-    column_widths(&header, &[], cells.len())
+    column_widths(&header, &[], cells.len(), CONTENT_W)
 }
 
 #[test]

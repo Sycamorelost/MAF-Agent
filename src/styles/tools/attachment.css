@@ -278,14 +278,9 @@
 }
 .att-confirm-body p { margin: 0 0 var(--space-2); overflow-wrap: anywhere; }
 
-/* 附件来源浮层(Composer「+」):锚定按钮上方;具体定位沿用 .pin-menu */
+/* 附件来源浮层(Composer「+」):portal 到 body,坐标由 usePinMenu 注入 */
 .attach-src-wrap { position: relative; display: inline-flex; flex: 0 0 auto; }
-.attach-src-menu {
-  left: 0;
-  right: auto;
-  bottom: calc(100% + 8px);
-  min-width: calc(176px * var(--ui-scale));
-}
+.attach-src-menu { min-width: calc(176px * var(--ui-scale)); }
 .attach-src-item {
   display: flex; align-items: center; gap: var(--space-2); width: 100%;
   padding: calc(7px * var(--ui-scale)) calc(10px * var(--ui-scale));
@@ -300,6 +295,64 @@
   text-align: center;
   font-size: var(--font-caption);
   color: var(--text-4);
+}
+/* 两栏布局:左侧列表伸缩,右侧预览固定宽度;容器过窄时由容器查询隐藏预览 */
+.att-pick-dialog { container-type: inline-size; }
+.att-pick-body {
+  display: flex;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow: hidden;
+}
+.att-pick-left {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.att-pick-left .att-pick-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.att-pick-preview {
+  flex: 0 0 auto;
+  width: calc(300px * var(--ui-scale));
+  max-width: 40%;
+  overflow-y: auto;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border);
+}
+@container (max-width: 720px) {
+  .att-pick-preview { display: none; }
+}
+.att-prev-head { display: flex; align-items: flex-start; gap: var(--space-2); }
+.att-prev-icon { flex: 0 0 auto; color: var(--text-3); }
+.att-prev-title { min-width: 0; }
+.att-prev-name {
+  font-size: var(--font-sub); font-weight: 600; color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.att-prev-sub { margin-top: calc(2px * var(--ui-scale)); font-size: var(--font-micro); color: var(--text-4); }
+.att-prev-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(4px * var(--ui-scale)) var(--space-2);
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-micro);
+}
+.att-prev-fields dt { color: var(--text-4); white-space: nowrap; }
+.att-prev-fields dd {
+  margin: 0; color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.att-prev-warn { color: var(--warn); }
+.att-prev-section { margin-top: var(--space-3); }
+.att-prev-label { font-size: var(--font-micro); color: var(--text-4); margin-bottom: calc(4px * var(--ui-scale)); }
+.att-prev-summary {
+  margin: 0;
+  font-size: var(--font-caption);
+  line-height: 1.65;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
 }
 .att-pick-list { display: flex; flex-direction: column; gap: calc(4px * var(--ui-scale)); }
 .att-pick-item {

@@ -230,8 +230,7 @@
   to   { opacity: 1; }
 }
 .palette-panel {
-  width: 520px;
-  max-width: 80vw;
+  width: min(calc(680px * var(--ui-scale)), 92vw);
   max-height: 60vh;
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -322,4 +321,50 @@
   color: var(--text-4);
   font-size: var(--font-micro);
 }
+/* 多源搜索结果:分组标题带数量,条目为「标题 + 片段 + 元信息」三行 */
+.palette-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) calc(4px * var(--ui-scale));
+  font-size: var(--font-micro);
+  color: var(--text-4);
+}
+.palette-group-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  font-variant-numeric: tabular-nums;
+}
+.palette-result {
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(2px * var(--ui-scale));
+}
+.palette-result.active { background: var(--bg-hover); }
+.palette-result-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(2px * var(--ui-scale));
+  min-width: 0;
+  width: 100%;
+}
+.palette-result-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.palette-result-title .gs-item-icon { flex: 0 0 auto; color: var(--text-3); }
+.palette-result-snippet {
+  font-size: var(--font-micro);
+  color: var(--text-3);
+  line-height: 1.5;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.palette-result-meta { font-size: var(--font-micro); color: var(--text-4); }
 

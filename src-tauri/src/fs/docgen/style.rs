@@ -3,8 +3,6 @@
 //! 只描述「应该长什么样」,不依赖 docx-rs;由 `writer` 翻译成 Word 样式。
 //! 数值单位:字号为半点(half-point,12pt=24),间距为 twip(1pt=20)。
 
-use docx_rs::{LineSpacing, LineSpacingType, RunFonts};
-
 use super::profile::Profile;
 
 /// A4 纸张宽度(twip)。
@@ -15,8 +13,22 @@ pub const PAGE_H: u32 = 16_838;
 pub const MARGIN_TB: i32 = 1_440;
 /// 左右页边距 3cm。
 pub const MARGIN_LR: i32 = 1_701;
-/// 正文可用宽度(twip)= A4 − 左右边距。
+/// 默认正文可用宽度(twip)= A4 − 左右边距。
 pub const CONTENT_W: usize = (PAGE_W as i32 - 2 * MARGIN_LR) as usize;
+
+/// 标题自动编号方案。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HeadingNumbering {
+    /// 不编号(通用文档)
+    #[default]
+    None,
+    /// 学位论文:1 / 1.1 / 1.1.1
+    Academic,
+    /// 公文:一、/（一）/ 1.
+    Official,
+    /// 报告:一、/ 1. /（1）
+    Simple,
+}
 
 /// 一套文档版式。
 #[derive(Debug, Clone)]
@@ -31,6 +43,8 @@ pub struct DocStyle {
     pub body_size: usize,
     /// 正文行距(240 = 单倍)
     pub body_line: i32,
+    /// 固定行距(twip);`Some` 时优先于 `body_line`
+    pub fixed_line: Option<i32>,
     /// 正文首行缩进(twip,0 表示不缩进)
     pub body_indent: i32,
     /// 标题字号(4 级)
@@ -47,6 +61,16 @@ pub struct DocStyle {
     pub meta_size: usize,
     /// 文档大标题字号(半点)
     pub title_size: usize,
+    /// 上边距(twip)
+    pub margin_top: i32,
+    /// 下边距(twip)
+    pub margin_bottom: i32,
+    /// 左边距(twip)
+    pub margin_left: i32,
+    /// 右边距(twip)
+    pub margin_right: i32,
+    /// 标题自动编号
+    pub numbering: HeadingNumbering,
     /// 是否三线表
     pub three_line: bool,
     /// 表头是否加浅色底纹(通用文档用)
@@ -65,6 +89,7 @@ impl DocStyle {
                 heading_east_asia: "黑体",
                 body_size: 24,
                 body_line: 360,
+                fixed_line: None,
                 body_indent: 480,
                 heading_sizes: [32, 28, 24, 24],
                 heading_before: [240, 180, 120, 120],
@@ -73,6 +98,11 @@ impl DocStyle {
                 caption_size: 21,
                 meta_size: 24,
                 title_size: 44,
+                margin_top: MARGIN_TB,
+                margin_bottom: MARGIN_TB,
+                margin_left: MARGIN_LR,
+                margin_right: MARGIN_LR,
+                numbering: HeadingNumbering::None,
                 three_line: profile.three_line_table(),
                 header_fill: !profile.three_line_table(),
                 justify: true,
@@ -84,6 +114,7 @@ impl DocStyle {
                 heading_east_asia: "微软雅黑",
                 body_size: 22,
                 body_line: 276,
+                fixed_line: None,
                 body_indent: 0,
                 heading_sizes: [32, 26, 24, 22],
                 heading_before: [280, 200, 140, 120],
@@ -92,6 +123,11 @@ impl DocStyle {
                 caption_size: 20,
                 meta_size: 22,
                 title_size: 40,
+                margin_top: MARGIN_TB,
+                margin_bottom: MARGIN_TB,
+                margin_left: MARGIN_LR,
+                margin_right: MARGIN_LR,
+                numbering: HeadingNumbering::None,
                 three_line: false,
                 header_fill: true,
                 justify: false,
@@ -99,41 +135,9 @@ impl DocStyle {
         }
     }
 
-    pub fn body_fonts(&self) -> RunFonts {
-        RunFonts::new()
-            .ascii(self.latin)
-            .hi_ansi(self.latin)
-            .east_asia(self.east_asia)
-            .hint("eastAsia")
-    }
-
-    pub fn heading_fonts(&self) -> RunFonts {
-        RunFonts::new()
-            .ascii(self.latin)
-            .hi_ansi(self.latin)
-            .east_asia(self.heading_east_asia)
-            .hint("eastAsia")
-    }
-
-    pub fn mono_fonts(&self) -> RunFonts {
-        RunFonts::new()
-            .ascii("Consolas")
-            .hi_ansi("Consolas")
-            .east_asia(self.east_asia)
-    }
-
-    /// 正文行距(1.5 倍 / 1.15 倍)。
-    pub fn body_line_spacing(&self) -> LineSpacing {
-        LineSpacing::new()
-            .line_rule(LineSpacingType::Auto)
-            .line(self.body_line)
-    }
-
-    /// 单倍行距(表格、题注)。
-    pub fn single_line_spacing(&self) -> LineSpacing {
-        LineSpacing::new()
-            .line_rule(LineSpacingType::Auto)
-            .line(240)
+    /// 当前版式的正文可用宽度(twip)。
+    pub fn content_w(&self) -> usize {
+        (PAGE_W as i32 - self.margin_left - self.margin_right).max(0) as usize
     }
 }
 
@@ -149,6 +153,7 @@ mod tests {
         assert_eq!(s.body_indent, 480); // 2 字符
         assert!(s.three_line);
         assert_eq!(s.east_asia, "宋体");
+        assert_eq!(s.content_w(), CONTENT_W);
     }
 
     #[test]

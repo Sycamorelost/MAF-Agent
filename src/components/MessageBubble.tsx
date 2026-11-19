@@ -214,9 +214,8 @@ function MessageBubbleInner({
         {isUser
           ? shownContent && (
               <div className="bubble">
-                <div className="md">
-                  <MemoMarkdown content={shownContent} withCodeBlock={false} />
-                </div>
+                {/* 用户输入按纯文本展示,不做 Markdown 渲染(引用/追问卡片仍走 Markdown) */}
+                <div className="bubble-plain">{shownContent}</div>
               </div>
             )
           : segments.map((seg, i) =>

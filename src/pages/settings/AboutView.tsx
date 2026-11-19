@@ -29,7 +29,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">myAgent</div>
           <div className="set-product-ver">
-            版本 {appVersion ? `${appVersion}` : '2.6.1'} · 桌面端 · Windows
+            版本 {appVersion ? `${appVersion}` : '2.8.0'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             MAF 团队旗下的 Agent 产品,一款专为学习、调研而创造的智能体框架软件。完全免费且无广告,开发者:梧桐吾桐及其团队。
@@ -50,8 +50,23 @@ export function AboutView({ appVersion }: AboutViewProps) {
 
       {/* 版本更新摘要:按主题归并,精简表述 */}
       <div className="set-card">
-        <div className="set-card-h">更新内容 · v1.17.1 → v2.6.1</div>
+        <div className="set-card-h">更新内容 · v1.17.1 → v2.8.0</div>
         <div className="set-card-b">
+          <p>
+            <b>文档模板(v2.8.0)：</b>`fs_export_docx` 新增 `template` 参数,内置公文、学术论文、实验报告、调研报告、工作总结、通知、会议纪要等模板;公文按 GB/T 9704 规范设置页边距与固定行距,标题支持「一、」「1.1」「1.1.1」三套自动编号(检测到用户手写编号时跳过),缺章时在文末给出回执提示。
+          </p>
+          <p>
+            <b>演示文稿模板(v2.8.0)：</b>`slides_export` 新增组会汇报、进度汇报、答辩、工作汇报、数据分析五套场景模板与 `academic` 主题;主题缺失时回退到最接近的配色,结构不完整时提示补齐页型,原有调用方式行为不变。
+          </p>
+          <p>
+            <b>工程解耦(v2.8.0)：</b>版式层与 docx-rs 解耦,Markdown 解析、公式、MCP 配置/运行时/审批、路径解析、Key 轮换等大文件按职责拆分为多个子模块,新增源文件统一控制在 400 行以内,降低回归风险。
+          </p>
+          <p>
+            <b>媒体能力(v2.7.0)：</b>新增图片生成、演示文稿导出与图片文字识别三项内置工具。图片生成使用设置中配置的图像服务商,产物自动登记为图片卡;演示文稿按结构化大纲导出 16:9 的 `.pptx`,失败时回退为同名 Markdown 大纲;图片 OCR 调用 Windows 系统识别能力,支持中英混排。设置页新增「能力 → 媒体能力」。
+          </p>
+          <p>
+            <b>检索与附件(v2.7.0)：</b>全局搜索扩展为多源结果,覆盖会话标题、消息全文、记忆、知识库与附件解析内容,按来源分组展示;从附件中心插入会话时可预览文件名、来源、解析状态与摘要,弹窗宽度随字号比例增加,窄窗口自动收起预览栏。同时修复了附件来源菜单被顶部任务条遮挡的问题(浮层改为视口定位,空间不足时向下翻转)。
+          </p>
           <p>
             <b>Token 预算与工具按需下发(v2.6.x)：</b>上下文预算估算改为「官方 BPE 分词 + 历史用量校准 + 分段缓存预估」三层校准,模型词表按服务商自动匹配(DeepSeek / 通义 / Kimi / GLM / OpenAI 等),请求摘要同步给出 messages / tools / 缓存命中的分项拆解;工具规格改为按需下发——只读工具全量、高频写工具常驻、低频写工具与会话历史里调用过的外部 MCP 工具才注入,GUI 工具仅在「完全信任」档下发,简单问答的单轮工具占用明显减少。
           </p>
@@ -158,7 +173,23 @@ export function AboutView({ appVersion }: AboutViewProps) {
             </div>
           </section>
 
+          <section className="set-term">
+            <h3 className="set-term-h">ppt-rs · Apache-2.0(演示文稿导出)</h3>
+            <div className="set-term-body">
+              <p>
+                项目地址:<span className="mono">https://crates.io/crates/ppt-rs</span>
+              </p>
+              <p>版权所有:Copyright (c) ppt-rs contributors。</p>
+              <p>
+                引用范围:内置 `slides_export` 工具用它生成 `.pptx` 文件;
+                该库随安装包一同编译分发,许可文本见仓库根目录 NOTICE。
+              </p>
+            </div>
+          </section>
+
           <p className="set-term-foot">
+            图片文字识别(ocr_extract)调用 Windows 系统自带的 OCR 能力,不捆绑额外的识别模型;
+            该能力的可用语言取决于系统已安装的 OCR 语言包。
             本应用自身以 Apache License 2.0 开源发布,源码见
             <span className="mono">https://github.com/Sycamorelost/MAF-Agent</span>,
             许可证全文与第三方组件声明见仓库根目录 LICENSE / NOTICE 文件。

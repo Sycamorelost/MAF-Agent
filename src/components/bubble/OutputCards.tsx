@@ -3,7 +3,7 @@ import * as ipc from '../../lib/ipc';
 import type { DeliverableDto } from '../../lib/ipc';
 import { extractOutputFiles, outputBaseName } from '../../lib/outputFiles';
 import { useDeliverablesStore } from '../../stores/deliverables';
-import { IconCopy, IconDoc, IconExternalLink, IconFolder } from '../icons';
+import { IconCopy, IconChevronDown, IconDoc, IconExternalLink, IconFolder } from '../icons';
 
 /** 卡片数据:后端产物事件优先,正文路径解析兜底时 note/kind 为空。 */
 interface CardFile {
@@ -204,37 +204,49 @@ export function OutputCards({
     return out;
   }, [all, messageId, content]);
 
+  // 产物由事件异步到达:hook 必须早于空列表提前返回,否则数量变化会触发 React #310
+  const [expanded, setExpanded] = useState(false);
+
   if (files.length === 0) return null;
 
   const MAX_VISIBLE = 5;
-  const [expanded, setExpanded] = useState(false);
   const tooMany = files.length > MAX_VISIBLE;
-  const visible = tooMany && !expanded ? files.slice(0, MAX_VISIBLE) : files;
+  const head = tooMany ? files.slice(0, MAX_VISIBLE) : files;
+  const tail = tooMany ? files.slice(MAX_VISIBLE) : [];
   const hiddenCount = files.length - MAX_VISIBLE;
+
+  const renderItem = (f: CardFile) =>
+    f.isImage ? (
+      <ImageCard key={f.key} file={f} sessionId={sessionId} />
+    ) : (
+      <div key={f.key} className="out-list-row" title={f.path}>
+        <IconDoc size={14} />
+        <span className="out-list-name">{f.name}</span>
+        <span className="out-list-path" title={f.path}>{outputDirPath(f.path)}</span>
+        <span className="out-list-kind">{f.kind ?? '文件'}</span>
+        <span className="out-list-size">{formatSize(f.size)}</span>
+        <CardActions file={f} sessionId={sessionId} />
+      </div>
+    );
 
   return (
     <div className="out-list">
-      {visible.map((f) =>
-        f.isImage ? (
-          <ImageCard key={f.key} file={f} sessionId={sessionId} />
-        ) : (
-          <div key={f.key} className="out-list-row" title={f.path}>
-            <IconDoc size={14} />
-            <span className="out-list-name">{f.name}</span>
-            <span className="out-list-path" title={f.path}>{outputDirPath(f.path)}</span>
-            <span className="out-list-kind">{f.kind ?? '文件'}</span>
-            <span className="out-list-size">{formatSize(f.size)}</span>
-            <CardActions file={f} sessionId={sessionId} />
-          </div>
-        ),
+      {head.map(renderItem)}
+      {tooMany && (
+        <div className={`out-list-more${expanded ? ' open' : ''}`}>
+          <div className="out-list-more-inner">{tail.map(renderItem)}</div>
+        </div>
       )}
       {tooMany && (
         <button
           type="button"
-          className="out-list-toggle"
+          className={`out-list-toggle${expanded ? ' is-expanded' : ''}`}
+          title={expanded ? `收起 ${hiddenCount} 个文件` : `展开 ${hiddenCount} 个更多文件`}
+          aria-label={expanded ? `收起 ${hiddenCount} 个文件` : `展开 ${hiddenCount} 个更多文件`}
+          aria-expanded={expanded}
           onClick={() => setExpanded((v) => !v)}
         >
-          {expanded ? `收起 ${hiddenCount} 个` : `展开 ${hiddenCount} 个更多文件`}
+          <IconChevronDown size={10} className="out-list-arrow" />
         </button>
       )}
     </div>

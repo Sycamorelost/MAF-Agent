@@ -116,8 +116,23 @@ fn serialize_plain_message_keeps_string_content() {
         images: vec![],
         ..Default::default()
     };
-    let v = OpenAiCompat::serialize_message(&m);
+    let v = OpenAiCompat::serialize_message(&m, false);
     assert_eq!(v["content"], serde_json::json!("你好"));
+}
+
+/// DeepSeek 思考模式:assistant 的 reasoning_content 需原样回传;其余场景不下发。
+#[test]
+fn serialize_reasoning_content_only_when_requested() {
+    let m = ChatMessage {
+        role: "assistant".into(),
+        content: "答案".into(),
+        reasoning_content: Some("先分析再作答".into()),
+        ..Default::default()
+    };
+    let v = OpenAiCompat::serialize_message(&m, true);
+    assert_eq!(v["reasoning_content"], serde_json::json!("先分析再作答"));
+    let v = OpenAiCompat::serialize_message(&m, false);
+    assert!(v.get("reasoning_content").is_none());
 }
 
 #[test]
@@ -131,7 +146,7 @@ fn serialize_vision_message_builds_content_array() {
         ],
         ..Default::default()
     };
-    let v = OpenAiCompat::serialize_message(&m);
+    let v = OpenAiCompat::serialize_message(&m, false);
     let parts = v["content"].as_array().expect("content should be array");
     assert_eq!(parts.len(), 3);
     assert_eq!(parts[0]["type"], "text");
@@ -410,7 +425,7 @@ fn serialize_assistant_tool_calls_and_tool_result_messages() {
         }]),
         ..Default::default()
     };
-    let v = OpenAiCompat::serialize_message(&assistant);
+    let v = OpenAiCompat::serialize_message(&assistant, false);
     let calls = v["tool_calls"]
         .as_array()
         .expect("必须输出 tool_calls 数组");
@@ -430,7 +445,7 @@ fn serialize_assistant_tool_calls_and_tool_result_messages() {
         tool_call_id: Some("call_1".into()),
         ..Default::default()
     };
-    let v = OpenAiCompat::serialize_message(&tool_msg);
+    let v = OpenAiCompat::serialize_message(&tool_msg, false);
     assert_eq!(v["role"], "tool");
     assert_eq!(v["tool_call_id"], "call_1");
     assert_eq!(v["content"], "echo:hi");
@@ -446,7 +461,7 @@ fn serialize_plain_message_has_no_tool_fields() {
         images: vec![],
         ..Default::default()
     };
-    let v = OpenAiCompat::serialize_message(&m);
+    let v = OpenAiCompat::serialize_message(&m, false);
     assert!(v.get("tool_calls").is_none());
     assert!(v.get("tool_call_id").is_none());
 }

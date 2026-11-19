@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "2.6.1"
+version = "2.8.0"
 description = "myAgent —— 本地优先的桌面智能体框架"
 authors = ["梧桐吾桐 (Sycamorelost)"]
 license = "Apache-2.0"
@@ -68,10 +68,17 @@ sysinfo = "0.37"
 # (deepseek_v3/v4 / qwen2 / kimi_k2/k3 / glm4/glm5 / minimax_m2 / o200k_base / cl100k_base ...)
 # 按 model 名自动匹配 encoding,零网络零 IO,精准到 token 级
 tiktoken = "4"
+ppt-rs = { version = "0.2", features = ["markdown"] }
 
 # GUI 自动化(P2):UI Automation / SendInput / 窗口枚举。仅 Windows 目标编译
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Globalization",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Storage_Streams",
     "Win32_Foundation",
     "Win32_System_Com",
     "Win32_System_Threading",

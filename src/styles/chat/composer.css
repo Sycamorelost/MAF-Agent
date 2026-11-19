@@ -360,45 +360,8 @@
 }
 .attach-x:hover { background: var(--bg-hover); color: var(--text-1); }
 
-/* 消息内附件卡片 */
-.attach-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-  max-width: 100%;
-}
-.msg.user .attach-cards { justify-content: flex-end; }
-.attach-card {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: color-mix(in srgb, var(--bg-hover) 42%, var(--bg-main));
-  border: none;
-  border-radius: var(--radius-m);
-  color: var(--text-2);
-  font-size: var(--font-caption);
-}
-.attach-card-info { min-width: 0; text-align: left; }
-.attach-card-name {
-  max-width: calc(220px * var(--ui-scale));
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--text-1);
-}
-.attach-card-kind { color: var(--text-4); }
-.attach-thumb {
-  max-width: calc(200px * var(--ui-scale));
-  max-height: calc(140px * var(--ui-scale));
-  border-radius: var(--radius-m);
-  border: none;
-  cursor: zoom-in;
-  display: block;
-}
+/* 消息内附件卡片见 chat/attachments.css */
 
-<<<<<<< HEAD
 /* 会话产物列表:AI 回复中提到的本地文件,按行展示(类似 git diff 列表) */
 .out-list {
   display: flex;
@@ -406,28 +369,6 @@
   gap: 0;
   margin-top: var(--space-2);
   max-width: 100%;
-=======
-/* 会话产物卡:AI 回复中提到的本地文件,点击在文件管理器中定位 */
-/* 固定一行 3 列、卡片同高;超过 3 个时容器固定高度内部滚动,不撑占会话窗口 */
-.out-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  max-width: 100%;
-  max-height: calc(66px * var(--ui-scale)); /* 一行完整 + 次行露边提示可滚动 */
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-.out-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: calc(50px * var(--ui-scale));
-  box-sizing: border-box;
-  min-width: 0;
-  padding: var(--space-2) var(--space-3);
->>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
@@ -446,39 +387,44 @@
   transition: background .12s;
   border-bottom: 1px solid var(--border);
 }
-<<<<<<< HEAD
 .out-list-row:last-child { border-bottom: none; }
 .out-list-row:hover { background: var(--bg-hover); }
 .out-list-row > svg { flex-shrink: 0; color: var(--text-3); }
+/* 展开区:grid 行高过渡实现抽屉动画,两个方向都平滑 */
+.out-list-more {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .22s ease;
+}
+.out-list-more.open { grid-template-rows: 1fr; }
+.out-list-more-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.out-list-more-inner .out-list-row:last-child { border-bottom: none; }
 .out-list-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 7px var(--space-3);
+  height: calc(12px * var(--ui-scale));
+  padding: 0 var(--space-3);
   width: 100%;
   background: var(--bg-hover);
   border: none;
-  border-top: 1px solid var(--border);
   color: var(--accent);
-  font: inherit;
-  font-size: var(--font-micro);
   cursor: pointer;
+  overflow: hidden;
   transition: background .12s;
 }
 .out-list-toggle:hover { background: var(--bg-surface); }
+/* 折叠态朝上,展开态朝下;旋转过渡与抽屉动画同步 */
+.out-list-arrow { transform: rotate(180deg); transition: transform .22s ease; }
+.out-list-toggle.is-expanded .out-list-arrow { transform: rotate(0deg); }
 .out-list-name {
   font-family: var(--font-mono, ui-monospace, Consolas, monospace);
   font-size: var(--font-caption);
-=======
-.out-card > svg { flex: none; }
-.out-card:hover { border-color: var(--brand); background: var(--bg-hover); }
-.out-card-info { display: flex; flex-direction: column; min-width: 0; }
-.out-card-name {
-  max-width: calc(220px * var(--ui-scale));
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
->>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
   color: var(--text-1);
   overflow: hidden;
   white-space: nowrap;
@@ -514,13 +460,45 @@
   min-width: 48px;
   text-align: right;
 }
-/* 图片产物:仍用卡片预览 */
-.out-list .out-card-image {
+/* 图片产物行:与普通文件行同构(缩略图 + 文件名 + 类型 + 操作),不再用大卡片 */
+.out-list .out-card {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2);
+  padding: 7px var(--space-3);
+  min-width: 0;
   background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  transition: background .12s;
+}
+.out-list .out-card:last-child { border-bottom: none; }
+.out-list .out-card:hover { background: var(--bg-hover); }
+.out-card-info {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.out-card-name {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: var(--font-caption);
+  color: var(--text-1);
+}
+.out-card-kind {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-3);
+  font-size: var(--font-micro);
+  line-height: 1.4;
 }
 /* 操作组:打开 / 定位 / 复制路径 / 转 PDF */
 .out-card-actions {
@@ -634,11 +612,16 @@
   /* P0-3b:抽屉式滑出动画 */
   animation: drawerUp 0.2s ease-out;
 }
-.pin-menu-title {
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-caption);
-  color: var(--text-4);
+.pin-menu-title { padding: var(--space-2) var(--space-3); font-size: var(--font-caption); color: var(--text-4); }
+/* 通过 createPortal 渲染到 body 的浮层:坐标由 usePinMenu 以内联样式注入 */
+.pin-menu-portal {
+  position: fixed;
+  right: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+/* 上方空间不足时向下展开,滑入方向随之翻转 */
+.pin-menu.down { animation: drawerDown 0.2s ease-out; }
 .pin-menu button {
   justify-content: flex-start !important;
   width: 100% !important;
@@ -696,9 +679,13 @@
 .think-item.active .hint { color: var(--brand); }
 .think-divider { height: 1px; margin: var(--space-1) var(--space-2); background: var(--border); }
 
-
 /* P0-3b:抽屉式滑出动画 —— 从底部 30px 位置向上滑入 */
 @keyframes drawerUp {
   from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0);      opacity: 1; }
+}
+/* 向下翻转时的滑入方向 */
+@keyframes drawerDown {
+  from { transform: translateY(-16px); opacity: 0; }
   to   { transform: translateY(0);      opacity: 1; }
 }

@@ -1,32 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import type { MenuItem } from '../ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import * as ipc from '../../lib/ipc';
-import { cloneSession, renameSession } from '../../lib/ipc/session';
+import { renameSession } from '../../lib/ipc/session';
 import { sessionPath } from '../../lib/workbench';
 import { useSessionsStore } from '../../stores/sessions';
 import { useUiStore } from '../../stores/ui';
 import type { NoteMeta, ProjectRow, SessionRow } from '../../lib/ipc';
-import { IconChevronRight, IconPlus, IconSearch, IconX } from '../icons';
-import { createPortal } from 'react-dom';
-import Toast from '../Toast';
 import { useToast } from '../../lib/useToast';
 import {
   readCollapsed, writeCollapsed,
   readProjectsOpen, writeProjectsOpen,
-  clampSidebarWidth, defaultSidebarWidth,
   isAbsolutePath,
   sectionFromPath,
   sidebarMode,
-  whenLabel,
 } from './utils';
 import type { ProjectGroup, DeleteProjectState } from './types';
 import { NavRail } from './NavRail';
-import { ProjectListView } from './ProjectList';
-import { SectionFlatList } from './SectionFlatList';
-import { TimeListView } from './TimeList';
-import { SidebarMenus } from './Menus';
+import { SidebarHeader, SidebarSections } from './SidebarSections';
+import { SidebarResize } from './SidebarResize';
+import { SidebarOverlays } from './SidebarOverlays';
+import { buildProjectMenu, buildSessionMenu, type SidebarMenuContext } from './sidebarMenuItems';
 
 /**
  * Sidebar 主容器(DeepSeek 风格):
@@ -152,25 +146,6 @@ export default function Sidebar() {
     return () => window.removeEventListener('notes_changed', onChanged);
   }, [visible, section]);
 
-  // ====== 宽度拖拽 ======
-  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
-  const onResizeDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!visible) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { startX: e.clientX, startW: width };
-    setDragging(true);
-  };
-  const onResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = dragRef.current;
-    if (!d) return;
-    setSidebarWidth(clampSidebarWidth(d.startW + e.clientX - d.startX));
-  };
-  const onResizeEnd = () => {
-    dragRef.current = null;
-    setDragging(false);
-  };
-
   // ====== 分组逻辑(纯计算) ======
   const grouped = useMemo(() => {
     const byProject = new Map<string, SessionRow[]>();
@@ -289,54 +264,19 @@ export default function Sidebar() {
     void ipc.renameProject(p.id, name.trim()).then(() => void refreshProjects());
   };
 
-  // ====== 右键菜单构建 ======
-  const buildProjectMenu = (p: ProjectRow): MenuItem[] => [
-    { key: 'new-here', label: `在「${p.name}」中新建会话`,
-      onClick: () => void handleNewSession(p.id) },
-    { divider: true, key: 's1' },
-    { key: 'open-folder', label: '打开工作文件夹',
-      onClick: () => { if (p.path) void ipc.fsOpen(p.path); } },
-    { key: 'change-folder', label: '更换工作文件夹…',
-      onClick: () => void handleChangeProjectPath(p) },
-    { divider: true, key: 's2' },
-    { key: 'rename', label: '重命名项目',
-      onClick: () => startRenameProject(p) },
-    { key: 'delete', label: '删除项目', danger: true,
-      onClick: () => {
-        const count = grouped.projectGroups.find((g) => g.project.id === p.id)?.items.length ?? 0;
-        setPendingProjectDel({ projectId: p.id, label: p.name, count });
-      } },
-    // 最底部:项目路径,自动省略 + 悬停全名 + 不可点击
-    ...(p.path ? [
-      { divider: true, key: 's3' },
-      { key: 'project-path', label: p.path, disabled: true, title: p.path, className: 'ctx-path-item' },
-    ] : []),
-  ];
-
-  const buildSessionMenu = (s: SessionRow): MenuItem[] => {
-    const moveTo: MenuItem[] = projects
-      .filter((p) => p.id !== s.project_id)
-      .map((p) => ({
-        key: `move-${p.id}`, label: p.name,
-        onClick: () => void sessionsStore.setProject(s.id, p.id),
-      }));
-    if (moveTo.length > 0) {
-      moveTo.push({ divider: true, key: 'move-div' });
-      moveTo.push({ key: 'uncat', label: '移出项目',
-        onClick: () => void sessionsStore.setProject(s.id, null) });
-    }
-    return [
-      { key: 'rename', label: '重命名', onClick: () => startRenameSession(s) },
-      { key: 'clone', label: '克隆会话',
-        onClick: () => { void cloneSession(s.id).then((newId) => nav(sessionPath(newId))); } },
-      { key: 'move', label: '移动到项目…',
-        children: moveTo.length > 0
-          ? moveTo
-          : [{ key: 'no-proj', label: '(没有其他项目)', disabled: true }] },
-      { divider: true, key: 's1' },
-      { key: 'delete', label: '删除会话', danger: true,
-        onClick: () => setPendingDel(s) },
-    ];
+  // ====== 右键菜单上下文 ======
+  /** 菜单构建所需的项目/会话与回调;状态仍由本组件持有。 */
+  const menuCtx: SidebarMenuContext = {
+    projects,
+    projectGroups: grouped.projectGroups,
+    onNewSession: (pid) => void handleNewSession(pid),
+    onChangeProjectPath: (p) => void handleChangeProjectPath(p),
+    onStartRenameProject: startRenameProject,
+    onRequestDeleteProject: setPendingProjectDel,
+    onStartRenameSession: startRenameSession,
+    onRequestDeleteSession: setPendingDel,
+    onSetSessionProject: (sid, pid) => void sessionsStore.setProject(sid, pid),
+    onNavigateToSession: (sid) => nav(sessionPath(sid)),
   };
 
   // ====== 删除确认 ======
@@ -356,11 +296,6 @@ export default function Sidebar() {
 
   // 折叠态仍保留抽屉节点(宽度收拢到 0)以播放关闭动画;
   // .closed 里的 visibility:hidden 保证收起后不可聚焦、不可交互。
-
-  // 会话分区:项目列表常驻可折叠;无项目时仍显示「会话」分组承载全部会话
-  const showSessions = grouped.uncatItems.length > 0 || projects.length === 0;
-  const projectsExpanded = projectsOpen;
-
   return (
     <>
       <div
@@ -368,279 +303,82 @@ export default function Sidebar() {
         aria-hidden={!visible}
       >
         <aside className="sidebar" aria-label="侧边栏">
-        {/* 顶部固定区:新对话按钮,全宽胶囊 + 贴顶部 + 右侧与会话区同高 */}
-        <div className="side-top">
-          <button
-            type="button"
-            className="side-new"
-            title="新建会话"
-            onClick={() => void handleNewSession(null)}
-          >
-            <IconPlus size={15} />
-            <span>新对话</span>
-          </button>
-        </div>
+          <SidebarHeader onNewSession={() => void handleNewSession(null)} />
 
-        {/* 滚动区:NavRail + 列表 */}
-        <div className="side-scroll">
-        <NavRail />
-        {section === 'chat' && (
-          <div className="side-proj-sec">
-            <div className="side-sec-head">
-              <button
-                type="button"
-                className="side-sec-toggle"
-                aria-expanded={projectsExpanded}
-                aria-label={projectsExpanded ? '折叠项目' : '展开项目'}
-                onClick={() => setProjectsOpen((v) => !v)}
-              >
-                <IconChevronRight
-                  size={12}
-                  className={`chevron${projectsExpanded ? ' down' : ''}`}
-                />
-                <span className="side-sec-title">项目</span>
-                {projects.length > 0 && (
-                  <span className="side-sec-count">{projects.length}</span>
-                )}
-              </button>
-              <div className="side-head-actions">
-                <button
-                  className="panel-toggle"
-                  title="新建项目(绑定本地工作文件夹)"
-                  aria-label="新建项目"
-                  onClick={() => void handleNewProject()}
-                >
-                  <IconPlus size={14} />
-                </button>
-              </div>
-            </div>
-            {projectsExpanded && (
-              <div className="side-list side-proj-list">
-                {projects.length === 0 ? (
-                  <div className="side-empty">
-                    还没有项目 ·{' '}
-                    <button className="link-btn" onClick={() => void handleNewProject()}>
-                      选择工作文件夹
-                    </button>
-                  </div>
-                ) : (
-                  <ProjectListView
-                    projectGroups={grouped.projectGroups}
-                    collapsed={collapsed}
-                    activeId={activeId}
-                    activeProjectId={activeProjectId}
-                    editingId={editingSessionId}
-                    editingText={editingSessionText}
-                    onToggleCollapsed={(pid) =>
-                      setCollapsed((prev) => ({ ...prev, [pid]: !(prev[pid] ?? false) }))}
-                    onNewSessionInProject={(pid) => void handleNewSession(pid)}
-                    onProjectContextMenu={(e, p) => projectMenu.open(e, p)}
-                    onSessionNavigate={(id) => nav(sessionPath(id))}
-                    onSessionStartRename={startRenameSession}
-                    onEditingTextChange={setEditingSessionText}
-                    onCommitRename={commitRenameSession}
-                    onCancelRename={cancelRenameSession}
-                    onSessionContextMenu={(e, s) => sessionMenu.open(e, s)}
-                  />
-                )}
-              </div>
-            )}
+          {/* 滚动区:NavRail + 列表 */}
+          <div className="side-scroll">
+            <SidebarSections
+              section={section}
+              projects={projects}
+              projectGroups={grouped.projectGroups}
+              uncatItems={grouped.uncatItems}
+              sessions={sessions}
+              notes={notes}
+              collapsed={collapsed}
+              projectsExpanded={projectsOpen}
+              sessionsOpen={sessionsOpen}
+              activeId={activeId}
+              activeProjectId={activeProjectId}
+              activeMemorySession={activeMemorySession}
+              activeNoteId={activeNoteId}
+              editingSessionId={editingSessionId}
+              editingSessionText={editingSessionText}
+              onToggleProjects={() => setProjectsOpen((v) => !v)}
+              onToggleSessions={() => setSessionsOpen((v) => !v)}
+              onToggleProjectCollapsed={(pid) =>
+                setCollapsed((prev) => ({ ...prev, [pid]: !(prev[pid] ?? false) }))}
+              onNewProject={() => void handleNewProject()}
+              onNewSession={(pid) => void handleNewSession(pid)}
+              onNewNote={() => void handleNewNote()}
+              onNavigateSession={(id) => nav(sessionPath(id))}
+              onProjectContextMenu={(e, p) => projectMenu.open(e, p)}
+              onSessionContextMenu={(e, s) => sessionMenu.open(e, s)}
+              onSessionStartRename={startRenameSession}
+              onEditingTextChange={setEditingSessionText}
+              onCommitRename={commitRenameSession}
+              onCancelRename={cancelRenameSession}
+              onSelectMemory={(id) => nav(`/memory?tab=native&session=${id}`)}
+              onSelectNote={(id) => nav(`/knowledge?id=${id}`)}
+            />
           </div>
-        )}
 
-        {section === 'chat' && showSessions && (
-          <div className="side-sec">
-            <div className="side-sec-head">
-              <button
-                type="button"
-                className="side-sec-toggle"
-                aria-expanded={sessionsOpen}
-                aria-label={sessionsOpen ? '折叠会话' : '展开会话'}
-                onClick={() => setSessionsOpen((v) => !v)}
-              >
-                <IconChevronRight
-                  size={12}
-                  className={`chevron${sessionsOpen ? ' down' : ''}`}
-                />
-                <span className="side-sec-title">会话</span>
-                {grouped.uncatItems.length > 0 && (
-                  <span className="side-sec-count">{grouped.uncatItems.length}</span>
-                )}
-              </button>
-            </div>
-            {sessionsOpen && (
-            <div className="side-list">
-              <TimeListView
-                sessions={grouped.uncatItems}
-                activeId={activeId}
-                editingId={editingSessionId}
-                editingText={editingSessionText}
-                onSessionNavigate={(id) => nav(sessionPath(id))}
-                onSessionStartRename={startRenameSession}
-                onEditingTextChange={setEditingSessionText}
-                onCommitRename={commitRenameSession}
-                onCancelRename={cancelRenameSession}
-                onSessionContextMenu={(e, s) => sessionMenu.open(e, s)}
-              />
-            </div>
-            )}
+          {/* 底部固定区:设置按钮,右对齐贴底 */}
+          <div className="side-bottom">
+            <NavRail foot />
           </div>
-        )}
 
-        {section === 'memory' && (
-          <SectionFlatList
-            title="记忆库"
-            rows={sessions.map((s) => ({
-              id: s.id,
-              title: s.title || '未命名会话',
-              when: whenLabel(s.updated),
-            }))}
-            activeId={activeMemorySession}
-            emptyText="还没有会话记忆,先去对话页聊一句吧。"
-            onSelect={(id) => nav(`/memory?tab=native&session=${id}`)}
+          <SidebarResize
+            visible={visible}
+            width={width}
+            onWidth={setSidebarWidth}
+            onDraggingChange={setDragging}
           />
-        )}
-
-        {section === 'knowledge' && (
-          <SectionFlatList
-            title="知识库"
-            rows={notes.map((n) => ({
-              id: n.id,
-              title: n.title || '未命名笔记',
-              when: whenLabel(n.updated),
-            }))}
-            activeId={activeNoteId}
-            emptyText="知识库还是空的,在主区域新建一篇笔记吧。"
-            headActions={
-              <button
-                className="panel-toggle"
-                title="新建笔记"
-                aria-label="新建笔记"
-                onClick={() => void handleNewNote()}
-              >
-                <IconPlus size={14} />
-              </button>
-            }
-            onSelect={(id) => nav(`/knowledge?id=${id}`)}
-          />
-        )}
-
-        </div>
-
-        {/* 底部固定区:设置按钮,右对齐贴底 */}
-        <div className="side-bottom">
-          <NavRail foot />
-        </div>
-
-        <div
-          className="side-resize"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="拖拽调整侧栏宽度"
-          title="拖拽调整宽度,双击复位"
-          onPointerDown={onResizeDown}
-          onPointerMove={onResizeMove}
-          onPointerUp={onResizeEnd}
-          onPointerCancel={onResizeEnd}
-          onDoubleClick={() => setSidebarWidth(defaultSidebarWidth())}
-        />
         </aside>
       </div>
 
-      <SidebarMenus
-        projectMenuPos={projectMenu.pos}
-        projectMenuTarget={projectMenu.target}
-        sessionMenuPos={sessionMenu.pos}
-        sessionMenuTarget={sessionMenu.target}
+      <SidebarOverlays
+        projectMenu={projectMenu}
+        sessionMenu={sessionMenu}
         pendingDel={pendingDel}
         pendingProjectDel={pendingProjectDel}
-        onCloseProjectMenu={projectMenu.close}
-        onCloseSessionMenu={sessionMenu.close}
-        onBuildProjectMenu={buildProjectMenu}
-        onBuildSessionMenu={buildSessionMenu}
+        renamingProject={renamingProject}
+        onBuildProjectMenu={(p) => buildProjectMenu(p, menuCtx)}
+        onBuildSessionMenu={(s) => buildSessionMenu(s, menuCtx)}
         onCancelDeleteSession={() => setPendingDel(null)}
         onConfirmDeleteSession={confirmDeleteSession}
         onCancelDeleteProject={() => setPendingProjectDel(null)}
         onConfirmDeleteProject={confirmDeleteProject}
-        renamingProject={renamingProject}
         onCancelRenameProject={() => setRenamingProject(null)}
         onConfirmRenameProject={confirmRenameProject}
+        toast={toast}
+        onCloseToast={hideToast}
+        searchOpen={searchOpen}
+        searchQuery={searchQuery}
+        onSearchQuery={setSearchQuery}
+        sessions={sessions}
+        onCloseSearch={() => setSearchOpen(false)}
+        searchInputRef={searchInputRef}
       />
-      <Toast text={toast} onClose={hideToast} />
-      {/* P16:弹出式搜索面板(Portal 到 body,浮层覆盖全窗口) */}
-      {searchOpen && createPortal(
-        <SearchPalette
-          query={searchQuery}
-          onQuery={setSearchQuery}
-          sessions={sessions}
-          onClose={() => setSearchOpen(false)}
-          onOpenSession={(id) => { setSearchOpen(false); nav(`/chat/${id}`); }}
-          inputRef={searchInputRef}
-        />,
-        document.body,
-      )}
     </>
-  );
-}
-
-/** P16:弹出式搜索面板(类似图 2 样式)。 */
-function SearchPalette({
-  query, onQuery, sessions, onClose, onOpenSession, inputRef,
-}: {
-  query: string;
-  onQuery: (v: string) => void;
-  sessions: SessionRow[];
-  onClose: () => void;
-  onOpenSession: (id: string) => void;
-  inputRef: React.MutableRefObject<HTMLInputElement | null>;
-}) {
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return sessions.slice(0, 20);
-    return sessions
-      .filter((s) => (s.title || '').toLowerCase().includes(q))
-      .slice(0, 20);
-  }, [query, sessions]);
-
-  const handleBg = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
-  return (
-    <div className="palette-mask" onMouseDown={handleBg}>
-      <div className="palette-panel" role="dialog" aria-label="搜索会话">
-        <div className="palette-head">
-          <IconSearch size={15} />
-          <input
-            ref={inputRef}
-            type="text"
-            className="palette-input"
-            placeholder="搜索会话名称"
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-          />
-          <button className="palette-close" onClick={onClose} title="关闭 (Esc)">
-            <IconX size={14} />
-          </button>
-        </div>
-        <div className="palette-list">
-          {filtered.length === 0 ? (
-            <div className="palette-empty">没有匹配的会话</div>
-          ) : (
-            filtered.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="palette-item"
-                onClick={() => onOpenSession(s.id)}
-              >
-                <span className="palette-item-title">{s.title || '(无标题)'}</span>
-                {s.agent_id && <span className="palette-item-tag">{s.agent_id}</span>}
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
   );
 }

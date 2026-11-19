@@ -41,6 +41,10 @@ pub struct ChatMessage {
     /// tool 角色消息:对应哪个 assistant 的 tool_call(id)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// assistant 消息的思考内容:DeepSeek 等厂商在思考模式下要求下一轮回传,
+    /// 仅在对应 Provider 方言下由序列化层下发(见 openai/body.rs)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 impl Default for ChatMessage {
@@ -51,6 +55,7 @@ impl Default for ChatMessage {
             images: Vec::new(),
             tool_calls: None,
             tool_call_id: None,
+            reasoning_content: None,
         }
     }
 }

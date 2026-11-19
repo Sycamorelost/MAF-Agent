@@ -153,8 +153,8 @@
 
 /* ---------- harness 任务清单条(输入框正上方) ---------- */
 .chat-todos {
-  /* 严格等于输入框(chat-max-w)的 4/5,水平居中对齐 */
-  width: calc(4 * var(--chat-max-w) / 5);
+  /* 与输入卡、正文同宽(共用 --chat-max-w),水平居中对齐 */
+  width: var(--chat-max-w);
   max-width: 100%;
   margin: 0 auto var(--space-2);
   box-sizing: border-box;

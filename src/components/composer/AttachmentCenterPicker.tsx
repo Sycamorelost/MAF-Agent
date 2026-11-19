@@ -4,6 +4,7 @@ import type { AttachmentEntry, AttachmentMeta } from '../../lib/ipc';
 import { uiConfirm } from '../confirmService';
 import { IconCheck } from '../icons';
 import { KIND_LABEL, fmtSize } from '../../pages/attachments/shared';
+import AttachmentPreviewPane from './AttachmentPreviewPane';
 
 interface Props {
   /** 目标会话(当前对话) */
@@ -28,6 +29,8 @@ export default function AttachmentCenterPicker({
   const [entries, setEntries] = useState<AttachmentEntry[] | null>(null);
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  /** 预览栏当前条目(按路径);悬停/聚焦切换,缺省显示第一条 */
+  const [active, setActive] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // onError 由父组件传入,放进依赖会导致重复拉取,这里用 ref 固定引用
   const onErrorRef = useRef(onError);
@@ -63,6 +66,12 @@ export default function AttachmentCenterPicker({
     const kw = query.trim().toLowerCase();
     return kw ? uniq.filter((e) => e.meta.name.toLowerCase().includes(kw)) : uniq;
   }, [entries, query]);
+
+  /** 预览条目:优先保留最近操作项,不在当前列表(搜索过滤)时回落到第一条 */
+  const previewEntry = useMemo(() => {
+    if (list.length === 0) return null;
+    return list.find((e) => e.meta.path === active) ?? list[0];
+  }, [list, active]);
 
   const toggle = (e: AttachmentEntry) => {
     if (busy || unavailable(e)) return;
@@ -110,62 +119,64 @@ export default function AttachmentCenterPicker({
   return (
     <div className="dialog-mask" onClick={() => !busy && onClose()}>
       <div
-        className="dialog"
+        className="dialog att-pick-dialog"
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'min(calc(720px * var(--ui-scale)), 92vw)',
+          width: 'min(calc(960px * var(--ui-scale)), 94vw)',
           maxHeight: '80vh',
           display: 'flex',
           flexDirection: 'column',
         }}
       >
         <div className="dialog-head">从附件中心导入</div>
-        <div className="dialog-body" style={{ overflow: 'auto', flex: 1 }}>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
+        <div className="dialog-body att-pick-body">
+          <div className="att-pick-left">
             <input
               className="input"
               placeholder="搜索文件名…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              style={{ flex: 1, minWidth: 0 }}
             />
-          </div>
-          {entries === null ? (
-            <div className="att-pick-empty">加载中…</div>
-          ) : list.length === 0 ? (
-            <div className="att-pick-empty">附件中心还没有可导入的文件</div>
-          ) : (
-            <div className="att-pick-list">
-              {list.map((e) => {
-                const checked = picked.has(e.meta.path);
-                const disabled = busy || unavailable(e);
-                return (
-                  <button
-                    type="button"
-                    key={e.meta.path}
-                    className={`att-pick-item ${checked ? 'on' : ''} ${disabled ? 'off' : ''}`}
-                    onClick={() => toggle(e)}
-                    disabled={disabled}
-                    title={e.meta.summary ?? e.meta.name}
-                  >
-                    <span className={`att-pick-box ${checked ? 'on' : ''}`}>
-                      {checked && <IconCheck size={11} />}
-                    </span>
-                    <span className="att-pick-main">
-                      <span className="att-pick-name">{e.meta.name}</span>
-                      <span className="att-pick-meta">
-                        {KIND_LABEL[e.meta.kind]} · {fmtSize(e.meta.size)}
-                        {(e.meta.chunk_count ?? 0) > 0 && ` · ${e.meta.chunk_count} 块`}
-                        {` · 来源:${e.session_title}`}
+            {entries === null ? (
+              <div className="att-pick-empty">加载中…</div>
+            ) : list.length === 0 ? (
+              <div className="att-pick-empty">附件中心还没有可导入的文件</div>
+            ) : (
+              <div className="att-pick-list">
+                {list.map((e) => {
+                  const checked = picked.has(e.meta.path);
+                  const disabled = busy || unavailable(e);
+                  return (
+                    <button
+                      type="button"
+                      key={e.meta.path}
+                      className={`att-pick-item ${checked ? 'on' : ''} ${disabled ? 'off' : ''}`}
+                      onClick={() => toggle(e)}
+                      onMouseEnter={() => setActive(e.meta.path)}
+                      onFocus={() => setActive(e.meta.path)}
+                      aria-disabled={disabled}
+                      title={e.meta.summary ?? e.meta.name}
+                    >
+                      <span className={`att-pick-box ${checked ? 'on' : ''}`}>
+                        {checked && <IconCheck size={11} />}
                       </span>
-                      {e.meta.summary && <span className="att-pick-sum">{e.meta.summary}</span>}
-                      {unavailable(e) && <span className="att-pick-sum">未解析,无法复用</span>}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+                      <span className="att-pick-main">
+                        <span className="att-pick-name">{e.meta.name}</span>
+                        <span className="att-pick-meta">
+                          {KIND_LABEL[e.meta.kind]} · {fmtSize(e.meta.size)}
+                          {(e.meta.chunk_count ?? 0) > 0 && ` · ${e.meta.chunk_count} 块`}
+                          {` · 来源:${e.session_title}`}
+                        </span>
+                        {e.meta.summary && <span className="att-pick-sum">{e.meta.summary}</span>}
+                        {unavailable(e) && <span className="att-pick-sum">未解析,无法复用</span>}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {previewEntry && <AttachmentPreviewPane entry={previewEntry} />}
         </div>
         <div className="dialog-foot" style={{ justifyContent: 'flex-end' }}>
           <button type="button" className="btn" onClick={onClose} disabled={busy}>

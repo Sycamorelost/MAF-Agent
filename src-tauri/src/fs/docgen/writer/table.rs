@@ -4,7 +4,7 @@ use docx_rs::*;
 
 use super::super::inline;
 use super::super::markdown::Align;
-use super::super::style::{CONTENT_W, DocStyle};
+use super::super::style::DocStyle;
 use super::document::add_text_runs_with;
 
 pub(super) fn table_block(
@@ -19,7 +19,7 @@ pub(super) fn table_block(
     if cols == 0 {
         return Table::new(vec![]);
     }
-    let widths = column_widths(header, rows, cols);
+    let widths = column_widths(header, rows, cols, style.content_w());
 
     let mut trs: Vec<TableRow> = Vec::new();
     if !header.is_empty() {
@@ -46,7 +46,7 @@ pub(super) fn table_block(
 
     Table::new(trs)
         .set_grid(widths.clone())
-        .width(CONTENT_W, WidthType::Dxa)
+        .width(style.content_w(), WidthType::Dxa)
         .layout(TableLayoutType::Fixed)
         .margins(TableCellMargins::new().margin(60, 108, 60, 108))
         .set_borders(borders)
@@ -101,7 +101,12 @@ fn table_row(
     TableRow::new(tcs)
 }
 
-pub(super) fn column_widths(header: &[String], rows: &[Vec<String>], cols: usize) -> Vec<usize> {
+pub(super) fn column_widths(
+    header: &[String],
+    rows: &[Vec<String>],
+    cols: usize,
+    content: usize,
+) -> Vec<usize> {
     let mut weights = vec![2usize; cols];
     for row in std::iter::once(header).chain(rows.iter().map(Vec::as_slice)) {
         for (i, cell) in row.iter().enumerate() {
@@ -112,17 +117,17 @@ pub(super) fn column_widths(header: &[String], rows: &[Vec<String>], cols: usize
     }
     let total: usize = weights.iter().sum::<usize>().max(1);
     // 列数很多时按平均宽度压缩下限,避免总宽超出正文区
-    let min_w = (CONTENT_W / cols.max(1)).clamp(240, 720);
+    let min_w = (content / cols.max(1)).clamp(240, 720);
     let mut widths: Vec<usize> = weights
         .iter()
-        .map(|w| (CONTENT_W * w / total).max(min_w))
+        .map(|w| (content * w / total).max(min_w))
         .collect();
     for _ in 0..4 {
         let sum: usize = widths.iter().sum();
         if sum == 0 {
             break;
         }
-        let diff = CONTENT_W as i64 - sum as i64;
+        let diff = content as i64 - sum as i64;
         if diff == 0 {
             break;
         }
@@ -140,6 +145,6 @@ pub(super) fn column_widths(header: &[String], rows: &[Vec<String>], cols: usize
     }
     // 舍入误差由首列吸收,保证网格总宽与正文区一致
     let sum: usize = widths.iter().sum();
-    widths[0] = (widths[0] as i64 + CONTENT_W as i64 - sum as i64).max(1) as usize;
+    widths[0] = (widths[0] as i64 + content as i64 - sum as i64).max(1) as usize;
     widths
 }

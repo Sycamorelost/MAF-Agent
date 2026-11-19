@@ -8,7 +8,8 @@ use super::OpenAiCompat;
 
 impl OpenAiCompat {
     /// 序列化单条 ChatMessage:纯文本或 vision content 数组(兼容 OpenAI / DeepSeek 等)。
-    pub(super) fn serialize_message(m: &ChatMessage) -> serde_json::Value {
+    /// with_reasoning:是否回传 assistant 的 reasoning_content(仅 DeepSeek 思考模式需要)。
+    pub(super) fn serialize_message(m: &ChatMessage, with_reasoning: bool) -> serde_json::Value {
         let mut v = if m.images.is_empty() {
             json!({
                 "role": m.role,
@@ -36,6 +37,12 @@ impl OpenAiCompat {
         }
         if let Some(id) = &m.tool_call_id {
             v["tool_call_id"] = json!(id);
+        }
+        // DeepSeek 思考模式:下一轮必须把 assistant 的 reasoning_content 原样带回
+        if with_reasoning {
+            if let Some(rc) = m.reasoning_content.as_deref().filter(|s| !s.is_empty()) {
+                v["reasoning_content"] = json!(rc);
+            }
         }
         v
     }

@@ -26,6 +26,7 @@ export const NAV: NavGroup[] = [
     grp: '能力',
     items: [
       { id: 'search', label: '联网搜索', icon: IconGlobe },
+      { id: 'media', label: '媒体能力', icon: IconSparkles },
     ],
   },
   {
@@ -157,6 +158,8 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
           '网络与本地调度:reqwest(采用 rustls)、futures、notify、tokio(Tauri 运行时);',
           '加密与编码:操作系统提供的 Windows DPAPI,以及 aes-gcm、sha2、base64;',
           '文档解析与图像:docx-rs、calamine、pdf-extract、image;',
+          '演示文稿:ppt-rs(Apache-2.0)——随安装包编译分发;',
+          '图片文字识别:Windows 系统自带的 OCR 能力,不捆绑额外的识别模型;',
           '内容渲染:react-markdown、remark-gfm、remark-math、rehype-katex、katex、rehype-highlight、highlight.js、mermaid、echarts;',
           '模型上下文协议(MCP)组件:@modelcontextprotocol/server-filesystem、server-memory、server-sequential-thinking(MIT),以及联网搜索组件 agent-search-mcp(Apache-2.0)——随应用启动经 npx 拉起,不随安装包捆绑,其许可文本见各自项目;',
         ],

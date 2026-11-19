@@ -22,6 +22,7 @@ pub mod presets;
 pub mod projects;
 pub mod provider;
 pub mod search;
+pub mod search_attachments;
 pub mod settings;
 pub mod tasks;
 pub mod tutorial;

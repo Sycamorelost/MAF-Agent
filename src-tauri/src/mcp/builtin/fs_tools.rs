@@ -153,9 +153,46 @@ pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (Strin
                 .get("meta")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .unwrap_or_default();
-            let req = crate::fs::docgen::DocRequest::from_parts(title, body, profile, toc, meta);
+            let mut req = crate::fs::docgen::DocRequest::from_parts(title, body, profile, toc, meta);
+            req.template = args
+                .get("template")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
+            req.subtitle = args
+                .get("subtitle")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let template = req.effective_template();
             match crate::fs::text::export_docx_ext(path, &req, session_id) {
-                Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
+                Ok(r) => {
+                    let mut v = serde_json::to_value(&r).unwrap_or_default();
+                    if let Some(obj) = v.as_object_mut() {
+                        obj.insert("template".into(), serde_json::json!(template.name));
+                        // 缺章提示只在正文确实没写这些章节时出现,不阻断导出
+                        let missing: Vec<&str> = template
+                            .skeleton
+                            .iter()
+                            .copied()
+                            .filter(|s| !body.contains(s))
+                            .take(3)
+                            .collect();
+                        if !missing.is_empty() {
+                            obj.insert(
+                                "suggest".into(),
+                                serde_json::json!(format!(
+                                    "可补充章节:{}。{}",
+                                    missing.join("、"),
+                                    template.hints
+                                )),
+                            );
+                        }
+                    }
+                    (v.to_string(), true)
+                }
                 Err(e) => (format!("导出 docx 失败:{e}"), false),
             }
         }

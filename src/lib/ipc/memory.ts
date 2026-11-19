@@ -71,6 +71,10 @@ export interface AppSettings {
   summarize_provider_id: string | null;
   /** 提炼专用模型(null = 用当前会话模型) */
   summarize_model: string | null;
+  /** 图片生成服务商 provider_id(null = 未启用) */
+  image_provider_id: string | null;
+  /** 图片生成模型(null = gpt-image-1) */
+  image_model: string | null;
   /** 关闭主窗口时隐藏到托盘(最小化仍是普通最小化) */
   minimize_to_tray: boolean;
   /** 导航菜单中隐藏的功能项(对话/设置始终显示) */

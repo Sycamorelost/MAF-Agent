@@ -36,8 +36,20 @@ This product references the following third-party works.
    default service (zero-API-key multi-engine aggregation); not distributed
    in the package.
 
+4. ppt-rs (bundled)
+   https://crates.io/crates/ppt-rs
+   License: Apache License 2.0
+   Compiled into the application and used by the built-in `slides_export`
+   tool to generate .pptx presentations.
+
 -------------------------------------------------------------------------------
+Image text recognition (`ocr_extract`) uses the OCR capability provided by
+Windows (Windows.Media.Ocr). No additional OCR model or third-party OCR engine
+is bundled with this product; available languages depend on the OCR language
+packs installed on the system.
+
 Cherry Studio is licensed separately under AGPL-3.0 and is referenced at the
 architecture level only, as described in section 1. The MCP reference servers
 (section 2) and agent-search-mcp (section 3) are launched via npx at
-application startup and are not redistributed with this product.
+application startup and are not redistributed with this product. ppt-rs
+(section 4) is compiled into the application under Apache-2.0.

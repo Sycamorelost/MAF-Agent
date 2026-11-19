@@ -13,6 +13,12 @@ pub struct AppSettings {
     /// 提炼专用模型(空 = 用当前会话模型)
     #[serde(default)]
     pub summarize_model: Option<String>,
+    /// 图片生成服务商 provider_id(空 = 未启用 image_generate)
+    #[serde(default)]
+    pub image_provider_id: Option<String>,
+    /// 图片生成模型(空 = gpt-image-1)
+    #[serde(default)]
+    pub image_model: Option<String>,
     /// 关闭主窗口时隐藏到托盘(默认关:点 × 直接退出;最小化始终保留任务栏图标)
     #[serde(default)]
     pub minimize_to_tray: bool,
@@ -156,6 +162,8 @@ impl Default for AppSettings {
         Self {
             summarize_provider_id: None,
             summarize_model: None,
+            image_provider_id: None,
+            image_model: None,
             minimize_to_tray: false,
             hidden_nav_items: Vec::new(),
             nav_order: Vec::new(),

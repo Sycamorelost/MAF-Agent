@@ -1,16 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import type { VirtualizerHandle } from 'virtua';
-import { mcpClearSessionAllowed } from '../../lib/ipc/mcp';
 import StreamingBubble from '../../components/StreamingBubble';
-import Composer from '../../components/Composer';
-import Toast from '../../components/Toast';
-import MemoryHandoffDialog from '../../components/MemoryHandoffDialog';
-import ModelSwitchDialog from '../../components/ModelSwitchDialog';
-import AgentPickerDialog from '../../components/AgentPickerDialog';
 import OutlinePanel from '../../components/OutlinePanel';
-import { agentIconComponent } from '../../components/icons';
 import { Inspector } from '../../components/inspector/Inspector';
 import { WorkbenchChromeContext } from '../../lib/workbenchChrome';
 
@@ -20,9 +11,10 @@ import { useProvidersStore } from '../../stores/providers';
 import { useMemoryStore } from '../../stores/memory';
 import { useDeliverablesStore } from '../../stores/deliverables';
 import { useAgentsStore } from '../../stores/agents';
-import { useThinkingStore, DEFAULT_THINKING_LEVEL, agentThinking } from '../../stores/thinking';
+import { useThinkingStore } from '../../stores/thinking';
 import type { AttachmentMeta, MessageRow } from '../../lib/ipc';
 import * as ipc from '../../lib/ipc';
+import { buildQuote, type QuoteRef } from '../../lib/quote';
 import { MessageList } from './MessageList';
 import { ChatHeader } from './ChatHeader';
 import { useModelHandoff } from './useModelHandoff';
@@ -32,8 +24,12 @@ import { useDraftHandoff } from './useDraftHandoff';
 import { useChatInspector } from './useChatInspector';
 import { ChatBanners } from './ChatBanners';
 import { ChatEmptyState } from './ChatEmptyState';
-import AttachmentCenterPicker from '../../components/composer/AttachmentCenterPicker';
-import { buildQuote, type QuoteRef } from '../../lib/quote';
+import { ChatComposerArea } from './ChatComposerArea';
+import { ChatDialogs } from './ChatDialogs';
+import { useChatPageScroll } from './useChatPageScroll';
+import { useChatSelectionToolbar, type ChatSelectionTool } from './useChatSelectionToolbar';
+import { ChatSelectionToolbar } from './ChatSelectionToolbar';
+import { useChatSessionEffects } from './useChatSessionEffects';
 
 /** 稳定空数组:避免 `?? []` 每次渲染生成新引用导致 MessageList memo 失效。 */
 const EMPTY_MESSAGES: MessageRow[] = [];
@@ -66,8 +62,6 @@ export default function ChatPage({ compactTools = false }: { compactTools?: bool
   const [composerText, setComposerText] = useState('');
   const [pendingAttachments, setPendingAttachments] = useState<AttachmentMeta[]>([]);
   const [pendingImages, setPendingImages] = useState<Record<string, string>>({});
-  /** 从附件中心导入的选择器开关 */
-  const [centerPickerOpen, setCenterPickerOpen] = useState(false);
   /** 引用条:完整原文留在 state,输入框只显示摘要;发送时作为独立上下文注入 */
   const [quotes, setQuotes] = useState<QuoteRef[]>([]);
   /** 引用消息(选区优先):最多保留 3 条,超出替换最早一条 */
@@ -81,101 +75,20 @@ export default function ChatPage({ compactTools = false }: { compactTools?: bool
   );
   const [modelSwitchOpen, setModelSwitchOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
-  /** 划词选中浮动工具栏:文本 + 屏幕坐标(相对视口,Portal 到 body 直接用) + 来源消息 id */
-  const [selTool, setSelTool] = useState<{ text: string; x: number; y: number; msgId?: number } | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<VirtualizerHandle | null>(null);
-  const listWrapRef = useRef<HTMLDivElement>(null);
-  /** P3:虚拟列表在滚动容器内的起始偏移(上方横幅/任务清单等兄弟节点占位) */
-  const [listMargin, setListMargin] = useState(0);
 
   const session = sessions.find((s) => s.id === sessionId);
   const messages = sessionId ? (bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
 
-  // ---------- D16 / val.md §5.8:工作台能力永久开启(工作台页已并入会话页) ----------
-  // isWork 已删除,PresetChip / Inspector 永远按工作台能力呈现
-
   // ---------- 检查器(P3-1:工作台能力永久开启,检查器默认开) ----------
   const { chatInspectorOpen, toggleChatInspector, chromeValue } = useChatInspector();
 
-  /** 前插历史标记:加载更早一页时抑制「自动滚到底部」,避免把视口甩走 */
-  const prependingRef = useRef(false);
-
-  /** 加载更早一页并保持视口位置(Virtualizer shift 以列表尾部为锚点自动补偿高度差) */
-  const onLoadOlder = async () => {
-    if (!sessionId) return;
-    if (!useMessagesStore.getState().hasMore[sessionId]) return;
-    prependingRef.current = true;
-    await loadOlder(sessionId);
-  };
-
-  // ---------- P3:虚拟列表起始偏移测量(横幅/任务清单等上方兄弟节点高度会动态变化) ----------
-  useLayoutEffect(() => {
-    const measure = () => {
-      const wrap = listWrapRef.current;
-      const sc = scrollRef.current;
-      if (!wrap || !sc) return;
-      const m = Math.max(
-        0,
-        Math.round(wrap.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop),
-      );
-      setListMargin((prev) => (Math.abs(prev - m) <= 1 ? prev : m));
-    };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
-    const sc = scrollRef.current;
-    if (sc) {
-      ro.observe(sc);
-      if (sc.firstElementChild) ro.observe(sc.firstElementChild);
-    }
-    return () => ro.disconnect();
-  }, [sessionId]);
-
-  // ---------- 划词选中浮动工具栏(mouseup 检测选区,定位到选区上方) ----------
-  useEffect(() => {
-    const onMouseUp = () => {
-      const sel = window.getSelection();
-      const text = sel?.toString().trim() ?? '';
-      // 只在消息区(listWrapRef 内)选中非空文本时弹工具栏
-      if (!text || !sel || sel.isCollapsed) { setSelTool(null); return; }
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) { setSelTool(null); return; }
-      // 确保选区在消息列表容器内(不是 Composer 或其他区域)
-      const list = listWrapRef.current;
-      if (list && !list.contains(range.commonAncestorContainer)) { setSelTool(null); return; }
-      // 向上找最近的 [data-msg-id] 容器,拿到来源消息 id
-      let node: Node | null = range.commonAncestorContainer;
-      let msgId: number | undefined;
-      while (node) {
-        if (node.nodeType === 1) {
-          const el = node as HTMLElement;
-          const idStr = el.getAttribute?.('data-msg-id');
-          if (idStr) { msgId = Number(idStr); break; }
-        }
-        node = node.parentNode;
-      }
-      setSelTool({
-        text: text.slice(0, 500), // 截断防极长
-        x: rect.left + rect.width / 2,
-        y: rect.top - 8,
-        msgId,
-      });
-    };
-    const onMouseDown = (e: MouseEvent) => {
-      // 点到工具栏自身时不关闭
-      const t = e.target as HTMLElement;
-      if (t?.closest?.('.sel-float-tool')) return;
-      setSelTool(null);
-    };
-    document.addEventListener('mouseup', onMouseUp);
-    document.addEventListener('mousedown', onMouseDown);
-    return () => {
-      document.removeEventListener('mouseup', onMouseUp);
-      document.removeEventListener('mousedown', onMouseDown);
-    };
-  }, []);
+  // ---------- 滚动/定位与划词工具栏 ----------
+  const [searchParams, setSearchParams] = useSearchParams();
+  const {
+    scrollRef, listRef, listWrapRef, listMargin,
+    onLoadOlder, onScrollFollow, onOutlineJump, resumeFollow,
+  } = useChatPageScroll({ sessionId, messages, hasMore, loadOlder, searchParams, setSearchParams });
+  const { selTool, setSelTool } = useChatSelectionToolbar(listWrapRef);
 
   // ---------- B2:当前会话绑定的 Agent ----------
   const agent = useMemo(
@@ -219,122 +132,11 @@ export default function ChatPage({ compactTools = false }: { compactTools?: bool
   });
   const activeBranch = session?.active_branch ?? 'main';
 
-  // 全局搜索跳转定位
-  const [searchParams, setSearchParams] = useSearchParams();
-  const locatingRef = useRef(false);
-  useEffect(() => {
-    locatingRef.current = false;
-  }, [sessionId, searchParams]);
-  useEffect(() => {
-    const target = searchParams.get('msg');
-    if (!target || messages.length === 0) return;
-    const idx = messages.findIndex((m) => String(m.id) === target);
-    if (idx >= 0) {
-      // P3:虚拟列表只挂载视口附近消息,离屏目标用 index 定位;
-      // 定位后等待条目挂载再闪烁高亮(高度测量可能需几帧)
-      listRef.current?.scrollToIndex(idx, { align: 'center' });
-      let attempts = 0;
-      let raf = 0;
-      let timer = 0;
-      const highlight = () => {
-        const el = document.getElementById(`msg-${target}`);
-        if (!el) {
-          if (++attempts < 12) {
-            raf = requestAnimationFrame(highlight);
-          } else {
-            setSearchParams({}, { replace: true });
-          }
-          return;
-        }
-        el.scrollIntoView({ block: 'center' });
-        el.classList.add('msg-flash');
-        timer = window.setTimeout(() => el.classList.remove('msg-flash'), 1800);
-        setSearchParams({}, { replace: true });
-      };
-      raf = requestAnimationFrame(highlight);
-      return () => {
-        cancelAnimationFrame(raf);
-        if (timer) window.clearTimeout(timer);
-      };
-    }
-    // 目标消息在更早分页里:继续向前加载,直到命中(或已无更早消息)
-    if (hasMore && sessionId) {
-      if (!locatingRef.current) {
-        locatingRef.current = true;
-        void loadOlder(sessionId);
-      }
-      return;
-    }
-    // 目标消息不存在(已被删除):清掉定位参数
-    setSearchParams({}, { replace: true });
-  }, [searchParams, messages, setSearchParams, hasMore, sessionId, loadOlder]);
-
-  /** 纲要跳转:定位到消息首行;虚拟列表只挂载视口附近消息,先按 index 滚动,待条目挂载后再 flash。 */
-  const onOutlineJump = useCallback(
-    (msgId: number) => {
-      const idx = messages.findIndex((m) => m.id === msgId);
-      if (idx < 0) return;
-      listRef.current?.scrollToIndex(idx, { align: 'start' });
-      let attempts = 0;
-      const highlight = () => {
-        const el = document.getElementById(`msg-${msgId}`);
-        if (!el) {
-          if (++attempts < 12) requestAnimationFrame(highlight);
-          return;
-        }
-        el.scrollIntoView({ block: 'start' });
-        el.classList.add('msg-flash');
-        window.setTimeout(() => el.classList.remove('msg-flash'), 1800);
-      };
-      requestAnimationFrame(highlight);
-    },
-    [messages],
-  );
-
-  // 进入会话时加载消息和 memory
-  useEffect(() => {
-    if (!sessionId) return;
-    load(sessionId);
-    loadMemory(sessionId);
-    void loadDeliverables(sessionId);
-    // 离开会话时:空对话默认不保留(后端按真实消息数判断,流式中/已有内容的会话不受影响)
-    // 同时清空 MCP「始终允许」会话缓存,避免跨会话静默放行(Phase 5e 安全要求)
-    return () => {
-      void useSessionsStore.getState().removeIfEmpty(sessionId);
-      void mcpClearSessionAllowed().catch(() => {});
-    };
-  }, [sessionId, load, loadMemory]);
-
-  // F4:激活分支变化(切换/分叉/搜索跳转)时强制重载消息与分支列表
-  useEffect(() => {
-    if (!sessionId) return;
-    void load(sessionId, true);
-    void loadDeliverables(sessionId, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, activeBranch]);
-
-  // 进入会话页加载 Agent 模板(B2)
-  useEffect(() => {
-    loadAgents();
-  }, [loadAgents]);
-
-  // 加载单模型配置(D8):交接弹窗按其默认记忆策略预选
-  useEffect(() => {
-    loadModelConfig().catch(() => {});
-  }, [loadModelConfig]);
-
-  // 会话思考选择初始化:智能体偏好 > 单模型默认档(default_reasoning)> 全局默认 medium;
-  // 同会话切模型不覆盖已选(store 内 init 幂等)
-  useEffect(() => {
-    if (!sessionId || !current) return;
-    // 等智能体模板加载完再初始化,避免模型默认档抢先占位
-    if (session?.agent_id && agentTemplates.length === 0) return;
-    const def = modelConfig[current.providerId]?.[current.model]?.default_reasoning;
-    const lv = (['light', 'medium', 'high', 'ultra'] as const).find((x) => x === def);
-    const pref = agentThinking(agent?.thinking_level);
-    initThinking(sessionId, pref?.level ?? lv, pref?.on);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, current?.providerId, current?.model, modelConfig, agent?.thinking_level, agentTemplates.length, session?.agent_id]);
+  // 会话数据加载、分支重载、智能体模板/模型配置加载与思考档初始化
+  useChatSessionEffects({
+    sessionId, session, current, agent, agentTemplates, modelConfig, activeBranch,
+    load, loadMemory, loadDeliverables, loadAgents, loadModelConfig, initThinking,
+  });
 
   // F7 附件插入队列 / 预填文本 / 首页草稿接续 / 附件增删
   const { handlePickFiles, handleRemoveAttachment } = useDraftHandoff({
@@ -349,60 +151,6 @@ export default function ChatPage({ compactTools = false }: { compactTools?: bool
     onNotice: (msg: string) => chat.showToast(msg, 5200),
   });
 
-  /** 附件中心导入完成:追加待发区;图片补读 data URL 供视觉模型使用 */
-  const handleCenterImported = useCallback(async (metas: AttachmentMeta[]) => {
-    setPendingAttachments((prev) => [...prev, ...metas]);
-    const imgs: Record<string, string> = {};
-    for (const m of metas) {
-      if (m.kind !== 'image') continue;
-      try {
-        imgs[m.path] = await ipc.readAttachmentData(m.path);
-      } catch {
-        // 忽略读取失败:图片仍以占位形式随消息发送
-      }
-    }
-    if (Object.keys(imgs).length > 0) {
-      setPendingImages((prev) => ({ ...prev, ...imgs }));
-    }
-  }, []);
-
-  // 新消息到达 / 切换会话时:平滑滚动到底部
-  // (?msg 定位期间不抢滚动,否则会把 scrollIntoView 的目标甩到底部;
-  //  用 ref 读取最新目标,避免定位完成后清空 query 触发本 effect 再次拉到底部)
-  const msgTargetRef = useRef<string | null>(null);
-  msgTargetRef.current = searchParams.get('msg');
-  /** 用户是否停在底部(跟随新内容);一旦手动上滚即暂停,滚回底部恢复。 */
-  const followRef = useRef(true);
-  /** 换会话时重置为跟随 */
-  useEffect(() => {
-    followRef.current = true;
-  }, [sessionId]);
-  useEffect(() => {
-    if (prependingRef.current) {
-      prependingRef.current = false;
-      return;
-    }
-    if (msgTargetRef.current) return;
-    // 用户正在上滚查看时不抢滚动,避免「一有输出就被拽回底部」
-    if (!followRef.current) return;
-    // P3:虚拟列表条目按需挂载,直接 scrollTo(scrollHeight) 会因高度估算偏短;
-    // 先按 index 定位到最后一条(库内部会在测量后校正),再补滚动一次以覆盖列表下方元素。
-    const n = messages.length;
-    if (n > 0) listRef.current?.scrollToIndex(n - 1, { align: 'end' });
-    const sc = scrollRef.current;
-    const raf = requestAnimationFrame(() => {
-      sc?.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [sessionId, messages.length]);
-
-  /** 距底部 80px 内视为「跟随」,否则用户已主动上滚查看。 */
-  const onScrollFollow = () => {
-    const sc = scrollRef.current;
-    if (!sc) return;
-    followRef.current = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
-  };
-
   // ---------- D3.1/D3.2:模型切换交接 ----------
   const { handoff, switchBanner, setSwitchBanner, showInjected, setShowInjected,
     handoffDefaultStrategy, onPickModel, onCancelHandoff, onHandoffConfirm } = useModelHandoff({
@@ -416,6 +164,24 @@ export default function ChatPage({ compactTools = false }: { compactTools?: bool
   const lastAssistantId = useMemo(
     () => [...messages].reverse().find((m) => m.role === 'assistant')?.id,
     [messages],
+  );
+
+  /** 划词「追问」:用来源消息的原始 Markdown content 构建引用,
+   *  而不是选区渲染后纯文本(公式等会丢失定界符)。 */
+  const handleSelectionQuote = useCallback(
+    (selection: ChatSelectionTool) => {
+      const srcMsg = selection.msgId != null
+        ? messages.find((m) => m.id === selection.msgId)
+        : undefined;
+      const quoteText = srcMsg?.content?.trim() || selection.text;
+      const quoteRole = srcMsg?.role ?? 'assistant';
+      setQuotes((prev) => [
+        ...prev,
+        buildQuote(quoteText, quoteRole, srcMsg?.created),
+      ].slice(-3));
+      setSelTool(null);
+    },
+    [messages, setSelTool],
   );
 
   if (!sessionId) return null;
@@ -503,69 +269,35 @@ export default function ChatPage({ compactTools = false }: { compactTools?: bool
           </div>
           {/* 任务清单:固定在输入框(Composer)正上方,与输入框同高,实时更新 */}
           <ChatTodos sessionId={sessionId} onNotice={chat.setCompressNotice} />
-          <Composer
-            value={composerText}
-            onChange={setComposerText}
-            onSend={() => {
-              // 用户主动发送:恢复「跟随到底部」
-              followRef.current = true;
-              chat.onSend();
-            }}
-            disabled={chat.sending || chat.searching}
-            variant="docked"
-            sending={chat.sending}
-            onStop={chat.onCancel}
-            iconOnlyTools={compactTools}
-            attachments={pendingAttachments}
+          <ChatComposerArea
+            sessionId={sessionId}
+            session={session}
+            current={current}
+            agent={agent}
+            compactTools={compactTools}
+            composerText={composerText}
+            setComposerText={setComposerText}
+            pendingAttachments={pendingAttachments}
+            setPendingAttachments={setPendingAttachments}
+            setPendingImages={setPendingImages}
+            quotes={quotes}
+            setQuotes={setQuotes}
             onPickFiles={handlePickFiles}
             onRemoveAttachment={handleRemoveAttachment}
-            onOpenAttachmentCenter={() => setCenterPickerOpen(true)}
-            quotes={quotes}
-            onRemoveQuote={(qid) => setQuotes((prev) => prev.filter((q) => q.id !== qid))}
+            thinkingSel={thinkingSel}
+            thinkCap={chat.thinkCap}
+            sending={chat.sending}
+            searching={chat.searching}
+            onSend={chat.onSend}
+            onCancel={chat.onCancel}
             onRecall={chat.onRecall}
-            webSearch={session?.web_search_enabled ?? false}
             onToggleWebSearch={chat.onToggleWebSearch}
-            thinking={
-              chat.thinkCap?.enabled && current
-                ? {
-                    capability: chat.thinkCap,
-                    providerId: current.providerId,
-                    model: current.model,
-                    selection: thinkingSel ?? { on: false, level: DEFAULT_THINKING_LEVEL },
-                    onSelect: (sel) => {
-                      if (sessionId) setThinking(sessionId, sel);
-                    },
-                  }
-                : null
-            }
-            model={{
-              name: current ? current.model : '未配置模型',
-              ready: !!current,
-              onOpen: () => setModelSwitchOpen(true),
-            }}
-          >
-            {/* B2:当前 Agent 指示,点击切换/解绑 */}
-            <button
-              type="button"
-              className="tool-chip agent-chip-btn"
-              title={agent ? `当前智能体:${agent.name}(点击切换)` : '点击选择智能体'}
-              onClick={() => setAgentPickerOpen(true)}
-            >
-              {(() => {
-                const Icon = agentIconComponent(agent?.icon ?? 'bot');
-                return <Icon size={13} />;
-              })()}
-              {!compactTools && <span className="agent-chip-text">{agent?.name ?? '智能体'}</span>}
-            </button>
-          </Composer>
-          {centerPickerOpen && sessionId && (
-            <AttachmentCenterPicker
-              sessionId={sessionId}
-              onClose={() => setCenterPickerOpen(false)}
-              onImported={(metas) => void handleCenterImported(metas)}
-              onError={chat.setError}
-            />
-          )}
+            setError={chat.setError}
+            onResumeFollow={resumeFollow}
+            onOpenModelSwitch={() => setModelSwitchOpen(true)}
+            onOpenAgentPicker={() => setAgentPickerOpen(true)}
+            onSelectThinking={(sel) => setThinking(sessionId, sel)}
+          />
           {/* 会话纲要:右缘贴边短横线(每条 = 一次回答),hover 展开完整浮层;两种模式都保留(P1) */}
           <OutlinePanel messages={messages} onJump={onOutlineJump} />
         </div>
@@ -579,91 +311,44 @@ export default function ChatPage({ compactTools = false }: { compactTools?: bool
         )}
       </div>
 
-      {modelSwitchOpen && (
-        <ModelSwitchDialog onClose={() => setModelSwitchOpen(false)} onPick={onPickModel} />
-      )}
-
-      {/* F5:换模型重试(取消无副作用) */}
-      {chat.retryTarget && (
-        <ModelSwitchDialog onClose={() => chat.setRetryTarget(null)} onPick={chat.onPickRetryModel} />
-      )}
-
-      {agentPickerOpen && (
-        <AgentPickerDialog
-          currentAgentId={session?.agent_id ?? null}
-          sessionId={sessionId}
-          onSelect={async (agentId) => {
-            setAgentPickerOpen(false);
-            if (!sessionId) return;
-            try {
-              await setSessionAgent(sessionId, agentId);
-            } catch (e) {
-              chat.setError(`切换智能体失败:${e instanceof Error ? e.message : String(e)}`);
-            }
-          }}
-          onClose={() => setAgentPickerOpen(false)}
-        />
-      )}
-
-      {handoff && (
-        <MemoryHandoffDialog
-          from={handoff.from}
-          to={handoff.to}
-          memoryBody={memoryDto?.body ?? ''}
-          currentStrategy={handoffDefaultStrategy}
-          onConfirm={onHandoffConfirm}
-          onCancel={onCancelHandoff}
-        />
-      )}
-
-      {showInjected && switchBanner && (
-        <div className="dialog-mask" onClick={() => setShowInjected(false)}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()} style={{ width: 560 }}>
-            <div className="dialog-head">实际注入的 system 文本</div>
-            <div className="dialog-body">
-              <pre className="injected-view">{switchBanner.injected}</pre>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {chat.toast && <Toast text={chat.toast} onClose={chat.hideToast} />}
+      <ChatDialogs
+        sessionId={sessionId}
+        sessionAgentId={session?.agent_id ?? null}
+        memoryBody={memoryDto?.body ?? ''}
+        modelSwitchOpen={modelSwitchOpen}
+        onCloseModelSwitch={() => setModelSwitchOpen(false)}
+        onPickModel={onPickModel}
+        retryTarget={chat.retryTarget}
+        onCloseRetryModel={() => chat.setRetryTarget(null)}
+        onPickRetryModel={chat.onPickRetryModel}
+        agentPickerOpen={agentPickerOpen}
+        onCloseAgentPicker={() => setAgentPickerOpen(false)}
+        onSelectAgent={async (agentId) => {
+          setAgentPickerOpen(false);
+          try {
+            await setSessionAgent(sessionId, agentId);
+          } catch (e) {
+            chat.setError(`切换智能体失败:${e instanceof Error ? e.message : String(e)}`);
+          }
+        }}
+        handoff={handoff}
+        handoffDefaultStrategy={handoffDefaultStrategy}
+        onHandoffConfirm={onHandoffConfirm}
+        onCancelHandoff={onCancelHandoff}
+        showInjected={showInjected}
+        switchBanner={switchBanner}
+        onCloseInjected={() => setShowInjected(false)}
+        toast={chat.toast}
+        onCloseToast={chat.hideToast}
+      />
 
       {/* 划词选中浮动工具栏 —— Portal 到 body,绝对定位在选区上方 */}
-      {selTool && createPortal(
-        <div
-          className="sel-float-tool"
-          style={{ left: selTool.x, top: selTool.y }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <button
-            className="sel-ft-btn"
-            onClick={() => {
-              void navigator.clipboard.writeText(selTool.text).catch(() => {});
-              setSelTool(null);
-            }}
-            title="复制"
-          >复制</button>
-          <button
-            className="sel-ft-btn primary"
-            onClick={() => {
-              // P15:用来源消息的**原始 Markdown content** 构建引用,
-              // 而不是 window.getSelection().toString() 拿到的渲染后纯文本(公式等会丢失定界符)
-              const srcMsg = selTool.msgId != null
-                ? messages.find((m) => m.id === selTool.msgId)
-                : undefined;
-              const quoteText = srcMsg?.content?.trim() || selTool.text;
-              const quoteRole = srcMsg?.role ?? 'assistant';
-              setQuotes((prev) => [
-                ...prev,
-                buildQuote(quoteText, quoteRole, srcMsg?.created),
-              ].slice(-3));
-              setSelTool(null);
-            }}
-            title="引用并追问"
-          >追问</button>
-        </div>,
-        document.body,
+      {selTool && (
+        <ChatSelectionToolbar
+          selection={selTool}
+          onClose={() => setSelTool(null)}
+          onQuote={handleSelectionQuote}
+        />
       )}
     </WorkbenchChromeContext.Provider>
   );

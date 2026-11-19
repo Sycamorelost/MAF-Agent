@@ -1,0 +1,37 @@
+/* 消息内附件卡片(从 composer.css 拆出,控制单文件体积) */
+.attach-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  max-width: 100%;
+}
+.msg.user .attach-cards { justify-content: flex-end; }
+.attach-card {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--bg-hover) 42%, var(--bg-main));
+  border: none;
+  border-radius: var(--radius-m);
+  color: var(--text-2);
+  font-size: var(--font-caption);
+}
+.attach-card-info { min-width: 0; text-align: left; }
+.attach-card-name {
+  max-width: calc(220px * var(--ui-scale));
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+}
+.attach-card-kind { color: var(--text-4); }
+.attach-thumb {
+  max-width: calc(200px * var(--ui-scale));
+  max-height: calc(140px * var(--ui-scale));
+  border-radius: var(--radius-m);
+  border: none;
+  cursor: zoom-in;
+  display: block;
+}

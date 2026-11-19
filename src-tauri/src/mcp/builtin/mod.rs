@@ -19,6 +19,7 @@ use super::capability::Scope;
 mod delegate;
 mod docs;
 mod fs_tools;
+mod media;
 #[cfg(test)]
 mod matrix_tests;
 #[cfg(test)]
@@ -132,6 +133,9 @@ pub(crate) async fn execute_builtin(
     }
     if sys_web::handles(name) {
         return sys_web::exec(name, args, session_id).await;
+    }
+    if media::handles(name) {
+        return media::exec(name, args, session_id).await;
     }
 
     match name {

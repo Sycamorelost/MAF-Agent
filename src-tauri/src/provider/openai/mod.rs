@@ -106,16 +106,20 @@ impl Provider for OpenAiCompat {
         let url = format!("{}/chat/completions", self.base_url);
 
         // 序列化消息:无图片时 content 为纯字符串;有图片时走 vision content 数组。
+        // DeepSeek 的思考模式要求回传历史 assistant 的 reasoning_content(否则 400)。
+        let reasoning_active = req.reasoning.map(|r| r.is_active()).unwrap_or(false);
+        let lower_base = self.base_url.to_ascii_lowercase();
+        let with_reasoning = reasoning_active
+            && (self.id.eq_ignore_ascii_case("deepseek") || lower_base.contains("deepseek"));
         let messages: Vec<serde_json::Value> = req
             .messages
             .iter()
-            .map(|m: &ChatMessage| Self::serialize_message(m))
+            .map(|m: &ChatMessage| Self::serialize_message(m, with_reasoning))
             .collect();
 
         // 采样参数互斥(官方明示:思考开启时 temperature/top_p 被服务端忽略或直接报错):
         // 思考生效(Effort/Budget)时整个省略这两个键(不发 null,兼容严格校验的端点);
         // max_tokens 保留——思考 token 计入其额度,思考模型建议 ≥16k(UI 侧提示)。
-        let reasoning_active = req.reasoning.map(|r| r.is_active()).unwrap_or(false);
         let mut body = json!({
             "model": req.model,
             "messages": messages,

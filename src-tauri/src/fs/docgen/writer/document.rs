@@ -7,8 +7,11 @@ use docx_rs::*;
 use super::super::DocRequest;
 use super::super::inline::{self, Emphasis};
 use super::super::markdown::Block;
-use super::super::style::{DocStyle, MARGIN_LR, MARGIN_TB, PAGE_H, PAGE_W};
+use super::super::style::{DocStyle, HeadingNumbering, PAGE_H, PAGE_W};
+use super::super::templates::numbering;
 use super::image::image_para;
+use super::front_matter::{add_cover, footer_para, header_para};
+use super::metrics;
 use super::styles::styles_for;
 use super::table::table_block;
 
@@ -23,10 +26,10 @@ pub fn render(req: &DocRequest, style: &DocStyle, base: &Path) -> Result<Vec<u8>
     let mut docx = Docx::new()
         .page_size(PAGE_W, PAGE_H)
         .page_margin(PageMargin {
-            top: MARGIN_TB,
-            left: MARGIN_LR,
-            bottom: MARGIN_TB,
-            right: MARGIN_LR,
+            top: style.margin_top,
+            left: style.margin_left,
+            bottom: style.margin_bottom,
+            right: style.margin_right,
             header: 851,
             footer: 992,
             gutter: 0,
@@ -60,94 +63,77 @@ pub fn render(req: &DocRequest, style: &DocStyle, base: &Path) -> Result<Vec<u8>
     }
 
     let mut need_break = cover || toc;
-    for block in &blocks {
+    let prefixes = heading_prefixes(&blocks, style.numbering);
+    for (idx, block) in blocks.iter().enumerate() {
         let brk = std::mem::take(&mut need_break);
-        docx = add_block(docx, block, style, base, brk);
+        docx = add_block(docx, block, style, base, brk, prefixes[idx].as_deref());
     }
 
     let mut cursor = std::io::Cursor::new(Vec::new());
     docx.build()
         .pack(&mut cursor)
         .map_err(|e| format!("生成 docx 失败: {e}"))?;
-    Ok(cursor.into_inner())
-}
-
-// ---------------- 封面与页眉页脚 ----------------
-
-fn add_cover(mut docx: Docx, req: &DocRequest, style: &DocStyle) -> Docx {
-    // 用段前距推高标题,避免空段落堆叠
-    docx = docx.add_paragraph(
-        Paragraph::new()
-            .line_spacing(LineSpacing::new().before(2200))
-            .indent(Some(0), Some(SpecialIndentType::FirstLine(0)), None, None),
-    );
-    if !req.title.trim().is_empty() {
-        docx = docx.add_paragraph(add_text_runs(
-            Paragraph::new()
-                .style("DocTitle")
-                .align(AlignmentType::Center),
-            &req.title,
-            style,
-        ));
-    }
-    if !req.subtitle.trim().is_empty() {
-        docx = docx.add_paragraph(add_text_runs(
-            Paragraph::new()
-                .style("DocSubtitle")
-                .align(AlignmentType::Center),
-            &req.subtitle,
-            style,
-        ));
-    }
-    for (label, value) in req.meta.rows() {
-        let text = format!("{label}：{value}");
-        docx = docx.add_paragraph(add_text_runs(
-            Paragraph::new()
-                .style("MetaText")
-                .align(AlignmentType::Center)
-                .line_spacing(LineSpacing::new().before(160)),
-            &text,
-            style,
-        ));
-    }
-    docx
-}
-
-fn header_para(style: &DocStyle, title: &str) -> Paragraph {
-    Paragraph::new()
-        .style("Normal")
-        .align(AlignmentType::Right)
-        .indent(Some(0), Some(SpecialIndentType::FirstLine(0)), None, None)
-        .add_run(
-            Run::new()
-                .add_text(title.trim())
-                .size(18)
-                .color("808080")
-                .fonts(style.body_fonts()),
-        )
-}
-
-fn footer_para() -> Paragraph {
-    Paragraph::new()
-        .style("Normal")
-        .align(AlignmentType::Center)
-        .indent(Some(0), Some(SpecialIndentType::FirstLine(0)), None, None)
-        .add_run(Run::new().add_text("第 ").size(18).color("808080"))
-        .add_page_num(PageNum::new())
-        .add_run(Run::new().add_text(" 页").size(18).color("808080"))
+    // 把正文里的公式占位符替换为 OMML(docx-rs 本身不支持公式)
+    super::super::math_docx::inject_docx_math(cursor.into_inner())
 }
 
 // ---------------- 块渲染 ----------------
 
-fn add_block(mut docx: Docx, block: &Block, style: &DocStyle, base: &Path, brk: bool) -> Docx {
+/// 预计算每级标题编号;用户已手写编号的标题返回 None。
+fn heading_prefixes(blocks: &[Block], kind: HeadingNumbering) -> Vec<Option<String>> {
+    if kind == HeadingNumbering::None {
+        return vec![None; blocks.len()];
+    }
+    let mut counters = [0usize; 4];
+    // 以正文中最浅的标题层级作为编号第 1 级(常见写法从 `##` 开始)
+    let min_level = blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Heading { level, .. } if *level <= 4 => Some(*level),
+            _ => None,
+        })
+        .min()
+        .unwrap_or(1);
+    blocks
+        .iter()
+        .map(|b| match b {
+            Block::Heading { level, text } if *level <= 4 => {
+                let l = level.saturating_sub(min_level).min(3);
+                counters[l] += 1;
+                for c in counters.iter_mut().skip(l + 1) {
+                    *c = 0;
+                }
+                if numbering::has_manual(text) {
+                    None
+                } else {
+                    Some(numbering::prefix(kind, &counters, l + 1))
+                }
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn add_block(
+    mut docx: Docx,
+    block: &Block,
+    style: &DocStyle,
+    base: &Path,
+    brk: bool,
+    num: Option<&str>,
+) -> Docx {
     match block {
         Block::Heading { level, text } => {
             let lvl = (*level).clamp(1, 4);
+            let numbered = match num {
+                Some(p) => format!("{p}{text}"),
+                None => text.clone(),
+            };
             docx = docx.add_paragraph(add_text_runs(
                 Paragraph::new()
                     .style(&format!("Heading{lvl}"))
                     .page_break_before(brk),
-                text,
+                &numbered,
                 style,
             ));
         }
@@ -164,6 +150,43 @@ fn add_block(mut docx: Docx, block: &Block, style: &DocStyle, base: &Path, brk: 
                 text,
                 style,
             ));
+        }
+        Block::Abstract(text) | Block::Keywords(text) => {
+            let label = if matches!(block, Block::Abstract(_)) {
+                "摘要："
+            } else {
+                "关键词："
+            };
+            let p = Paragraph::new()
+                .style(if matches!(block, Block::Abstract(_)) {
+                    "AbstractText"
+                } else {
+                    "KeywordsText"
+                })
+                .page_break_before(brk)
+                .add_run(
+                    Run::new()
+                        .add_text(label)
+                        .bold()
+                        .fonts(metrics::heading_fonts(style)),
+                );
+            docx = docx.add_paragraph(add_text_runs(p, text, style));
+        }
+        Block::Reference(text) => {
+            docx = docx.add_paragraph(add_text_runs(
+                Paragraph::new().style("ReferenceText").page_break_before(brk),
+                text,
+                style,
+            ));
+        }
+        Block::Math(latex) => {
+            let token = super::super::math::token(latex, true);
+            docx = docx.add_paragraph(
+                Paragraph::new()
+                    .style("MathBlock")
+                    .page_break_before(brk)
+                    .add_run(Run::new().add_text(token)),
+            );
         }
         Block::List { ordered, items } => {
             let base_indent = if style.body_indent > 0 {
@@ -189,7 +212,7 @@ fn add_block(mut docx: Docx, block: &Block, style: &DocStyle, base: &Path, brk: 
                         .style("BodyText")
                         .align(AlignmentType::Left)
                         .page_break_before(brk && idx == 0)
-                        .line_spacing(style.body_line_spacing())
+                        .line_spacing(metrics::body_line_spacing(style))
                         .indent(
                             Some(left),
                             Some(SpecialIndentType::Hanging(420)),
@@ -280,7 +303,7 @@ fn add_block(mut docx: Docx, block: &Block, style: &DocStyle, base: &Path, brk: 
     docx
 }
 
-fn add_text_runs(p: Paragraph, text: &str, style: &DocStyle) -> Paragraph {
+pub(super) fn add_text_runs(p: Paragraph, text: &str, style: &DocStyle) -> Paragraph {
     add_text_runs_with(p, text, style, false)
 }
 
@@ -291,6 +314,11 @@ pub(super) fn add_text_runs_with(
     force_bold: bool,
 ) -> Paragraph {
     for seg in inline::parse_inline(text) {
+        // 公式:写入占位符,打包后由 math_docx::inject_docx_math 换 OMML
+        if seg.emphasis == Emphasis::Math {
+            p = p.add_run(Run::new().add_text(super::super::math::token(&seg.text, false)));
+            continue;
+        }
         let mut run = Run::new().add_text(seg.text);
         run = match seg.emphasis {
             Emphasis::Bold => run.bold(),
@@ -298,9 +326,9 @@ pub(super) fn add_text_runs_with(
             Emphasis::BoldItalic => run.bold().italic(),
             Emphasis::Strike => run.strike(),
             Emphasis::Code => run
-                .fonts(style.mono_fonts())
+                .fonts(metrics::mono_fonts(style))
                 .shading(Shading::new().fill("F2F2F2")),
-            Emphasis::Normal => run,
+            Emphasis::Normal | Emphasis::Math => run,
         };
         if force_bold {
             run = run.bold();
@@ -319,14 +347,14 @@ fn code_para(lines: &[String], style: &DocStyle) -> Paragraph {
             p = p.add_run(
                 Run::new()
                     .add_break(BreakType::TextWrapping)
-                    .fonts(style.mono_fonts())
+                    .fonts(metrics::mono_fonts(style))
                     .shading(shading.clone()),
             );
         }
         p = p.add_run(
             Run::new()
                 .add_text(line)
-                .fonts(style.mono_fonts())
+                .fonts(metrics::mono_fonts(style))
                 .shading(shading.clone()),
         );
     }

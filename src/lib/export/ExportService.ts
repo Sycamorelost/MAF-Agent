@@ -10,6 +10,8 @@
  * 首行缩进、三线表、A4 页边距)。
  */
 
+import katex from 'katex';
+
 import { academicCss, academicPaperCss } from './docStyle';
 import { exportPdf } from '../ipc/export';
 
@@ -30,6 +32,9 @@ ${academicCss('.maf-print-overlay')}
 .maf-print-overlay .doc-title {
   text-align:center;font-size:22pt;font-family:"SimHei","黑体","Microsoft YaHei",sans-serif;
   font-weight:700;margin:0 0 18pt;
+}
+.maf-print-overlay .doc-math {
+  text-align:center;text-indent:0;margin:12pt 0;
 }
 `;
 
@@ -76,7 +81,25 @@ function safeHref(raw: string): string | null {
   return ALLOWED_HREF_PROTOCOLS.includes(scheme[1].toLowerCase()) ? raw : null;
 }
 
-/** 行内标记:`code`、**粗体**、链接(带协议白名单与属性转义)。 */
+/** 公式渲染:KaTeX 独立渲染,失败时降级为等宽的原始 TeX,不阻断导出。 */
+function renderTex(tex: string, display: boolean): string {
+  try {
+    return katex.renderToString(tex.trim(), {
+      displayMode: display,
+      throwOnError: false,
+      trust: false,
+      strict: 'ignore',
+    });
+  } catch {
+    const escaped = tex
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    return `<code>${escaped}</code>`;
+  }
+}
+
+/** 行内标记:`code`、**粗体**、链接(带协议白名单与属性转义)、$...$ 公式。 */
 export function inlineMd(line: string): string {
   const esc = (s: string) =>
     s
@@ -85,14 +108,24 @@ export function inlineMd(line: string): string {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
-  return esc(line)
+  // 公式先抽成占位符再转义正文,避免 LaTeX 里的 <>& 被 HTML 转义
+  const maths: string[] = [];
+  const withMath = line.replace(
+    /\$\$([^$]+?)\$\$|\$([^$\n]+?)\$/g,
+    (_m, display: string | undefined, inline: string | undefined) => {
+      maths.push(renderTex(display ?? inline ?? '', Boolean(display)));
+      return `\u0000M${maths.length - 1}\u0000`;
+    },
+  );
+  return esc(withMath)
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, href: string) => {
       const safe = safeHref(href);
       // 白名单外协议(如 javascript:/data:)降级为纯文本,不生成可点击链接
       return safe ? `<a href="${safe}">${text}</a>` : `<span>${text}</span>`;
-    });
+    })
+    .replace(/\u0000M(\d+)\u0000/g, (_m, idx: string) => maths[Number(idx)] ?? '');
 }
 
 /** 管道表格行 → 单元格文本数组。 */
@@ -137,6 +170,27 @@ function mdToPrintHtml(md: string): string {
       continue;
     }
 
+    // 独立公式:$$ ... $$(支持单行与多行)
+    if (line.trim().startsWith('$$')) {
+      closeList();
+      let tex = line.trim().slice(2);
+      if (tex.endsWith('$$')) {
+        tex = tex.slice(0, -2);
+      } else {
+        while (i + 1 < lines.length) {
+          i++;
+          const cur = lines[i].trim();
+          if (cur.endsWith('$$')) {
+            tex += `${tex ? '\n' : ''}${cur.slice(0, -2)}`;
+            break;
+          }
+          tex += `${tex ? '\n' : ''}${cur}`;
+        }
+      }
+      out.push(`<div class="doc-math">${renderTex(tex, true)}</div>`);
+      continue;
+    }
+
     if (/^#{1,6}\s/.test(line)) {
       closeList();
       const level = line.match(/^#+/)![0].length;
@@ -146,8 +200,7 @@ function mdToPrintHtml(md: string): string {
     }
 
     // 管道表格:表头 + 分隔行 + 数据行
-    if (
-      line.includes('|') &&
+    if (line.includes('|') &&
       i + 1 < lines.length &&
       isTableDivider(lines[i + 1])
     ) {

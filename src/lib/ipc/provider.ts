@@ -382,7 +382,7 @@ export const restoreBuiltinTemplates = () => invoke<void>('restore_builtin_templ
 export interface ChatStreamInput {
   provider_id: string;
   model: string;
-  messages: Array<{ role: string; content: string; images?: string[] }>;
+  messages: Array<{ role: string; content: string; images?: string[]; reasoning_content?: string }>;
   temperature?: number | null;
   max_tokens?: number | null;
   top_p?: number | null;

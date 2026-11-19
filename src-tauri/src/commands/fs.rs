@@ -75,18 +75,20 @@ pub async fn fs_export_docx(
     path: String,
     title: String,
     body: String,
+    template: Option<String>,
     profile: Option<String>,
     toc: Option<bool>,
     meta: Option<crate::fs::docgen::DocMeta>,
     session_id: Option<String>,
 ) -> Result<text::WriteResult, String> {
-    let req = crate::fs::docgen::DocRequest::from_parts(
+    let mut req = crate::fs::docgen::DocRequest::from_parts(
         &title,
         &body,
         profile.as_deref(),
         toc,
         meta.unwrap_or_default(),
     );
+    req.template = template.filter(|t| !t.trim().is_empty());
     text::export_docx_ext(&path, &req, session_id.as_deref())
 }
 

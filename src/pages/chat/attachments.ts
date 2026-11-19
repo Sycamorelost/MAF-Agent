@@ -96,7 +96,7 @@ export function buildSendHistory(
   system: string,
   extraUser: { content: string; images?: string[] } | null,
   docOpts: DocPipelineOpts = {},
-): { role: string; content: string; images?: string[] }[] {
+): { role: string; content: string; images?: string[]; reasoning_content?: string }[] {
   let base = messages.slice();
   if (maxMsg > 0 && base.length > maxMsg) base = base.slice(-maxMsg);
   // 附件注入:窗口内所有带附件消息均注入,但同一文档只注入一次
@@ -104,8 +104,10 @@ export function buildSendHistory(
   const history = base.map((m) => ({
     role: m.role,
     content: injectAttachments(m, docOpts, seen),
+    // DeepSeek 思考模式要求回传 assistant 的思考内容,否则下一轮 400
+    ...(m.role === 'assistant' && m.reasoning ? { reasoning_content: m.reasoning } : {}),
   }));
-  const out: { role: string; content: string; images?: string[] }[] = [
+  const out: { role: string; content: string; images?: string[]; reasoning_content?: string }[] = [
     { role: 'system', content: system },
     ...history,
   ];
@@ -116,13 +118,14 @@ export function buildSendHistory(
 /** 用新分支的最新历史组装 system + 滑窗 + 附件注入(F4 重新生成 / F5 换模型重试共用)。 */
 export function rebuildSendHistory(
   latest: MessageRow[], maxMsg: number, system: string, docOpts: DocPipelineOpts = {},
-): { role: string; content: string }[] {
+): { role: string; content: string; reasoning_content?: string }[] {
   let base = latest.slice();
   if (maxMsg > 0 && base.length > maxMsg) base = base.slice(-maxMsg);
   const seen = new Set<string>();
   const history = base.map((m) => ({
     role: m.role,
     content: injectAttachments(m, docOpts, seen),
+    ...(m.role === 'assistant' && m.reasoning ? { reasoning_content: m.reasoning } : {}),
   }));
   return [{ role: 'system', content: system }, ...history];
 }

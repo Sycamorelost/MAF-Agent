@@ -34,11 +34,24 @@ export interface NoteHit {
   updated: string;
 }
 
+/** 附件命中(文件名 / 解析摘要 / 提取正文)。 */
+export interface AttachmentHit {
+  path: string;
+  name: string;
+  kind: string;
+  session_id: string;
+  session_title: string;
+  message_id: number;
+  branch_id: string;
+  snippet: string;
+}
+
 export interface SearchResults {
   sessions: SessionHit[];
   messages: MessageHit[];
   memory: MemoryHit[];
   notes: NoteHit[];
+  attachments: AttachmentHit[];
 }
 
 export const searchAll = (query: string) => invoke<SearchResults>('search_all', { query });

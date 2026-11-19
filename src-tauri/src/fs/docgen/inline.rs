@@ -15,6 +15,8 @@ pub enum Emphasis {
     BoldItalic,
     Code,
     Strike,
+    /// 行内 LaTeX 公式(文本字段保存原始 LaTeX,由 docx 层转 OMML)
+    Math,
 }
 
 /// 一段同一样式的文本。
@@ -88,7 +90,8 @@ pub fn parse_inline(text: &str) -> Vec<Segment> {
                 if let Some(end) = find_dollar(&chars, i + 1) {
                     flush(&mut out, &mut buf, bold, italic, strike);
                     let raw: String = chars[i + 1..end].iter().collect();
-                    out.push(Segment::new(math_to_text(&raw), Emphasis::Normal));
+                    // 保留原始 LaTeX:docx 走 OMML,纯文本场景由调用方兜底
+                    out.push(Segment::new(raw, Emphasis::Math));
                     i = end + 1;
                 } else {
                     buf.push(c);
@@ -201,7 +204,11 @@ fn flush(out: &mut Vec<Segment>, buf: &mut String, bold: bool, italic: bool, str
 /// 相邻片段之间补空格(避免粗体边界吞掉中英间距)。
 fn fix_boundaries(mut segs: Vec<Segment>) -> Vec<Segment> {
     for i in 1..segs.len() {
-        if segs[i].emphasis == Emphasis::Code || segs[i - 1].emphasis == Emphasis::Code {
+        if matches!(
+            segs[i].emphasis,
+            Emphasis::Code | Emphasis::Math
+        ) || matches!(segs[i - 1].emphasis, Emphasis::Code | Emphasis::Math)
+        {
             continue;
         }
         let prev = segs[i - 1].text.chars().last();
@@ -495,6 +502,16 @@ mod tests {
         assert_eq!(math_to_text(r"a \times b \le c"), "a × b ≤ c");
         assert_eq!(math_to_text(r"x^2 + y^2"), "x² + y²");
         assert_eq!(math_to_text(r"\text{时间} \mid 10"), "时间 | 10");
+    }
+
+    #[test]
+    fn keeps_raw_latex_for_docx_math() {
+        let segs = parse_inline(r"由 $E=mc^2$ 可得");
+        let math = segs
+            .iter()
+            .find(|s| s.emphasis == Emphasis::Math)
+            .expect("应保留公式片段");
+        assert_eq!(math.text, r"E=mc^2");
     }
 
     #[test]

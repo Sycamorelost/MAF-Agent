@@ -191,16 +191,9 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
      与主面板同一平面,不再呈现独立悬浮图层 */
   background:transparent;
   display:flex;flex-direction:column;
-<<<<<<< HEAD
   /* 三段式:side-top(固定顶) + side-scroll(中间滚) + side-bottom(固定底)
      右侧不留额外 padding —— 让子元素直接贴右边界 */
   padding:0 0 0 calc(var(--pad-x-narrow) * .5);
-=======
-  /* 顶部不留 padding:「新对话」按钮与右侧主面板上端同高(主面板贴 .body 顶);
-     右侧留白收窄一半,列表文字更贴近主面板 */
-  padding:0 calc(var(--pad-x-narrow) * .25) calc(var(--space-3) * .5) calc(var(--pad-x-narrow) * .5);
-  overflow:hidden;
->>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
   transition:transform var(--drawer-dur) var(--drawer-ease);
 }
 /* 顶部固定区:搜索 + 新对话,全宽胶囊 + 贴顶部 + 右侧与会话区同高 */

@@ -47,6 +47,8 @@ pub struct SearchResults {
     pub messages: Vec<MessageHit>,
     pub memory: Vec<MemoryHit>,
     pub notes: Vec<NoteHit>,
+    /// 附件:文件名 / 解析摘要 / 提取正文命中
+    pub attachments: Vec<super::search_attachments::AttachmentHit>,
 }
 
 /// 会话目录根:`<data_dir>/conversations`
@@ -63,6 +65,7 @@ pub async fn search_all(query: String) -> Result<SearchResults, String> {
         messages: Vec::new(),
         memory: Vec::new(),
         notes: Vec::new(),
+        attachments: Vec::new(),
     };
     if q.is_empty() {
         return Ok(out);
@@ -250,6 +253,12 @@ pub async fn search_all(query: String) -> Result<SearchResults, String> {
                 out.notes.push(r);
             }
         }
+    }
+
+    // 5. 附件(文件名 / 摘要 / 提取正文):元数据存于 messages.attachments JSON
+    {
+        let conn = db::conn().lock().map_err(|e| e.to_string())?;
+        out.attachments = super::search_attachments::search_attachments_on(&conn, &q, 10)?;
     }
 
     Ok(out)

@@ -490,6 +490,13 @@
 .msg.user .bubble .md strong { font-weight: 600; }
 .msg.user .bubble .md em { font-style: italic; }
 
+/* 用户输入按纯文本展示:保留换行与空格,不解析 Markdown */
+.msg.user .bubble-plain {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 /* 消息操作栏溢出菜单:复制常驻,其余收入「⋯」(折叠冗余、窄窗不溢出) */
 .more-wrap { position: relative; display: inline-flex; }
 .more-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); cursor: default; }

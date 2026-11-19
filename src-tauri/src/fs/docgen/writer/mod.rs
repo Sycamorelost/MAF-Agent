@@ -16,7 +16,9 @@
 //! - `styles.rs`:Word 样式表。
 
 mod document;
+mod front_matter;
 mod image;
+mod metrics;
 mod styles;
 mod table;
 

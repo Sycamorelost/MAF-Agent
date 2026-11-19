@@ -6,7 +6,7 @@ use super::tool;
 use crate::provider::ToolDef;
 
 pub fn write_tool_defs() -> Vec<ToolDef> {
-    vec![
+    let mut defs = vec![
         tool(
             "shell_exec",
             "执行本机命令。command 填程序名(git/dir/where),参数放 args 数组;默认仅只读命令白名单,路径不限目录,解释器与写操作被拒绝;系统级操作(环境变量/服务/注册表)需审批模式切到「完全信任」。高危命令(格式化/删根/改注册表等)始终需要人工确认。结果首行 [exit=N ...],N≠0 为失败。",
@@ -101,17 +101,23 @@ pub fn write_tool_defs() -> Vec<ToolDef> {
         ),
         tool(
             "fs_export_docx",
-            "导出 .docx,自动套用学术/通用版式:Heading 大纲级别、正文首行缩进与 1.5 倍行距、三线表、封面、目录、页眉页码。正文用 Markdown:#/##/### 标题、- 或 1. 列表、| 表格 |、``` 代码块、**粗体**、`行内代码`、> 引用、![图注](图片路径);表题写在表格上一行(如「表 1 …」),图注写在图片下一行。实验报告/论文建议用 ## 一、… 分章,meta 填作者/课程以生成封面。path 支持绝对路径,自动建目录。",
+            "导出 .docx,自动套用文体版式:Heading 大纲级别、正文首行缩进与行距、三线表/网格表、封面、目录、页眉页码、摘要/关键词、参考文献悬挂缩进、标题自动编号。正文用 Markdown:#/##/### 标题、- 或 1. 列表、| 表格 |、``` 代码块、**粗体**、`行内代码`、> 引用、![图注](图片路径);表题写在表格上一行(如「表 1 …」),图注写在图片下一行。数学公式直接写 LaTeX:$...$ 行内、$$...$$ 独立成行,会转成 Word 原生公式(OMML)。template 可选:official 公文(GB/T 9704,仿宋三号)、paper 论文、lab 实验报告、practice 实践调研、summary 工作总结、notice 通知、minutes 会议纪要、general 通用;省略则按标题/正文自动识别。论文传 template=paper 并填 meta,正文写「摘要：」「关键词：」,「## 参考文献」之后的条目按 [1] 悬挂缩进。path 支持绝对路径,自动建目录。",
             json!({
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "目标路径,如 D:\\报告\\a.docx" },
                     "title": { "type": "string", "description": "文档标题" },
-                    "body": { "type": "string", "description": "正文,按 Markdown 解析;表格用管道语法,表题紧邻表格上一行" },
+                    "subtitle": { "type": "string", "description": "副标题(封面用,可选)" },
+                    "body": { "type": "string", "description": "正文,按 Markdown 解析;表格用管道语法,表题紧邻表格上一行;公式用 $...$ / $$...$$ 写 LaTeX 原式" },
+                    "template": {
+                        "type": "string",
+                        "enum": ["official", "paper", "lab", "practice", "summary", "notice", "minutes", "general"],
+                        "description": "文体模板:official 公文 / paper 论文 / lab 实验报告 / practice 实践调研 / summary 工作总结 / notice 通知 / minutes 会议纪要 / general 通用;省略则自动识别"
+                    },
                     "profile": {
                         "type": "string",
                         "enum": ["experiment", "paper", "practice", "general"],
-                        "description": "用途模板:experiment 实验报告 / paper 论文 / practice 实践报告 / general 通用文档;省略则自动识别"
+                        "description": "旧版用途参数,优先用 template;两者都省略时自动识别"
                     },
                     "toc": { "type": "boolean", "description": "是否生成自动目录;省略时学术类默认开启" },
                     "meta": {
@@ -171,5 +177,7 @@ pub fn write_tool_defs() -> Vec<ToolDef> {
                 "required": ["path", "dest"]
             }),
         ),
-    ]
+    ];
+    defs.extend(super::media::write_media_tool_defs());
+    defs
 }
