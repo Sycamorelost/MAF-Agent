@@ -17,7 +17,6 @@ mod db;
 mod deliverables;
 mod diagnostics;
 mod doc;
-mod draw_prompt;
 mod export;
 mod fs;
 mod gui;

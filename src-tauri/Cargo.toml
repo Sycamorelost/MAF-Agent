@@ -42,7 +42,7 @@ sha2 = "0.10"
 encoding_rs = "0.8"
 thiserror = "1"
 docx-rs = "0.4"
-calamine = "0.37"
+calamine = "0.38"
 pdf-extract = "0.12"
 # 工作区表格导出(docx 写入用 docx-rs;xlsx 写入用 rust_xlsxwriter)
 # SEC-1:0.101 起依赖 zip 9.0,消除 zip 2.x 的已知漏洞告警。
@@ -51,7 +51,7 @@ rust_xlsxwriter = "0.101"
 # SEC-1:zip 8.x 存在路径穿越 CVE;升级到 9.x。本项目 zip_extract_in 已用
 # enclosed_name + 跳符号链接 + 体积上限做防御,升级主要消除已知漏洞告警。
 zip = "9"
-# 绘画历史缩略图(D5):仅 png 解码 + jpeg 缩略图编码
+# 文档生成(docgen)插图:仅 png 解码 + jpeg 缩略图编码
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 # MCP 客户端:rmcp 官方 SDK;stdio 传输 + child-process spawn,与项目已有 tokio 1.x 兼容
 # streamable-http:远端 MCP server(Streamable HTTP 传输),reqwest 0.13 已就位

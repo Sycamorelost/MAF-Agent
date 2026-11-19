@@ -112,8 +112,8 @@ a:hover { text-decoration: underline; }
   padding-right: calc(var(--pad-x-narrow) * .25);
   padding-bottom: var(--space-2);
 }
-.side-scroll::-webkit-scrollbar { width: 8px; }
-.side-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+.side-scroll::-webkit-scrollbar { width: 4px; }
+.side-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 .side-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 .side-list {
   display: flex;

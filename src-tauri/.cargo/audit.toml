@@ -15,4 +15,5 @@ ignore = [
     "RUSTSEC-2026-0367", # zip: SUID/SGID 位在解包时被保留
     "RUSTSEC-2026-0368", # zip: extract 创建指向目标目录外的符号链接
     "RUSTSEC-2026-0369", # zip: extract 通过符号链接应用权限
+    "RUSTSEC-2026-0429", # zip: extract 遇声明体积过大的符号链接条目时中止进程(同属 extract 路径,本项目不调用)
 ]

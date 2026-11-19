@@ -172,7 +172,6 @@ export interface ProviderTemplate {
   models: string[];
   /** 全部模型(含已停用,按用户排序),仅设置页展示/启用开关使用 */
   all_models: string[];
-  image_models: string[];
   docs_url: string | null;
   /** 使用提示(如「勿用 GLM Coding Plan 的 Key」),无则为 null */
   notice: string | null;

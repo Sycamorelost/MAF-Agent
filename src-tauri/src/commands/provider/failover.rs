@@ -75,7 +75,6 @@ pub(crate) fn error_kind(e: &ProviderError) -> &'static str {
         ProviderError::Server(_) => "server",
         ProviderError::Network(_) => "network",
         ProviderError::BadRequest(_) => "bad_request",
-        ProviderError::NotSupported(_) => "not_supported",
         ProviderError::Parse(_) => "parse",
         ProviderError::Other(_) => "other",
     }

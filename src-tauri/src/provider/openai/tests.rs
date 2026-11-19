@@ -109,34 +109,6 @@ fn parse_cached_tokens_clamped_and_anthropic_style() {
 }
 
 #[test]
-fn parse_image_b64() {
-    let v = serde_json::json!({
-        "data": [{ "b64_json": "aGVsbG8=", "revised_prompt": "rev" }]
-    });
-    let r = OpenAiCompat::parse_image_response(&v).expect("b64 ok");
-    assert_eq!(r.url, "data:image/png;base64,aGVsbG8=");
-    assert_eq!(r.revised_prompt, Some("rev".into()));
-}
-
-#[test]
-fn parse_image_url() {
-    let v = serde_json::json!({
-        "data": [{ "url": "https://example.com/x.png" }]
-    });
-    let r = OpenAiCompat::parse_image_response(&v).expect("url ok");
-    assert_eq!(r.url, "https://example.com/x.png");
-    assert_eq!(r.revised_prompt, None);
-}
-
-#[test]
-fn parse_image_missing_data() {
-    let v = serde_json::json!({ "data": [] });
-    assert!(OpenAiCompat::parse_image_response(&v).is_err());
-    let v2 = serde_json::json!({ "data": [{ "foo": 1 }] });
-    assert!(OpenAiCompat::parse_image_response(&v2).is_err());
-}
-
-#[test]
 fn serialize_plain_message_keeps_string_content() {
     let m = ChatMessage {
         role: "user".into(),

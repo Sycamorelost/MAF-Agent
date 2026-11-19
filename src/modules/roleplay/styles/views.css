@@ -1,0 +1,227 @@
+/* ===== 角色库 ===== */
+.rp-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: var(--space-3);
+}
+
+.rp-card {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+
+.rp-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.rp-card-name {
+  margin: 0 0 4px;
+  font-size: var(--font-body, 14px);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.rp-card-desc {
+  margin: 0 0 4px;
+  font-size: var(--font-mini, 12px);
+  color: var(--text-2);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rp-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ===== 角色编辑 ===== */
+.rp-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.rp-editor-body {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.rp-portrait-edit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.rp-fields {
+  flex: 1;
+  min-width: 260px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-2) var(--space-3);
+}
+
+/* ===== 世界书 ===== */
+.rp-lore-body {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.rp-lore-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 210px;
+  flex: 0 0 auto;
+}
+
+.rp-lore-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  text-align: left;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  cursor: pointer;
+}
+
+.rp-lore-item:hover {
+  background: var(--bg-hover);
+}
+
+.rp-lore-item.is-active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.rp-lore-name {
+  font-size: var(--font-sub);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.rp-lore-editor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.rp-lore-entries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rp-lore-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+
+/* ===== 存档 ===== */
+.rp-save-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rp-save-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+
+.rp-save-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.rp-save-title {
+  margin: 0;
+  font-size: var(--font-body, 14px);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.rp-save-summary {
+  margin: 6px 0 0;
+  font-size: var(--font-mini, 12px);
+  color: var(--text-3);
+  line-height: 1.7;
+}
+
+.rp-save-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* ===== 导出弹窗 ===== */
+.rp-modal-mask {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--text-1) 32%, transparent);
+  z-index: 40;
+}
+
+.rp-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(720px, 92vw);
+  max-height: 86vh;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l, var(--radius-m));
+  box-shadow: var(--shadow-card, none);
+}
+
+.rp-export {
+  min-height: 320px;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-mini, 12px);
+}
+
+@media (max-width: 760px) {
+  .rp-lore-body {
+    flex-direction: column;
+  }
+  .rp-lore-list {
+    width: 100%;
+  }
+  .rp-stage {
+    flex-wrap: wrap;
+  }
+}

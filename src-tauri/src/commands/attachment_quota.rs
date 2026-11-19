@@ -168,9 +168,11 @@ mod tests {
 
     #[test]
     fn violation_reports_count_and_capacity() {
-        let mut usage = SessionUsage::default();
-        usage.files = 2;
-        usage.bytes = 3;
+        let mut usage = SessionUsage {
+            files: 2,
+            bytes: 3,
+            ..Default::default()
+        };
         usage.paths.insert(r"D:\att\s1\a.png".into());
         let quota = AttachmentQuota {
             max_files: 3,

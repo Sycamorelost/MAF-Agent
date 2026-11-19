@@ -287,7 +287,6 @@ pub(crate) fn build_openai(
     Box::new(
         OpenAiCompat::new(
             spec.provider_id.clone(),
-            spec.display_name.clone(),
             spec.base_url.clone(),
             api_key.to_string(),
         )

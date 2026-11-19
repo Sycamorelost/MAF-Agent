@@ -68,6 +68,7 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 - 会话右侧检查器展示工具流水：工具名、参数摘要、耗时与关联任务，点击可跳到来源消息；参数与输出均脱敏。面板宽度可拖拽（240–520 px），收起后由会话头按钮重新展开。
 - 目标级任务清单：模型通过 `todo_write` / `todo_read` 维护；若回合结束时清单仍未同步，后端会追加一轮提醒模型更新，达到工具轮次上限则跳过。面板支持手动刷新。
 
+<<<<<<< HEAD
 ### 产物与导出
 
 - 模型调用 `present` 工具显式声明交付文件，前端渲染交付列表；未声明但正文出现的路径也会被识别。
@@ -123,6 +124,8 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 - 附件中心统一管理大小配额、拒绝记录与清理；解析结果以块数与摘要形式注入上下文，不重复注入全文。
 - 拖拽入会话或从附件中心插入，两者走同一解析链路。
 
+=======
+>>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
 ### 全局搜索
 
 - `Ctrl+K` 或标题栏放大镜唤起居中搜索面板，`Esc` 或点击遮罩关闭。
@@ -184,6 +187,7 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 
 架构要点：
 
+<<<<<<< HEAD
 - 附件解析、检索排序、流式转发、密钥链、工具调度都在 Rust 侧完成，前端只负责渲染与交互。
 - CSP 为白名单制，原始配置：
 
@@ -204,6 +208,12 @@ object-src 'none'; base-uri 'none'; frame-ancestors 'none'
 3. 请求发往用户配置的服务商端点，SSE 增量回传，前端边接收边渲染。
 4. 模型返回工具调用时，由后端 `dispatcher` 做风险评估与审批判定，执行后把结果作为 tool 消息续接，循环至模型不再调用工具。
 5. 回合结束后落库 `messages`、`usage_record`、`tool_call_log`，并同步任务清单与产物登记。
+=======
+- 复用系统 WebView2 而非捆绑 Chromium：安装包约 **12–18 MB**（NSIS 12 MB / MSI 18 MB），显著小于 Electron 系同类产品
+- 附件解析、搜索排序、流式转发、密钥链等重逻辑全部在 Rust 原生层完成
+- 严格 CSP 白名单：`default-src 'self'; object-src 'none'; base-uri 'none'`，无远程脚本
+- 前端构建产物约 8.4 MB
+>>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
 
 ---
 
@@ -287,6 +297,7 @@ npx tsc -b                 # 类型检查
 
 ```text
 myAgent/
+<<<<<<< HEAD
 ├── index.html
 ├── package.json
 ├── vite.config.ts
@@ -299,6 +310,21 @@ myAgent/
 │   └── styles/                   # 按域拆分的 CSS
 └── src-tauri/
     ├── tauri.conf.json
+=======
+├── index.html                  # Vite 入口
+├── package.json                # 前端依赖与脚本
+├── vite.config.ts              # Vite 配置(端口 1420)
+├── tutorials/                  # 应用内教程(聊天记忆)
+├── src/                        # 前端源码(React 19 + TS)
+│   ├── components/             # 标题栏、导航、全局搜索等通用组件
+│   ├── lib/                    # IPC 封装、工具函数
+│   ├── pages/                  # chat / memory / knowledge / attachments / settings
+│   ├── stores/                 # Zustand 状态
+│   └── styles/                 # 样式
+└── src-tauri/                  # 后端源码(Rust)
+    ├── tauri.conf.json         # 窗口、CSP、打包配置
+    ├── resources/aiflavor/     # AI 味检测语料资源
+>>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
     └── src/
         ├── commands/             # IPC 命令（provider / mcp / memory / attachment / ...）
         ├── db/                   # SQLite schema、迁移、查询
@@ -330,14 +356,21 @@ data/
 ├── presets.json                # 可选：覆盖内置预设
 ├── secrets/                    # DPAPI / AES-GCM 加密的凭据
 ├── conversations/<id>/
+<<<<<<< HEAD
 │   ├── memory.md
 │   └── memory.versions/
 ├── notes/                      # 知识库 Markdown
+=======
+│   ├── memory.md               # 会话记忆(可直接编辑)
+│   └── memory.versions/        # 记忆版本快照
+├── notes/                      # 知识库 Markdown 笔记(含 11 条预置笔记;preset_seeded.json 记录落盘状态,删除不复活)
+>>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
 └── attachments/                # 会话附件
 ```
 
 主要数据表：
 
+<<<<<<< HEAD
 | 表 | 用途 |
 |---|---|
 | `sessions` / `messages` / `branches` | 会话、消息、分支树 |
@@ -353,6 +386,15 @@ data/
 迁移全自动且幂等：磁盘 `user_version` 落后时按版本顺序补迁移，存量数据回填；索引表缺失或分词器过旧会重建。深度研究、学习中心、翻译、绘画页面已从界面移除，其中研究相关的 `research_sessions` 表在 V23 迁移中删除；`data/research/**`、`data/images/**` 等历史文件仍保留在数据目录，可自行删除。
 
 记忆与笔记均为纯文本，可用任意编辑器修改。备份整个数据目录即可迁移全部数据。
+=======
+> 历史版本说明：深度研究功能已整体移除，数据库升级时会自动删除 `research_sessions` 表；历史研究产物文件（`data/research/**`）保留在数据目录中，可自行清理。学习中心（study）、独立翻译页与 AI 绘画页亦已在后续版本中整体移除。
+>
+> 数据库迁移全自动且幂等：升级即建（如 V26 会话预设钉住列、V27 文档块全文索引 `doc_chunks_fts`）,存量数据自动回填；索引表缺失或分词器过旧时自动重建自愈，无需手工干预。
+>
+> 迁移前快照（v2.2.0）：检测到磁盘版本落后时，迁移前自动用 `VACUUM INTO` 生成 `metaagent-v<旧版本>-<时间戳>.db.bak` 快照（保留最近 2 份），升级异常时可手工回滚。
+>
+> 预置知识库（v2.3.0，v2.3.1 扩充至 11 条）：首次启动在 `notes/` 落盘 11 条预置内容并写入 `preset_seeded.json` 标记；标记存在期间被删除的预置不会自动复活，需要找回时用知识库页的「导入预置」一键恢复（合并不覆盖,完全重复的跳过）。
+>>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
 
 ---
 

@@ -251,7 +251,6 @@ export function useProviderAdmin() {
         base_url: newTpl.base_url.trim(),
         models: newTpl.modelsText.split('\n').map((s) => s.trim()).filter(Boolean),
         all_models: [],
-        image_models: [],
         docs_url: null,
         notice: null,
         openai_compat: true,

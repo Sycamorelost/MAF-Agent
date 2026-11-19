@@ -398,6 +398,7 @@
   display: block;
 }
 
+<<<<<<< HEAD
 /* 会话产物列表:AI 回复中提到的本地文件,按行展示(类似 git diff 列表) */
 .out-list {
   display: flex;
@@ -405,6 +406,28 @@
   gap: 0;
   margin-top: var(--space-2);
   max-width: 100%;
+=======
+/* 会话产物卡:AI 回复中提到的本地文件,点击在文件管理器中定位 */
+/* 固定一行 3 列、卡片同高;超过 3 个时容器固定高度内部滚动,不撑占会话窗口 */
+.out-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  max-width: 100%;
+  max-height: calc(66px * var(--ui-scale)); /* 一行完整 + 次行露边提示可滚动 */
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.out-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: calc(50px * var(--ui-scale));
+  box-sizing: border-box;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+>>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
@@ -423,6 +446,7 @@
   transition: background .12s;
   border-bottom: 1px solid var(--border);
 }
+<<<<<<< HEAD
 .out-list-row:last-child { border-bottom: none; }
 .out-list-row:hover { background: var(--bg-hover); }
 .out-list-row > svg { flex-shrink: 0; color: var(--text-3); }
@@ -445,6 +469,16 @@
 .out-list-name {
   font-family: var(--font-mono, ui-monospace, Consolas, monospace);
   font-size: var(--font-caption);
+=======
+.out-card > svg { flex: none; }
+.out-card:hover { border-color: var(--brand); background: var(--bg-hover); }
+.out-card-info { display: flex; flex-direction: column; min-width: 0; }
+.out-card-name {
+  max-width: calc(220px * var(--ui-scale));
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+>>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
   color: var(--text-1);
   overflow: hidden;
   white-space: nowrap;
@@ -534,34 +568,22 @@
   white-space: nowrap;
   pointer-events: none;
 }
-.out-card-image { flex-direction: column; align-items: stretch; padding: var(--space-2); }
 .out-thumb {
-  width: calc(200px * var(--ui-scale));
-  max-height: calc(160px * var(--ui-scale));
+  width: calc(30px * var(--ui-scale));
+  height: calc(30px * var(--ui-scale));
+  flex: none;
   object-fit: cover;
   border-radius: var(--radius-s);
   cursor: zoom-in;
   display: block;
 }
 .out-thumb-empty {
-  height: calc(90px * var(--ui-scale));
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-4);
   font-size: var(--font-micro);
   background: var(--bg-main);
-  border-radius: var(--radius-s);
-}
-.out-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-  min-width: 0;
-  color: var(--text-3);
-  font-size: var(--font-micro);
 }
 
 /* 消息 hover 操作工具条 */

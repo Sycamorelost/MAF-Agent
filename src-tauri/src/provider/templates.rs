@@ -16,9 +16,6 @@ pub struct ProviderTemplate {
     /// 全部可用模型(含被用户停用的),按用户排序;仅设置页展示/启用开关使用。
     #[serde(default)]
     pub all_models: Vec<String>,
-    /// 图像生成模型候选(走 /images/generations);为空表示该 Provider 无内置图像模型
-    #[serde(default)]
-    pub image_models: Vec<String>,
     /// 官网/文档链接,便于用户去拿 API Key
     pub docs_url: Option<String>,
     /// 使用提示(如「勿用 Coding Plan 的 Key」),设置页展示;None 表示无提示
@@ -41,7 +38,6 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
                 "gpt-5.4-mini".into(),
                 "gpt-5.4-nano".into(),
             ],
-            image_models: vec!["dall-e-3".into(), "dall-e-2".into(), "gpt-image-1".into()],
             docs_url: Some("https://platform.openai.com/api-keys".into()),
             notice: None,
             openai_compat: true,
@@ -52,7 +48,6 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             display_name: "DeepSeek".into(),
             base_url: "https://api.deepseek.com".into(),
             models: vec!["deepseek-flash".into(), "deepseek-v4-pro".into()],
-            image_models: vec![],
             docs_url: Some("https://platform.deepseek.com/api_keys".into()),
             notice: Some(
                 "旧模型名 deepseek-chat / deepseek-reasoner 已于 2026-07-24 弃用，请使用 deepseek-flash 或 deepseek-v4-pro。"
@@ -71,7 +66,6 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
                 "kimi-k2.7-code".into(),
                 "kimi-k2.6".into(),
             ],
-            image_models: vec![],
             docs_url: Some("https://platform.moonshot.cn/console/api-keys".into()),
             notice: Some(
                 "moonshot-v1 与 kimi-k2.5 已下线；kimi-k2.6 / kimi-k2.7-code 计划于 2026 年 12 月底下线，长期使用建议选 K3 系列。"
@@ -90,7 +84,6 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
                 "qwen3.7-plus".into(),
                 "qwen3-vl-plus".into(),
             ],
-            image_models: vec![],
             docs_url: Some("https://bailian.console.aliyun.com/".into()),
             notice: None,
             openai_compat: true,
@@ -107,8 +100,6 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
                 "glm-5.1".into(),
                 "glm-4.6".into(),
             ],
-            // 智谱图像模型走同一 base_url 的 /images/generations
-            image_models: vec!["cogview-3-plus".into(), "cogview-3-flash".into()],
             docs_url: Some("https://bigmodel.cn/usercenter/proj-mgmt/apikeys".into()),
             notice: Some(
                 "请勿使用 GLM Coding Plan 套餐的 API Key：该套餐仅限官方指定工具使用，接入本应用属违规，可能导致权益被限制或账号封禁。请在开放平台按标准 API 单独创建 Key。"
@@ -122,7 +113,6 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             display_name: "DeepL".into(),
             base_url: "https://api-free.deepl.com/v2".into(),
             models: vec![], // 专用翻译 Provider,不走对话模型
-            image_models: vec![],
             docs_url: Some("https://www.deepl.com/pro-api".into()),
             notice: None,
             openai_compat: false,
@@ -133,7 +123,6 @@ pub fn builtin_templates() -> Vec<ProviderTemplate> {
             display_name: "自定义 (OpenAI 兼容)".into(),
             base_url: "".into(),
             models: vec![],
-            image_models: vec![],
             docs_url: None,
             notice: None,
             openai_compat: true,

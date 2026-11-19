@@ -1,6 +1,6 @@
 //! Provider 模板 CRUD 与变更广播。
 
-use crate::provider::model_cards::{load_model_cache, merge_image_models, save_model_cache};
+use crate::provider::model_cards::{load_model_cache, save_model_cache};
 use crate::provider::{
     keychain, model_config,
     rotation::{self, RotationState},
@@ -29,11 +29,6 @@ pub async fn list_provider_templates() -> Vec<ProviderTemplate> {
         // models = 已启用(供所有模型选择器使用);all_models = 全量(仅设置页展示/开关)
         t.models = model_config::filter_enabled(all.clone(), &model_cfg, &t.id);
         t.all_models = all;
-        // 图像模型候选:模板预置 ∪ 拉取缓存中声明 image 输出模态的模型
-        // (豆包/中转站把 seedream 类模型挂在 /models 下,仅靠预置会让绘图页无可选项)
-        if let Some(f) = cache.get(&t.id) {
-            t.image_models = merge_image_models(&t.image_models, f);
-        }
     }
     tpls
 }

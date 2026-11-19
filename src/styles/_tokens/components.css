@@ -187,11 +187,20 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 .sidebar{
   position:relative;
   width:var(--sidebar-w);flex:0 0 var(--sidebar-w);height:100%;
-  background:var(--bg-side);
+  /* 融入最底层:不用 --bg-side 独立铺色,透出身后 .window 的 --bg-main,
+     与主面板同一平面,不再呈现独立悬浮图层 */
+  background:transparent;
   display:flex;flex-direction:column;
+<<<<<<< HEAD
   /* 三段式:side-top(固定顶) + side-scroll(中间滚) + side-bottom(固定底)
      右侧不留额外 padding —— 让子元素直接贴右边界 */
   padding:0 0 0 calc(var(--pad-x-narrow) * .5);
+=======
+  /* 顶部不留 padding:「新对话」按钮与右侧主面板上端同高(主面板贴 .body 顶);
+     右侧留白收窄一半,列表文字更贴近主面板 */
+  padding:0 calc(var(--pad-x-narrow) * .25) calc(var(--space-3) * .5) calc(var(--pad-x-narrow) * .5);
+  overflow:hidden;
+>>>>>>> a88d39d486d89fe582919fa3e12d54ac15645b63
   transition:transform var(--drawer-dur) var(--drawer-ease);
 }
 /* 顶部固定区:搜索 + 新对话,全宽胶囊 + 贴顶部 + 右侧与会话区同高 */
@@ -306,8 +315,8 @@ button.chip:hover{border-color:var(--border-strong);color:var(--text-1)}
 
 /* 主区 stage */
 .stage{flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:var(--space-10) var(--pad-x) var(--space-4);display:flex;flex-direction:column;align-items:center}
-.stage::-webkit-scrollbar{width:8px}
-.stage::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.stage::-webkit-scrollbar{width:4px}
+.stage::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:2px}
 .stage::-webkit-scrollbar-thumb:hover{background:var(--text-3)}
 
 /* 欢迎语 */

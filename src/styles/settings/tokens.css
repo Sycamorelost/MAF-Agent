@@ -188,10 +188,6 @@
   background: var(--bg-hover);
   border-color: var(--brand-line, var(--border));
 }
-/* 展开态:紧凑头不变,drawer 从上方悬浮浮出 */
-.chat-todos.is-open .chat-todos-head {
-  /* 紧凑头保持原样,drawer 从上方浮出 */
-}
 .chat-todos-head svg { flex: none; color: var(--text-3); }
 .chat-todos-title {
   font-weight: 600;
