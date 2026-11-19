@@ -1,8 +1,7 @@
 import type { SessionRow } from '../../lib/ipc';
 import { SessionRowItem } from './SessionRow';
-import { groupSessionsByTime } from './utils';
 
-/** 按时间分组视图(今天/昨天/7 天内/30 天内/更早),与 DeepSeek 侧栏一致。 */
+/** P0:扁平列表,去掉「今天/昨天/7 天内」等时间分组 —— 用户要求删除分组,直接按更新时间倒序 */
 interface Props {
   sessions: SessionRow[];
   activeId: string | undefined;
@@ -38,26 +37,21 @@ export function TimeListView({
 
   return (
     <>
-      {groupSessionsByTime(flat).map((group) => (
-        <div key={group.key} className="side-time-group">
-          <div className="side-group-label">{group.label}</div>
-          {group.items.map((s) => (
-            <SessionRowItem
-              key={s.id}
-              session={s}
-              indentClass="side-flat-item"
-              activeId={activeId}
-              editingId={editingId}
-              editingText={editingText}
-              onNavigate={onSessionNavigate}
-              onStartRename={onSessionStartRename}
-              onEditingTextChange={onEditingTextChange}
-              onCommitRename={onCommitRename}
-              onCancelRename={onCancelRename}
-              onContextMenu={onSessionContextMenu}
-            />
-          ))}
-        </div>
+      {flat.map((s) => (
+        <SessionRowItem
+          key={s.id}
+          session={s}
+          indentClass="side-flat-item"
+          activeId={activeId}
+          editingId={editingId}
+          editingText={editingText}
+          onNavigate={onSessionNavigate}
+          onStartRename={onSessionStartRename}
+          onEditingTextChange={onEditingTextChange}
+          onCommitRename={onCommitRename}
+          onCancelRename={onCancelRename}
+          onContextMenu={onSessionContextMenu}
+        />
       ))}
     </>
   );

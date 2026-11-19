@@ -23,7 +23,7 @@ This product references the following third-party works.
 2. MCP reference servers (runtime, not bundled)
    https://github.com/modelcontextprotocol/servers
    License: MIT
-   Used at runtime via npx on-demand launch (not distributed in the package):
+   Launched via npx when the application starts (not distributed in the package):
    - @modelcontextprotocol/server-filesystem         (built-in "项目文件")
    - @modelcontextprotocol/server-memory             (built-in "长期记忆")
    - @modelcontextprotocol/server-sequential-thinking (built-in "顺序思考")
@@ -32,12 +32,12 @@ This product references the following third-party works.
    Copyright (c) lennney and contributors
    https://github.com/lennney/agent-search-mcp
    License: Apache License 2.0
-   Used at runtime via npx on-demand launch as the built-in "联网搜索"
+   Launched via npx when the application starts as the built-in "联网搜索"
    default service (zero-API-key multi-engine aggregation); not distributed
    in the package.
 
 -------------------------------------------------------------------------------
 Cherry Studio is licensed separately under AGPL-3.0 and is referenced at the
 architecture level only, as described in section 1. The MCP reference servers
-(section 2) and agent-search-mcp (section 3) are launched on demand at
-runtime and are not redistributed with this product.
+(section 2) and agent-search-mcp (section 3) are launched via npx at
+application startup and are not redistributed with this product.

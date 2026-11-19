@@ -358,11 +358,32 @@ pub async fn mcp_clear_session_allowed(approvals: State<'_, ApprovalStore>) -> R
 
 // ============ Phase 5e:工具定义下发(前端随 chat_stream 传给模型) ============
 
+/// 查询某会话历史里已调用过的工具名集合(tool_call_log)。
+/// 用于「按需激活」:没调过的工具不下发,省 token。
+fn history_tool_names(session_id: Option<&str>) -> std::collections::HashSet<String> {
+    let Some(sid) = session_id else { return std::collections::HashSet::new() };
+    let Ok(conn) = crate::db::conn().lock() else { return std::collections::HashSet::new() };
+    let mut stmt = match conn.prepare(
+        "SELECT DISTINCT tool_name FROM tool_call_log WHERE session_id = ?1",
+    ) {
+        Ok(s) => s,
+        Err(_) => return std::collections::HashSet::new(),
+    };
+    match stmt.query_map([sid], |r| r.get::<_, String>(0)) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(_) => std::collections::HashSet::new(),
+    }
+}
+
 /// 汇总内置工具与已启动 MCP server 的工具,转成 OpenAI function-calling 定义。
 /// R4/D2:只读内置工具默认下发(长文档 doc_search 不再依赖工具总开关);
 /// 写入/执行类工具与 MCP server 工具仍需打开总开关。
 /// P5/D18:按会话生效预设的 tools.include/exclude 裁剪(内置与 MCP 工具共用同一名单);
 /// session_id 为空或会话不存在时不过滤(保持既有调用方行为)。
+///
+/// P7/token 解耦:工具按「高频/必用」与「低频/按需」分层,前者每轮都下发,
+/// 后者仅当 session 历史里有过调用记录时才下发,避免简单问答场景白白消耗
+/// 7000+ tokens 在没用上的 tool spec JSON 上。
 #[tauri::command]
 pub async fn mcp_collect_tools(
     runtime: State<'_, McpRuntime>,
@@ -379,22 +400,36 @@ pub async fn mcp_collect_tools(
     let full_trust = mcp::approval::effective_mode(&policy, &dir, session_id.as_deref())
         == mcp::ApprovalMode::Full;
 
+    // 按需激活:查 session 历史里调过的工具名
+    let history_names = history_tool_names(session_id.as_deref());
+
     let mut out: Vec<crate::provider::ToolDef> = Vec::new();
-    // 只读内置工具(get_now / todo / sys / fs 读 / file_extract / doc_search / doc_read …)
-    // 默认可用:它们不改变磁盘与系统状态,且是长文档分析的前置能力。
+
+    // 1) 只读内置工具(get_now / todo / sys / fs 读 / file_extract / doc_search / doc_read …)
+    //    默认可用:它们不改变磁盘与系统状态,且是长文档分析的前置能力。
     if builtin_enabled {
         out.extend(crate::mcp::tool_spec::readonly_tool_defs());
     }
-    // 完全信任模式:GUI 自动化工具(ui_*)也下发
+
+    // 2) 完全信任模式:GUI 自动化工具(ui_*)也下发
     if full_trust {
         out.extend(crate::gui::tools::tool_defs());
     }
-    // 写入/执行类内置工具(shell / fs 写 / 导出 / 解包):内置开关打开时才下发。
-    // 注意:必须在 tools_enabled 提前返回之前下发 —— 内置工具只受 builtin_tools 门控,
-    // tools_enabled 管的是 MCP server 工具;放 return 之后会导致内置写工具永不下发。
+
+    // 3) 写入/执行类内置工具 —— 高频始终下发,低频按需激活
+    //    高频(始终):shell_exec(79×) / fs_write(46×) / fs_edit(19×) / 分块三件套
+    //    低频(按需):fs_delete / fs_export_docx / fs_export_xlsx / fs_restore / zip_extract
     if builtin_enabled {
-        out.extend(crate::mcp::tool_spec::write_tool_defs());
+        let write_all = crate::mcp::tool_spec::write_tool_defs();
+        let always = ["shell_exec", "fs_write", "fs_edit", "fs_write_begin", "fs_write_chunk", "fs_write_finish"];
+        out.extend(write_all.iter().filter(|t| always.contains(&t.function.name.as_str())).cloned());
+        // 低频:session 历史里调过任意低频 write 才下发全部低频
+        let optional = ["fs_delete", "fs_export_docx", "fs_export_xlsx", "fs_restore", "zip_extract"];
+        if !history_names.is_empty() && optional.iter().any(|n| history_names.contains(*n)) {
+            out.extend(write_all.iter().filter(|t| optional.contains(&t.function.name.as_str())).cloned());
+        }
     }
+
     // 总开关关闭:不再下发 MCP server 工具
     if !tools_enabled {
         return Ok(out);
@@ -465,21 +500,64 @@ pub async fn mcp_collect_tools(
         }
     }))
     .await;
-    for tools in per_server {
-        for t in tools {
+    // P7/token 解耦:按 server 粒度过滤 —— 历史用过该 server 任意工具 → 全部下发;
+    // 否则只下发核心只读子集(启发式:read/list/search/get/find/think 关键词匹配),
+    // 避免 write/delete/export 等低频工具白白消耗 tokens。
+    let server_core_keywords = ["read", "list", "search", "get", "find", "think", "fetch", "extract"];
+    for (server_cfg, tools) in servers.iter().zip(per_server) {
+        if tools.is_empty() {
+            continue;
+        }
+        let tool_names: std::collections::HashSet<&str> =
+            tools.iter().map(|t| t.name.as_str()).collect();
+        let server_used = !history_names.is_empty()
+            && tool_names.iter().any(|n| history_names.contains(*n));
+
+        let selected: Vec<&mcp::mcp_call::McpToolInfo> = if server_used {
+            // 历史已调过 → 全部下发(用户已经在用,不需要再切)
+            tools.iter().collect()
+        } else if tools.len() <= 3 {
+            // 小 server(≤3 工具)没必要再切
+            tools.iter().collect()
+        } else {
+            // 大 server 首次启用:只下发核心只读子集
+            let core: Vec<&mcp::mcp_call::McpToolInfo> = tools
+                .iter()
+                .filter(|t| {
+                    let lower = t.name.to_lowercase();
+                    server_core_keywords.iter().any(|kw| lower.contains(kw))
+                })
+                .collect();
+            if core.is_empty() {
+                // 启发式没命中 → 兜底取前 3 个(通常是最常用的)
+                tools.iter().take(3).collect()
+            } else {
+                core
+            }
+        };
+
+        log::debug!(
+            "[MCP] server=`{}` total={} selected={} used_by_history={}",
+            server_cfg.name,
+            tools.len(),
+            selected.len(),
+            server_used
+        );
+
+        for t in selected {
             let params = if t.input_schema.is_null() {
                 serde_json::json!({ "type": "object", "properties": {} })
             } else {
-                t.input_schema
+                t.input_schema.clone()
             };
             out.push(crate::provider::ToolDef {
                 r#type: "function".into(),
                 function: crate::provider::ToolFunctionDef {
-                    name: t.name,
+                    name: t.name.clone(),
                     description: if t.description.is_empty() {
                         None
                     } else {
-                        Some(t.description)
+                        Some(t.description.clone())
                     },
                     parameters: Some(params),
                 },
@@ -605,21 +683,6 @@ mod tests {
                 assert_eq!(arguments["command"], "ls");
             }
             other => panic!("类型错误:{other:?}"),
-        }
-    }
-
-    /// 内置工具定义与 dispatcher 的 builtin 判定必须同名,否则模型调不到。
-    #[test]
-    fn builtin_tool_names_match_dispatcher_whitelist() {
-        let tools = crate::mcp::tool_spec::builtin_tool_defs();
-        assert!(!tools.is_empty());
-        for t in tools {
-            assert!(
-                crate::mcp::dispatcher::is_builtin_tool(&t.function.name),
-                "{} 未在 dispatcher 注册",
-                t.function.name
-            );
-            assert_eq!(t.r#type, "function");
         }
     }
 }

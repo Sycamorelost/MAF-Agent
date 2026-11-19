@@ -34,6 +34,8 @@ interface Props {
    *  rejected 为逐文件拒绝明细,供调用方留存拒绝原因 */
   onPickFiles?: (files: File[], notice?: string, rejected?: SkippedFile[]) => void;
   onRemoveAttachment?: (index: number) => void;
+  /** 打开「从附件中心导入」选择器(附件按钮变为双来源菜单) */
+  onOpenAttachmentCenter?: () => void;
   /** 待发送引用(完整原文存 state,输入框只显示摘要) */
   quotes?: QuoteRef[];
   onRemoveQuote?: (id: string) => void;
@@ -47,6 +49,8 @@ interface Props {
   thinking?: ThinkingControl | null;
   /** 本会话模型选择器(工具条右端,发送按钮前) */
   model?: { name: string; ready: boolean; onOpen: () => void } | null;
+  /** 工具条芯片只保留图标(小窗紧凑模式) */
+  iconOnlyTools?: boolean;
   /** 追加到工具条的自定义 chip(智能体 / 会话设置等) */
   children?: ReactNode;
 }
@@ -63,6 +67,7 @@ export default function Composer({
   attachments,
   onPickFiles,
   onRemoveAttachment,
+  onOpenAttachmentCenter,
   quotes,
   onRemoveQuote,
   onRecall,
@@ -70,6 +75,7 @@ export default function Composer({
   onToggleWebSearch,
   thinking,
   model,
+  iconOnlyTools,
   children,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -319,6 +325,8 @@ export default function Composer({
           canSend={!disabled && (!!value.trim() || hasAttachments)}
           onSend={doSend}
           model={model}
+          iconOnly={iconOnlyTools}
+          onOpenAttachmentCenter={onOpenAttachmentCenter}
         >
           {children}
         </ToolBar>

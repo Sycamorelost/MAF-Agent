@@ -57,3 +57,21 @@ pub(super) fn tool(name: &str, desc: &str, params: serde_json::Value) -> ToolDef
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    /// 内置工具定义与 dispatcher 的 builtin 判定必须同名,否则模型调不到。
+    #[test]
+    fn builtin_tool_names_match_dispatcher_whitelist() {
+        let tools = super::builtin_tool_defs();
+        assert!(!tools.is_empty());
+        for t in tools {
+            assert!(
+                crate::mcp::dispatcher::is_builtin_tool(&t.function.name),
+                "{} 未在 dispatcher 注册",
+                t.function.name
+            );
+            assert_eq!(t.r#type, "function");
+        }
+    }
+}

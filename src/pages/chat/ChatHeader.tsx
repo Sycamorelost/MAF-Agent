@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  IconBug,
   IconCheck,
   IconChevronDown,
   IconDownload,
-  IconEdit,
   IconPullRequest,
   IconTrash,
   IconX,
-  IconBrain,
-  IconPanel,
   IconMore,
 } from '../../components/icons';
 import { useWorkbenchChrome } from '../../lib/workbenchChrome';
@@ -34,19 +32,15 @@ interface ChatHeaderProps {
   activeBranch: string;
   /** 递增信号:同一分支内分叉后也强制重载分支列表 */
   branchRefresh: number;
-  memCollapsed: boolean;
-  onToggleMemPanel: () => void;
   onError: (msg: string) => void;
 }
 
-/** 会话头部:会话切换 + 标题 / 分支指示条 / 预设 chip / 记忆面板开关。 */
+/** 会话头部:会话切换 + 标题 / 分支指示条 / 预设 chip。 */
 export function ChatHeader({
   title,
   sessionId,
   activeBranch,
   branchRefresh,
-  memCollapsed,
-  onToggleMemPanel,
   onError,
 }: ChatHeaderProps) {
   // ---------- F4:会话分支树 ----------
@@ -224,17 +218,13 @@ export function ChatHeader({
         </div>
       ) : (
         <>
-          <span className="chat-title ellipsis" title={title}>
+          <span
+            className="chat-title ellipsis"
+            title={title + '（双击重命名）'}
+            onDoubleClick={() => setTitleEdit(title)}
+          >
             {title}
           </span>
-          <button
-            type="button"
-            className="icon-btn"
-            title="重命名会话(同步更新记忆标题)"
-            onClick={() => setTitleEdit(title)}
-          >
-            <IconEdit size={13} />
-          </button>
         </>
       )}
       {/* 运行时预设选择器已移至设置页「运行时预设」统一管理,会话页不再提供入口 */}
@@ -296,13 +286,6 @@ export function ChatHeader({
                             {b.first_summary || '(空分支)'} · {b.message_count} 条
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          title="重命名"
-                          onClick={() => setRenaming({ id: b.branch_id, name: b.name })}
-                        >
-                          <IconEdit size={13} />
-                        </button>
                         {b.branch_id !== 'main' &&
                           (deleting === b.branch_id ? (
                             <button
@@ -370,7 +353,7 @@ export function ChatHeader({
           title={chrome.inspectorOpen ? '收起检查器' : '展开检查器'}
           onClick={chrome.onToggleInspector}
         >
-          <IconPanel size={15} />
+          <IconBug size={15} />
         </button>
       )}
       <div style={{ position: 'relative' }}>
@@ -393,15 +376,6 @@ export function ChatHeader({
           </>
         )}
       </div>
-      {/* 记忆面板开关:工作台能力常驻 */}
-      <button
-        type="button"
-        className={`icon-btn${memCollapsed ? '' : ' on'}`}
-        onClick={onToggleMemPanel}
-        title={memCollapsed ? '展开记忆面板' : '收起记忆面板'}
-      >
-        <IconBrain size={15} />
-      </button>
     </div>
   );
 }

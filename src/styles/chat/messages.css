@@ -1,5 +1,75 @@
 /* ============ 消息渲染(用户 = 右侧气泡;助手 = 无头像通栏矩形平铺) ============ */
 
+/* ============ P15:引用卡片(追问/引用展示) ============ */
+.quote-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+.msg.user .quote-cards { align-items: flex-end; }
+.quote-card {
+  width: 100%;
+  max-width: 100%;
+  border-left: 3px solid var(--border);
+  background: var(--bg-elevated, rgba(255,255,255,0.03));
+  border-radius: var(--radius-s);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-sub);
+  color: var(--text-2);
+  line-height: 1.55;
+  box-sizing: border-box;
+}
+.quote-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+  color: var(--text-3);
+  font-size: calc(var(--font-sub) * 0.9);
+}
+.quote-label { font-weight: 500; }
+.quote-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.quote-toggle .chevron { transition: transform .15s; }
+.quote-toggle .chevron.open { transform: rotate(180deg); }
+.quote-body {
+  font-family: var(--font);
+  line-height: 1.55;
+}
+/* MemoMarkdown 在卡片里的约束:紧凑,让 KaTeX/Markdown 适配卡片宽度 */
+.quote-body .md {
+  font-size: var(--font-sub);
+  line-height: 1.55;
+  word-break: break-word;
+}
+.quote-body .md p { margin: 0; }
+.quote-body .md p + p { margin-top: var(--space-1); }
+.quote-body .md .katex { font-size: 1.05em !important; }
+.quote-card.foldable .quote-body.collapsed {
+  max-height: calc(var(--font-sub) * 1.55 * 5 + var(--space-1)); /* 5 行 */
+  overflow: hidden;
+  position: relative;
+}
+.quote-card.foldable .quote-body.collapsed::after {
+  content: '';
+  position: absolute;
+  right: 0; bottom: 0; left: 0;
+  height: calc(var(--font-sub) * 1.55);
+  background: linear-gradient(transparent, var(--bg-elevated, rgba(255,255,255,0.03)));
+  pointer-events: none;
+}
+
 .msg {
   display: flex;
   align-items: flex-start;
@@ -141,4 +211,115 @@
   padding: var(--space-2);
 }
 .mermaid-error { color: #c44; }
+
+/* ============ P16:弹出式搜索面板 ============ */
+.palette-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  animation: palette-fade-in .15s ease-out;
+}
+@keyframes palette-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.palette-panel {
+  width: 520px;
+  max-width: 80vw;
+  max-height: 60vh;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: palette-slide-in .18s ease-out;
+}
+@keyframes palette-slide-in {
+  from { transform: translateY(-8px); opacity: .6; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+.palette-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.palette-head > svg { flex-shrink: 0; color: var(--text-3); }
+.palette-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--font-sub);
+  line-height: 1.4;
+}
+.palette-input::placeholder { color: var(--text-4); }
+.palette-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border: none;
+  background: none;
+  color: var(--text-4);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.palette-close:hover { background: var(--bg-hover); color: var(--text-1); }
+.palette-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+.palette-empty {
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--text-4);
+  font-size: var(--font-sub);
+}
+.palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s;
+  box-sizing: border-box;
+}
+.palette-item:hover { background: var(--bg-hover); }
+.palette-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+  font-size: var(--font-caption);
+}
+.palette-item-tag {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-4);
+  font-size: var(--font-micro);
+}
 

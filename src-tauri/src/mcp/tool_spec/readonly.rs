@@ -170,6 +170,11 @@ pub fn readonly_tool_defs() -> Vec<ToolDef> {
                 }
             }),
         ),
+        tool(
+            "doc_list",
+            "列出本会话已解析的文档(名称 / doc_id / 块数 / 字符数);细节用 doc_search 检索、doc_read 回看。",
+            json!({ "type": "object", "properties": {} }),
+        ),
         // D1:网页正文抓取(免 API Key)。与联网搜索互补:搜索给候选链接,本工具读原文
         tool(
             "web_fetch",

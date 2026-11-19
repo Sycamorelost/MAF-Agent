@@ -1,125 +1,170 @@
 # myAgent
 
-> 本地优先的 AI 桌面工作台 —— 把研究、学习与创作的过程，留在自己手里。
+> 本地优先的 Windows 桌面智能体工作台。模型能力由你自备的 API 提供，会话、记忆与文件都留在本机。
 
-myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust + React 19** 构建。
+myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不做模型托管，也不做数据中转：你填入自己的 OpenAI 兼容端点与 API Key，应用只与该端点直连；其余数据（会话、分支、记忆、笔记、附件、产物、用量）写入本地 SQLite 与纯文本文件。
 
-与云端 AI 助手不同，myAgent **不托管任何模型与数据**：你自备 API Key，数据全部存储在本机（SQLite + 纯文本文件），只与你的模型服务商直连。
-
-
-**版本** ：v2.5.3
-
-**许可证** ：Apache-2.0（附带 [NOTICE](NOTICE) 第三方衍生声明）
-
-**平台** ：Windows 10 / 11（64 位）
+**当前版本**：v2.6.1
+**许可证**：Apache-2.0（第三方衍生声明见 [NOTICE](NOTICE)）
+**平台**：Windows 10 / 11（64 位）
 
 ---
 
 ## 目录
 
-- [功能特性](#功能特性)
+- [概述](#概述)
+- [功能](#功能)
 - [技术架构](#技术架构)
 - [隐私与安全](#隐私与安全)
 - [系统要求](#系统要求)
-- [快速开始](#快速开始)
+- [开发与构建](#开发与构建)
 - [配置模型服务商](#配置模型服务商)
 - [项目结构](#项目结构)
 - [数据存储](#数据存储)
 - [快捷键](#快捷键)
+- [已知限制](#已知限制)
 - [第三方致谢](#第三方致谢)
 - [许可证](#许可证)
 
 ---
 
-## 功能特性
+## 概述
 
-### AI 对话
+| 维度 | 说明 |
+|---|---|
+| 形态 | 无边框主窗口 + 托盘常驻；双击托盘图标弹出贴任务栏的窄版小窗 |
+| 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
+| 后端 | Rust（edition 2024，rust-version 1.90），184 个 `#[tauri::command]` IPC 入口 |
+| 数据库 | SQLite（rusqlite bundled），迁移版本 `SCHEMA_VERSION = 38` |
+| 模型接入 | OpenAI 兼容协议，内置 OpenAI / DeepSeek / Kimi / 通义千问 / 智谱 GLM 模板，可自定义端点 |
+| 工具 | 内置 35 个（18 只读 / 11 写 / 6 GUI 自动化）+ 外部 MCP Server |
+| 渲染 | react-markdown + KaTeX + Mermaid + ECharts + highlight.js |
 
-- 流式输出，推理过程(Reasoning)折叠展示
-- 多会话管理，消息级会话分支树(Branch)
-- 会话改名(与记忆文件标题同步)与会话导出 Markdown
-- 单会话内中途切换模型
-- Markdown / KaTeX 公式 / Mermaid 图表 / ECharts 图表四类渲染
-- Mermaid 图双向自适应窗口:小图等比放大充满(矢量不失真),超宽图保持原生尺寸横向滚动
-- 附件本地解析：PDF(pdf-extract)、DOCX(docx-rs)、XLSX(calamine)、PPTX/EPUB/HTML,不经过云端
+安装包约 17 MB（NSIS），前端构建产物约 8.7 MB。体积主要来自复用系统 WebView2，而不是捆绑 Chromium。
 
-### 专业工作台
+---
 
-- 会话内嵌检查器:产物 / 变更与回滚 / 上下文与记忆 / 工具流水四页签,宽度可拖拽
-- 目标级任务清单面板:进度自动同步(模型主动回写 + 后端收尾兜底,等待你决策时不打扰),支持手动刷新并带结果反馈
-- 会话按项目文件夹分组管理,项目内会话与项目名对齐、展开收起抽屉动画
+## 功能
 
-### 工具与权限
+### 对话
 
-- 文件操作沙箱:相对路径一律限制在工作区内(拒绝 `..` 越界),输入绝对路径可显式操作其他位置;组件级边界比较,杜绝 `D:\proj` 误判包含 `D:\proj2`
-- MCP 工具权限四档:每步审批 / 低风险自动放行 / 自动审批 / 完全信任;「完全信任」档含高危命令、工作区外读写在内的全部调用直接执行,全程写入本地审计日志
+- SSE 流式输出，推理过程单独折叠展示，不混入正文。
+- 多会话管理；会话可归入项目文件夹，项目与会话均可改名与删除。
+- 消息级分支树：任一消息可另起分支，分支间独立继续对话，可查看分支首条摘要与消息数。
+- 会话内可中途切换模型与服务商，历史消息随之重放。
+- Markdown、KaTeX 公式、Mermaid 图表、ECharts 图表四类渲染，均在前端完成。
+- 公式容错：除 `$...$`、`$$...$$`、`\(...\)`、`\[...\]` 外，以 `latex`、`tex`、`math` 作为语言标记的代码围栏也会被归一化为块级公式，避免模型用代码块输出公式。
+- 选中消息文字弹出复制 / 追问浮条。追问与引用是同一能力：引用片段以卡片形式显示在提问气泡上方，复用 Markdown 与 KaTeX 渲染；超过 5 行自动折叠，可展开。
+- 消息中的产物路径自动整理为列表视图（文件名、目录、类型、大小、打开/定位操作），超过 5 条折叠；正文只写文件名时，会结合上下文目录补全识别。
+- 上下文超出预算时自动压缩：先截断旧的工具结果，再把最早轮次交给模型摘要，尾部保留约 55% 预算；压缩只作用于本次请求，数据库中的历史消息不变。
 
-### 持久记忆
+### 项目
 
-- 文件级记忆：每个会话对应一个 `memory.md`(YAML frontmatter + 结构化 Markdown)
-- 版本历史与行级 diff,可回滚
-- 文件监听(Watcher):用外部编辑器修改记忆文件，应用内实时同步
-- 跨会话记忆注入与草稿交接(draft handoff)
+- 项目把一组会话绑定到本地目录，可设置模型覆盖与项目级共享上下文，会话继承项目设置。
+- 工作区根下的 `AGENTS.md`（兼容 `CLAUDE.md`）作为「项目约定」注入每轮请求，上限 32 KB，按路径、修改时间与大小缓存，文件改动后下一轮生效；只在组装请求时注入，不写入数据库历史。
 
-### 知识库(笔记)
+### 检查器与任务清单
 
-- 内置 Markdown 笔记，支持标签、预览渲染
-- 保存时自动校验，Ctrl+S 快捷保存
-- **预置知识库(v2.3.0，v2.3.1 扩充至 11 条)**：首次启动自动落盘开箱内容——IT/编程/技术、学术/科研、法律/商务/金融、通用办公/营销/数据 四类中英对照术语表(参照微软语言门户、Git 官方中文本地化、Academic Phrasebank、香港律政司法律词汇、UNTERM 等权威来源整理,每类 50 组以上),及 Markdown 表格语法、CSV/TSV 约定、数据清洗规则、Excel 公式与数据透视、正则表达式、中文排版与标点规范、数据可视化图表选型 七篇速查;落盘后就是普通笔记,可自由编辑/删除,删除后不再出现,列表带「预置」角标
-- **一键导入预置(v2.3.0)**：被删的预置笔记一键找回;改过的条目按章节与表格首列逐条合并——你的内容一字不动,只补缺漏的行/表格/章节;导入结果弹窗按「新恢复 / 已合并 / 完全重复」三组明细展示,可滚动逐条核对
-- 标签独立为胶囊样式、笔记摘要剥离 Markdown 符号(v2.3.1);全应用删除操作统一使用应用内确认框,确认前不再先执行删除(v2.3.1)
+- 会话右侧检查器展示工具流水：工具名、参数摘要、耗时与关联任务，点击可跳到来源消息；参数与输出均脱敏。面板宽度可拖拽（240–520 px），收起后由会话头按钮重新展开。
+- 目标级任务清单：模型通过 `todo_write` / `todo_read` 维护；若回合结束时清单仍未同步，后端会追加一轮提醒模型更新，达到工具轮次上限则跳过。面板支持手动刷新。
 
-### 翻译
+### 产物与导出
 
-- 8 种语言互译，源语言自动检测
-- 输入即译(防抖自动触发)
-- 术语表(Glossary)支持：翻译时自动注入命中词条,保证专有名词译法一致
-- **预置术语表(v2.3.1)**：内置 8 类专业术语表(IT / AI / 学术 / 法律 / 金融 / 医学 / 商务 / 通用,参照微软语言门户、术语在线、Google 机器学习术语表、IASB 中文译本、WHO ICD-11、香港律政司法律词汇等权威来源,共 350 词条、中英双向展开 699 条);设置页「一键导入预置术语」合并不覆盖、可反复点击,被删词条自动补回;命中过多时按词长优先注入,大词表支持搜索与分段渲染
-- 最近 100 条历史记录，译文可一键发送到对话
+- 模型调用 `present` 工具显式声明交付文件，前端渲染交付列表；未声明但正文出现的路径也会被识别。
+- 文件写入采用分块协议（`fs_write_begin` / `fs_write_chunk` / `fs_write_finish`），大文件不一次性占用上下文。
+- 会话可导出 Markdown；PDF 通过 WebView 调起系统打印对话框，在打印机中选择「另存为 PDF」。导出前的链接做协议白名单与转义校验，非法链接降级为纯文本。
+- 表格类产物可导出 DOCX / XLSX（`fs_export_docx`、`fs_export_xlsx`）。
 
-### AI 绘画
+### 工具与审批
 
-- 文生图，历史缩略图管理
-- 本地缩略图生成(Rust 侧 PNG 解码 + JPEG 编码)
+内置工具按用途分三类：
+
+| 类别 | 数量 | 代表工具 |
+|---|---|---|
+| 只读 | 18 | `fs_read` `fs_list` `fs_grep` `file_extract` `zip_list` `doc_search` `doc_read` `doc_list` `web_fetch` `sys_overview` `sys_processes` `sys_disks` `sys_networks` `get_now` `present` `todo_read` / `todo_write` `delegate` |
+| 写入 / 执行 | 11 | `shell_exec` `fs_write` `fs_edit` `fs_write_begin` `fs_write_chunk` `fs_write_finish` `fs_delete` `fs_export_docx` `fs_export_xlsx` `fs_restore` `zip_extract` |
+| GUI 自动化 | 6 | `ui_list_windows` `ui_find_elements` `ui_invoke` `ui_set_value` `ui_type_text` `ui_focus_window` |
+
+- `todo_write` 与 `present` 只写会话内的任务清单和产物索引，不改动磁盘文件，因此计入只读类。
+- 审批三档：**逐次审批**（默认）、**工作区**（只读与工作区内写入自动放行，shell / 删除 / 越界写入仍询问）、**完全信任**（全部直接执行，并解锁 GUI 自动化）。审批结果与调用参数写入本地审计日志，日志对 `sk-`、`ghp_`、`Bearer` 等密钥形态做脱敏。
+- 工作区档支持附加自动放行名单，条目可写 `server::tool` 或只写工具名。
+- shell 默认只放行只读命令白名单；解释器与写操作被拒绝。格式化、删根、改注册表等高危命令在逐次审批与工作区档下强制人工确认，模型写入的 `confirm` 参数不能替代确认；完全信任档下不再询问，只记审计。
+- 文件沙箱：相对路径限制在当前会话工作区内，拒绝 `..` 越界；绝对路径可显式操作其他位置。边界比较按路径组件进行，`D:\proj` 不会误判包含 `D:\proj2`。
+- 工具规格按需下发，只影响每轮注入量，不改变可用能力：只读工具全量注入；写工具中 6 个高频项（`shell_exec`、`fs_write`、`fs_edit` 与分块写入三件套）常驻，5 个低频项（删除、DOCX / XLSX 导出、备份恢复、解压）仅在会话历史调用过时注入；GUI 工具只在「完全信任」档注入。
+- 外部 MCP 工具按 server 粒度裁剪：该 server 在会话历史上被调用过则全量下发；未调用过时，工具数不超过 3 个的 server 全量下发，超过 3 个的只下发名称含 `read` / `list` / `search` / `get` / `find` / `think` / `fetch` / `extract` 的核心子集，无命中则取前 3 个。
+
+### MCP
+
+- 基于 rmcp 官方 SDK，支持 stdio（子进程）与 Streamable HTTP 两种传输。
+- 预置四个服务，均为运行时经 `npx` 启动（应用启动时拉起并预热工具列表），不随安装包分发：
+  1. 项目文件 — `@modelcontextprotocol/server-filesystem`
+  2. 长期记忆 — `@modelcontextprotocol/server-memory`
+  3. 顺序思考 — `@modelcontextprotocol/server-sequential-thinking`
+  4. 联网搜索 — `agent-search-mcp`
+- 设置页可增删服务、编辑 JSON 配置、测试连通性、查看工具清单与诊断信息；支持自定义请求头，请求头中的凭据在落盘前经 DPAPI / AES-GCM 加密。
+- 外部工具默认按中等风险走确认；工作区档可逐个放行。
+
+### 记忆
+
+- 每个会话对应一份 `memory.md`（YAML frontmatter + 结构化 Markdown），可直接用外部编辑器修改，应用通过文件监听实时同步。
+- 记忆版本快照与行级 diff，保留最近 20 版，可回滚到任一历史版本。
+- 跨会话记忆注入与草稿交接；注入按策略取用（摘要 / 混合 / 全文），受 token 预算约束。
+- 长期记忆（MCP memory 服务）与本机记忆分开管理，互不覆盖。
+
+### 知识库与文档检索
+
+- 内置 Markdown 笔记，支持标签、预览、全文检索，`Ctrl+S` 保存。
+- 11 条预置笔记在首次启动时落盘，随后即为普通笔记，可编辑、可删除，删除后不复活；「导入预置」按章节与表格首行逐条合并，已有内容不被覆盖。
+- 会话内文档库：解析后的文档切块写入 `doc_chunks`，检索走 FTS5 `trigram` 索引。两字中文查询会展开为 3-gram 的 OR 表达式，再按覆盖率打分；与关键词路结果做 RRF 融合。
+
+### 附件
+
+- 本地解析，不经云端：PDF、DOCX、XLSX（兼容 xls / ods）、PPTX、EPUB、HTML。
+- 附件中心统一管理大小配额、拒绝记录与清理；解析结果以块数与摘要形式注入上下文，不重复注入全文。
+- 拖拽入会话或从附件中心插入，两者走同一解析链路。
 
 ### 全局搜索
 
-- `Ctrl+K` 唤起，本地全文检索会话消息、记忆、知识库
-- 毫秒级响应(SQLite 本地索引)
+- `Ctrl+K` 或标题栏放大镜唤起居中搜索面板，`Esc` 或点击遮罩关闭。
+- 检索范围：会话标题、消息全文（FTS5）、`memory.md`、知识库笔记。结果分组展示并支持跳转定位。
 
-### 用量统计
+### 智能体
 
-- Token 级用量热力图、健康度与成本估算
-
-### 多模型服务商
-
-- 内置 DeepSeek、智谱 GLM 等服务商模板，支持任意 **OpenAI 兼容** 端点自定义接入
-- 多 API Key 轮换(Rotation)与故障转移(Failover)
+- 内置多套模板，按对话、文档、开发、创作、运维、学习、工作、通用八类组织，可绑定会话，或仅作为提示词应用一次。
+- 内置模板提示词可编辑：同 id 的自定义副本覆盖内置，删除副本即恢复。
+- 支持基于基座模板创建变体（追加后缀）与完全自定义模板。
+- 存储可选**耦合**（单文件 `agents.json`）或**解耦**（目录多文件 `config.json` / `prompt.md` / `tools.json`）。解耦模式下可关联外部 `prompt.md`、`tools.json`，便于用外部编辑器维护。
+- 导入 / 导出走原生另存为对话框。
+- 委派：`delegate` 工具把独立子任务交给指定智能体，在隔离上下文中单轮执行并返回结果；子智能体没有工具权限，也不能再委派。
+- 设置页「角色设置」可编辑全局 base prompt，留空恢复默认。
 
 ### 运行时预设
 
-- 内置四档预设,决定工具集、上下文策略、记忆注入与检索策略,与界面布局、审批档位正交:
+预设是一份可合并的配置清单，用来决定工具集、上下文窗口、记忆策略、审批建议与检索参数。它不改变界面布局，也不替代全局权限档位。
 
-| 档位 | 定位 | 工具 | 检索策略 |
-|---|---|---|---|
-| 经济 | 省 token、快回答 | 只读白名单 | 单路全文检索,Top-3 |
-| 标准 | 日常默认 | 常用读写(无子代理/删除) | 混合检索,Top-5 |
-| 深度 | 复杂任务 | 全量工具 | 混合检索 + 软重排,Top-5 |
-| 代码 | 研发场景 | 全量工具 | 混合检索,Top-5 |
+| 档位 | 定位 | 工具 | 上下文 | 检索 |
+|---|---|---|---|---|
+| 经济 | 快问快答、弱模型 | 7 个：`get_now` `fs_read` `fs_list` `doc_search` `doc_read` `present` `shell_exec` | 20 条 / 24k 字符 | 3-gram，Top-3 |
+| 标准 | 日常默认 | 13 个：常用读写与文档解析，无子代理、删除、GUI | 40 条 / 48k 字符 | 3-gram + 向量，Top-5 |
+| 深度 | 长文档、多步调研 | 全量 | 30 条 / 48k 字符 | 3-gram + 向量 + 重排，Top-5 |
+| 代码 | 改码与重构 | 全量 | 40 条 / 64k 字符 | 3-gram，Top-5 |
 
-- 三级合并:**会话钉住 > Agent 模板默认 > 全局默认**(设置 → 预设);会话创建时钉住预设清单版本,老会话不随内置预设升级漂移,切换需显式确认
-- 混合检索:FTS5 trigram(3-gram OR 展开)+ 覆盖率打分两路 RRF 融合;黄金查询基准 Top-3 命中率 95% → 100%
-- 用户可在数据目录放 `presets.json` 覆盖同名内置档或追加新档
+合并优先级：会话钉住 > Agent 模板默认 > 全局默认。会话创建时钉住预设清单版本，老会话不随内置预设升级漂移，切换需显式确认。可在数据目录放置 `presets.json` 覆盖同名内置档或追加新档。同一设置页还可设定单次生成的总时长上限（1–1440 分钟），到点只结束本次生成，已输出内容保留。
 
-### 智能体(Agent)
+### 用量与预算
 
-- 内置多套智能体模板(日常 / 文档 / 开发 / 创作 / 运维 / 管理等),可一键绑定会话或仅应用为提示词
-- 内置智能体提示词可编辑:自定义覆盖同 id 内置模板,删除覆盖即恢复内置
-- 支持创建变体(基于基座模板追加后缀)与完全自定义模板
-- 存储结构可选:**耦合**(单文件 agents.json)或 **解耦**(目录多文件 config.json / prompt.md / tools.json),
-  解耦模式可关联外部 prompt.md / tools.json 文件,便于用外部编辑器维护
-- 智能体导入 / 导出走原生「另存为」对话框,可自选保存路径
-- 设置页「角色设置」可编辑全局自定义 base prompt(留空恢复默认)
+- Token 级用量记录，按日、按会话、按服务商聚合；提供时段热力图、成本估算、按当前计价表复算历史成本，以及 Key 健康度视图。
+- 请求预算三层校准：
+  1. 模型名匹配官方 BPE 词表（deepseek_v3/v4、qwen2、kimi_k2/k3、glm4/glm5、minimax_m2、o200k_base、cl100k_base 等），逐 token 计数；
+  2. 取本会话最近 10 轮「真实 `input_tokens` / 估算值」的中位数作校准系数；
+  3. 与上一轮消息比较最长公共前缀，按服务商的缓存命中率预估分段缓存节省量。
+- 每条请求在 `session_events` 中留档，`payload` 含 `est_tokens` 与 `breakdown`（`messages`、`tools`、`l1_raw`、`calibration`、`l2_calibrated`、`cache_saved`），可与 `usage_record` 的真实值逐轮对账。
+
+### 设置
+
+- 分组：模型（服务商 / 智能体管理 / 记忆管理）、能力（联网搜索）、界面（外观与首页 / 导航菜单 / 运行时预设）、扩展（MCP 工具）、数据（用量统计 / 存储位置 / 关于）。
+- 外观可调整主题、字号与首页提示语；导航菜单可拖拽排序，并可隐藏记忆库、知识库、附件入口。
+- 存储位置支持整体迁移数据目录，迁移时同步改写数据库中附件记录的绝对路径。
 
 ---
 
@@ -127,21 +172,38 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 
 | 层 | 技术 |
 |---|---|
-| 桌面框架 | Tauri 2.12（Rust + 系统 WebView2，不捆绑 Chromium） |
-| 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
-| 后端 | Rust（edition 2024，rust 1.90+），约 180 个 IPC 命令 |
-| 本地数据库 | SQLite（rusqlite，bundled，SCHEMA_VERSION 38） |
-| 网络 | reqwest（rustls-tls）+ SSE 流式解析，Rust 层直推前端 |
-| 附件解析 | pdf-extract / docx-rs / calamine / pptxgenjs（全部本地原生） |
-| 密钥保护 | Windows DPAPI + AES-GCM 双路径加密（`provider/keychain.rs`） |
-| 渲染 | react-markdown + KaTeX + Mermaid + ECharts + highlight.js |
+| 桌面框架 | Tauri 2.12（Rust + 系统 WebView2） |
+| 前端 | React 19 / TypeScript 5.8 / Vite 6 / Zustand 5 / React Router 7 |
+| 后端 | Rust 2024，tokio 1，reqwest 0.13（rustls） |
+| 数据库 | SQLite（rusqlite 0.32 bundled），`PRAGMA user_version` 迁移 |
+| 密钥 | Windows DPAPI + AES-GCM 双路径（`provider/keychain.rs`） |
+| 文档解析 | pdf-extract / docx-rs / calamine / zip / rust_xlsxwriter |
+| MCP | rmcp 3（stdio + Streamable HTTP） |
+| Token 估算 | tiktoken 4（纯 Rust，内置多厂商 BPE） |
+| GUI 自动化 | windows 0.62（UI Automation / SendInput / 窗口枚举），仅 Windows 目标 |
 
-**架构要点**
+架构要点：
 
-- 复用系统 WebView2 而非捆绑 Chromium：安装包约 **12–16 MB**（NSIS / MSI），显著小于 Electron 系同类产品
-- 附件解析、搜索排序、流式转发、密钥链等重逻辑全部在 Rust 原生层完成
-- 严格 CSP 白名单：`default-src 'self'; object-src 'none'; base-uri 'none'`，无远程脚本
-- 前端构建产物约 8.4 MB
+- 附件解析、检索排序、流式转发、密钥链、工具调度都在 Rust 侧完成，前端只负责渲染与交互。
+- CSP 为白名单制，原始配置：
+
+```text
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+img-src 'self' data: file: blob:; font-src 'self' data:;
+connect-src 'self' ipc: http://ipc.localhost;
+object-src 'none'; base-uri 'none'; frame-ancestors 'none'
+```
+
+- 窗口无系统装饰，标题栏由前端绘制；关闭主窗口隐藏到托盘，而非退出进程。
+- 工具调用日志按会话滚动保留最近 500 条；数据库升级前用 `VACUUM INTO` 生成快照，保留最近 2 份。
+
+单轮请求的处理顺序：
+
+1. 前端提交消息、附件元数据、会话预设与工具定义到 `chat_stream`。
+2. Rust 侧读取会话历史与 `memory.md`，按预设裁剪上下文，完成 token 估算并写入 `session_events`。
+3. 请求发往用户配置的服务商端点，SSE 增量回传，前端边接收边渲染。
+4. 模型返回工具调用时，由后端 `dispatcher` 做风险评估与审批判定，执行后把结果作为 tool 消息续接，循环至模型不再调用工具。
+5. 回合结束后落库 `messages`、`usage_record`、`tool_call_log`，并同步任务清单与产物登记。
 
 ---
 
@@ -149,140 +211,148 @@ myAgent 是一款开源的 Windows 桌面 AI 工作站，基于 **Tauri 2 + Rust
 
 | 维度 | 说明 |
 |---|---|
-| 数据存储 | 全部本地：SQLite + Markdown/JSON 文件，数据目录由用户自选、可迁移 |
-| 出网范围 | 仅连接用户自选的 LLM API 端点，无任何遥测/上报 |
-| API Key | Windows DPAPI 加密存储，辅以 AES-GCM 密钥链，不落明文；`secrets/` 目录权限收紧为仅当前系统用户可读 |
-| 文件操作 | 未绑定项目的会话默认沙箱:相对路径限制在工作区内,绝对路径显式放行;组件级边界比较杜绝前缀误判 |
-| 工具执行 | 审批档位四选一:每步审批 / 低风险自动放行 / 自动审批 / 完全信任;「完全信任」档含高危命令、工作区外操作在内的调用直接执行,全程记入本地审计日志,建议仅在受信任环境使用 |
-| 数据库升级 | 版本升级前自动快照（保留最近 2 份），工具调用记录按会话滚动保留最近 500 条 |
-| 导出 | 导出 PDF 的链接做协议白名单与转义校验，恶意链接降级为纯文本 |
+| 数据位置 | 全部本地：SQLite + Markdown / JSON，数据目录可由用户指定并迁移 |
+| 出网范围 | 仅连接用户配置的模型端点、用户启用的联网搜索后端与 MCP 服务；无遥测 |
+| API Key | DPAPI（Windows）加密，辅以 AES-GCM 密钥链，不落明文；`secrets/` 目录权限收紧为当前系统用户可读 |
+| 文件操作 | 默认工作区沙箱；绝对路径显式放行；路径组件级边界比较 |
+| 工具执行 | 三档审批；高危 shell 在非完全信任档强制确认；全部调用写审计日志并脱敏密钥 |
+| 数据库升级 | 迁移前自动快照（保留最近 2 份），异常可手工回滚 |
+| 导出 | 链接做协议白名单与转义校验 |
 | CSP | 严格白名单，禁止远程脚本与对象嵌入 |
-| 开源 | Apache-2.0,全部代码可审计 |
+| 开源 | Apache-2.0，代码可审计 |
+
+「完全信任」档会解除绝大多数执行前确认，并解锁 GUI 自动化。该档只应在你同时信任所用模型与工具输出内容时开启。
 
 ---
 
 ## 系统要求
 
-- Windows 10 / 11(64 位)
-- WebView2 运行时(Windows 11 自带；Windows 10 通常已预装，否则安装时自动引导)
-- 一个或多个模型服务商的 API Key(如 DeepSeek、智谱 GLM,或任意 OpenAI 兼容服务)
+- Windows 10 / 11（64 位）
+- WebView2 运行时（Windows 11 自带；Windows 10 一般已预装，缺失时安装程序会引导）
+- 至少一个 OpenAI 兼容服务商的 API Key
+- 联网搜索若使用 Tavily / 博查 / 智谱等后端，需要各自的 Key；SearXNG 需要自建实例地址
 
 ---
 
-## 快速开始
+## 开发与构建
 
-### 环境准备
+环境：
 
 | 依赖 | 版本 |
 |---|---|
-| Node.js | 18+(推荐 LTS) |
-| pnpm | 9+(`corepack enable` 后自带) |
-| Rust | 1.90+(rustup 安装) |
-| Tauri 系统依赖 | Windows 上仅需 WebView2 + MSVC 生成工具 |
+| Node.js | 18+ |
+| pnpm | 11（`corepack enable`） |
+| Rust | 1.90+ |
+| 系统 | WebView2 + MSVC 生成工具 |
 
-### 开发模式
+脚本（`package.json`）：
 
-```bash
-# 克隆仓库后进入项目目录
-cd "myAgent"
+| 命令 | 作用 |
+|---|---|
+| `pnpm dev` | 仅启动 Vite（端口 1420） |
+| `pnpm build` | `tsc -b` + `vite build` |
+| `pnpm preview` | 预览前端构建产物 |
+| `pnpm test` | `vitest run` |
+| `pnpm audit` | `pnpm audit --audit-level=high` |
+| `pnpm tauri dev` | 开发模式（Vite 热更新 + Tauri 窗口） |
+| `pnpm tauri build` | 前端构建、Rust 编译、NSIS 打包 |
 
-# 安装前端依赖
-pnpm install
+打包产物位于 `src-tauri/target/release/bundle/`（NSIS 安装包与可执行文件）。
 
-# 启动开发模式(Vite 热更新 + Tauri 窗口)
-pnpm tauri dev
-```
-
-### 构建发布
-
-```bash
-# 类型检查 + 前端构建 + Rust 编译 + 打包安装程序
-pnpm tauri build
-```
-
-产物位于 `src-tauri/target/release/bundle/`(NSIS 安装包与便携 exe)。
-
-### 运行测试
+测试：
 
 ```bash
 cd src-tauri
-cargo test        # Rust 单元测试(482 项)
-cargo check       # 静态检查
+cargo test                 # Rust 单元与集成测试，500+ 项
+cargo check                # 静态检查
+cd ..
+pnpm test                  # 前端 32 个测试文件
+npx tsc -b                 # 类型检查
 ```
 
 ---
 
 ## 配置模型服务商
 
-1. 启动应用，进入 **对话页** 顶部模型菜单，或打开 **设置 → 模型服务商**
-2. 选择内置模板(DeepSeek / 智谱 GLM)或 **新增 OpenAI 兼容** 服务商
-3. 填入 API Key —— Key 会立即经 Windows DPAPI 加密后写入本地密钥链
-4. 拉取模型列表，勾选启用，即可开始对话
+1. 打开 **设置 → 模型服务商**，选择内置模板（OpenAI / DeepSeek / Kimi / 通义千问 / 智谱 GLM）或新增 OpenAI 兼容服务商。
+2. 填入 API Key，Key 立即经 DPAPI 加密写入本地密钥链。
+3. 拉取模型列表并勾选启用。
+4. 同一服务商可配置多个 Key，按轮换与故障转移策略使用。
 
-支持为同一服务商配置多个 Key 做轮换与故障转移。
+联网搜索在 **设置 → 联网搜索** 中配置，支持博查、智谱 BigModel、DeepSeek 搜索、SearXNG、Tavily 五种后端。
 
 ---
 
 ## 项目结构
 
-```
+```text
 myAgent/
-├── index.html                  # Vite 入口
-├── package.json                # 前端依赖与脚本
-├── vite.config.ts              # Vite 配置(端口 1420)
-├── tutorials/                  # 应用内教程(聊天记忆/绘图/翻译)
-├── src/                        # 前端源码(React 19 + TS)
-│   ├── components/             # 标题栏、导航、全局搜索等通用组件
-│   ├── lib/                    # IPC 封装、工具函数
-│   ├── pages/                  # chat / memory / knowledge / attachments / translate / draw / settings
-│   ├── stores/                 # Zustand 状态
-│   └── styles/                 # 样式
-└── src-tauri/                  # 后端源码(Rust)
-    ├── tauri.conf.json         # 窗口、CSP、打包配置
-    ├── resources/aiflavor/     # AI 味检测语料资源
+├── index.html
+├── package.json
+├── vite.config.ts
+├── tutorials/                    # 应用内教程文本
+├── src/                          # 前端
+│   ├── components/               # 标题栏、侧栏、消息气泡、检查器、搜索面板
+│   ├── lib/                      # IPC 封装、导出、路径与格式工具
+│   ├── pages/                    # chat / memory / notes / attachments / settings
+│   ├── stores/                   # Zustand 状态
+│   └── styles/                   # 按域拆分的 CSS
+└── src-tauri/
+    ├── tauri.conf.json
     └── src/
-        ├── commands/           # Tauri IPC 命令
-        │   ├── provider/       # 模型接入/密钥链/流式/用量
-        │   ├── websearch.rs    # 联网搜索配置与连通性测试
-        │   ├── memory/         # 记忆 CRUD/版本 diff
-        │   └── ...
-        ├── db/                 # SQLite 会话与分支存储
-        ├── provider/           # 服务商模板/Key 轮换/DPAPI 密钥链
-        ├── websearch/          # 联网搜索(引擎/抓取/排序)
-        ├── memory/             # memory.md 读写与监听
-        └── settings.rs         # 应用设置
+        ├── commands/             # IPC 命令（provider / mcp / memory / attachment / ...）
+        ├── db/                   # SQLite schema、迁移、查询
+        ├── provider/             # 服务商模板、Key 轮换、DPAPI、模型卡、计价
+        ├── mcp/                  # MCP 客户端、内置工具、审批与安全策略
+        ├── agents/               # 内置智能体模板与存储
+        ├── memory/               # memory.md 读写、版本、监听
+        ├── websearch/            # 搜索引擎、抓取、正文提取
+        ├── retrieval.rs          # 3-gram 展开、覆盖率打分、RRF
+        ├── presets/              # 内置四档预设与合并
+        ├── gui/                  # UI Automation 工具
+        ├── doc/                  # 文档库切块与索引
+        └── settings.rs
 ```
 
 ---
 
 ## 数据存储
 
-默认数据目录位于应用数据文件夹(可在设置中迁移),布局如下：
+默认数据目录在应用数据文件夹内，可在设置中迁移：
 
-```
+```text
 data/
-├── metaagent.db                # SQLite:会话、消息、分支、用量、索引
-├── settings.json               # 应用设置
-├── provider_templates.json     # 服务商模板
-├── secrets/                    # DPAPI/AES-GCM 加密后的 API Key
+├── metaagent.db                # 会话、消息、分支、用量、索引、产物
+├── settings.json
+├── provider_templates.json
+├── mcp-approval.json           # 审批档与自动放行名单
+├── agents.json                 # 耦合模式下的自定义智能体
+├── presets.json                # 可选：覆盖内置预设
+├── secrets/                    # DPAPI / AES-GCM 加密的凭据
 ├── conversations/<id>/
-│   ├── memory.md               # 会话记忆(可直接编辑)
-│   └── memory.versions/        # 记忆版本快照
-├── notes/                      # 知识库 Markdown 笔记(含 11 条预置笔记;preset_seeded.json 记录落盘状态,删除不复活)
-├── translations/               # 翻译历史
-├── images/                     # AI 绘画产物
+│   ├── memory.md
+│   └── memory.versions/
+├── notes/                      # 知识库 Markdown
 └── attachments/                # 会话附件
 ```
 
-**重要**:记忆与笔记均为纯文本 Markdown,你可以用任何编辑器直接修改，应用会通过文件监听实时同步。删除应用前如需保留数据，备份整个数据目录即可。
+主要数据表：
 
-> 历史版本说明：深度研究功能已整体移除，数据库升级时会自动删除 `research_sessions` 表；历史研究产物文件（`data/research/**`）保留在数据目录中，可自行清理。学习中心功能（study）亦已在后续版本中整体移除。
->
-> 数据库迁移全自动且幂等：升级即建（如 V26 会话预设钉住列、V27 文档块全文索引 `doc_chunks_fts`）,存量数据自动回填；索引表缺失或分词器过旧时自动重建自愈，无需手工干预。
->
-> 迁移前快照（v2.2.0）：检测到磁盘版本落后时，迁移前自动用 `VACUUM INTO` 生成 `metaagent-v<旧版本>-<时间戳>.db.bak` 快照（保留最近 2 份），升级异常时可手工回滚。
->
-> 预置知识库（v2.3.0，v2.3.1 扩充至 11 条）：首次启动在 `notes/` 落盘 11 条预置内容并写入 `preset_seeded.json` 标记；标记存在期间被删除的预置不会自动复活，需要找回时用知识库页的「导入预置」一键恢复（合并不覆盖,完全重复的跳过）。
+| 表 | 用途 |
+|---|---|
+| `sessions` / `messages` / `branches` | 会话、消息、分支树 |
+| `projects` / `tasks` / `todos` | 项目、任务、待办 |
+| `usage_record` | 每请求真实 token 与费用 |
+| `session_events` | 请求/工具/交付等事件留档 |
+| `tool_call_log` | 工具调用记录（按会话滚动 500 条） |
+| `deliverables` | 交付产物登记 |
+| `memory_versions` | 记忆版本快照 |
+| `notes` | 知识库笔记 |
+| `doc_chunks` / `doc_chunks_fts` | 文档块与 FTS5 trigram 索引 |
+
+迁移全自动且幂等：磁盘 `user_version` 落后时按版本顺序补迁移，存量数据回填；索引表缺失或分词器过旧会重建。深度研究、学习中心、翻译、绘画页面已从界面移除，其中研究相关的 `research_sessions` 表在 V23 迁移中删除；`data/research/**`、`data/images/**` 等历史文件仍保留在数据目录，可自行删除。
+
+记忆与笔记均为纯文本，可用任意编辑器修改。备份整个数据目录即可迁移全部数据。
 
 ---
 
@@ -290,18 +360,30 @@ data/
 
 | 快捷键 | 作用 |
 |---|---|
-| `Ctrl + K` | 全局搜索(会话消息 / 记忆 / 知识库) |
-| `Ctrl + S`(笔记页) | 保存知识库笔记 |
+| `Ctrl + K` | 打开全局搜索面板 |
+| `Ctrl + S`（笔记页） | 保存笔记 |
+| `Esc` | 关闭搜索面板 / 取消重命名 |
+
+鼠标操作：双击会话标题重命名；双击托盘图标打开小窗；点击托盘图标恢复主窗口。
+
+---
+
+## 已知限制
+
+- 仅提供 Windows 构建；GUI 自动化依赖 Windows UI Automation。
+- 附件解析在本地完成，扫描件 PDF（纯图片）没有 OCR，只能提取内嵌文本层。
+- 会话导出 PDF 依赖系统 WebView2 打印，分页与字体由系统渲染决定，不同机器可能略有差异。
+- 用量成本估算基于内置计价表，自定义端点需手动维护单价，否则按 0 成本统计。
+- 工具调用日志按会话保留 500 条，超出后最早的记录被覆盖。
 
 ---
 
 ## 第三方致谢
 
-本项目引用以下开源作品，均已遵循其许可证(详见 [NOTICE](NOTICE)):
-
-- **[Cherry Studio](https://github.com/CherryHQ/cherry-studio)**(AGPL-3.0)—— 仅参考其服务商管理与桌面助手架构理念，未复制任何代码或资源
-- **[MCP 官方参考服务器](https://github.com/modelcontextprotocol/servers)**(MIT)—— 内置「项目文件 / 长期记忆 / 顺序思考」服务,运行时经 npx 按需启动,不随安装包分发
-- **[agent-search-mcp](https://github.com/lennney/agent-search-mcp)**(Apache-2.0)—— 内置「联网搜索」默认服务,零 API Key 多引擎聚合,运行时经 npx 按需启动,不随安装包分发
+- **[Cherry Studio](https://github.com/CherryHQ/cherry-studio)**（AGPL-3.0）—— 仅参考服务商管理与桌面助手架构思路，未复制代码或资源
+- **[MCP 官方参考服务器](https://github.com/modelcontextprotocol/servers)**（MIT）—— 内置项目文件 / 长期记忆 / 顺序思考服务，运行时经 npx 启动
+- **[agent-search-mcp](https://github.com/lennney/agent-search-mcp)**（Apache-2.0）—— 内置联网搜索服务，运行时经 npx 启动
+- 其余 Rust 与前端依赖的许可证见 `NOTICE` 与各 crate 元数据
 
 ---
 

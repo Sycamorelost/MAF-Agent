@@ -1,5 +1,7 @@
 //! 附件管理中心(迭代 F7):聚合历史附件、再次引入会话、删除与引用统计。
 
+use std::collections::HashMap;
+
 use serde::Serialize;
 
 use crate::attachment;
@@ -7,6 +9,22 @@ use crate::attachment;
 use super::meta::{
     AttachmentMeta, MAX_ATTACHMENT_BYTES, ensure_in_attachments_dir, extract_and_index,
 };
+
+/// 会话级文档清单条目(常驻系统提示的 doc manifest / 附件中心解析信息)。
+#[derive(Debug, Clone, Serialize)]
+pub struct SessionDoc {
+    pub doc_id: String,
+    pub doc_name: String,
+    pub kind: String,
+    /// 驻留块数
+    pub chunks: i64,
+    /// 正文字符数
+    pub chars: i64,
+    /// 上传时生成的 200 字摘要(可能缺省)
+    pub summary: Option<String>,
+    /// 首次入库时间
+    pub created: String,
+}
 
 /// 附件中心条目:展开 messages.attachments JSON,联表 sessions 取标题。
 #[derive(Debug, Clone, Serialize)]
@@ -67,6 +85,184 @@ pub(crate) fn list_all_on(conn: &rusqlite::Connection) -> Result<Vec<AttachmentE
 pub async fn list_all_attachments() -> Result<Vec<AttachmentEntry>, String> {
     let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
     list_all_on(&conn)
+}
+
+/// 会话级文档清单:按 doc_id 聚合块数/字符数/时间,并回填上传时的摘要。
+/// 摘要不落在 `doc_chunks`,只能从消息附件 JSON 反查(同会话扫描一次)。
+pub(crate) fn list_session_docs_on(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+) -> Result<Vec<SessionDoc>, String> {
+    let mut summaries: HashMap<String, String> = HashMap::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT attachments FROM messages
+                 WHERE session_id=?1 AND attachments IS NOT NULL AND attachments <> '[]'",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(rusqlite::params![session_id], |r| r.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let raw = row.map_err(|e| e.to_string())?;
+            let Ok(list) = serde_json::from_str::<Vec<AttachmentMeta>>(&raw) else {
+                continue;
+            };
+            for m in list {
+                if let (Some(id), Some(sum)) = (m.doc_id, m.summary) {
+                    summaries.entry(id).or_insert(sum);
+                }
+            }
+        }
+    }
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT doc_id, doc_name, kind, COUNT(*), COALESCE(SUM(length(content)),0), MIN(created)
+             FROM doc_chunks WHERE session_id=?1
+             GROUP BY doc_id, doc_name, kind ORDER BY MIN(id)",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(rusqlite::params![session_id], |r| {
+            Ok(SessionDoc {
+                doc_id: r.get(0)?,
+                doc_name: r.get(1)?,
+                kind: r.get(2)?,
+                chunks: r.get(3)?,
+                chars: r.get(4)?,
+                summary: None,
+                created: r.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let mut out: Vec<SessionDoc> = rows.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+    for d in out.iter_mut() {
+        d.summary = summaries.get(&d.doc_id).cloned();
+    }
+    Ok(out)
+}
+
+/// 列出本会话已解析文档(系统提示 doc manifest / 附件中心会话视图)。
+#[tauri::command]
+pub async fn list_session_docs(session_id: String) -> Result<Vec<SessionDoc>, String> {
+    let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
+    list_session_docs_on(&conn, &session_id)
+}
+
+/// 从消息的 attachments JSON 中定位指定路径的元数据,返回(来源会话, 元数据)。
+pub(crate) fn find_meta_on(
+    conn: &rusqlite::Connection,
+    message_id: i64,
+    path: &str,
+) -> Result<(String, AttachmentMeta), String> {
+    let (session_id, raw): (String, Option<String>) = conn
+        .query_row(
+            "SELECT session_id, attachments FROM messages WHERE id=?1",
+            rusqlite::params![message_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|e| format!("消息不存在: {e}"))?;
+    let metas: Vec<AttachmentMeta> = raw
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+    metas
+        .into_iter()
+        .find(|m| m.path == path)
+        .map(|m| (session_id, m))
+        .ok_or_else(|| "该消息中未找到此附件".to_string())
+}
+
+/// 复用解析:源会话有该文档的块时复制到目标会话(同会话不复制,只补块数)。
+/// 返回 (元数据, 是否复用成功)。未解析过的附件由调用方回退重新提取。
+pub(crate) fn reuse_parsed_on(
+    conn: &rusqlite::Connection,
+    source_session: &str,
+    target_session: &str,
+    mut meta: AttachmentMeta,
+) -> Result<(AttachmentMeta, bool), String> {
+    let has_chunks = match meta.doc_id.as_deref() {
+        Some(doc_id) => conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM doc_chunks WHERE session_id=?1 AND doc_id=?2)",
+                rusqlite::params![source_session, doc_id],
+                |r| r.get::<_, bool>(0),
+            )
+            .map_err(|e| e.to_string())?,
+        None => false,
+    };
+    if !has_chunks {
+        return Ok((meta, false));
+    }
+    if source_session != target_session
+        && let Some(doc_id) = meta.doc_id.as_deref()
+    {
+        meta.chunk_count = Some(crate::doc::copy_document(
+            conn,
+            source_session,
+            target_session,
+            doc_id,
+        )?);
+    }
+    // 源侧解析成功:清掉历史失败提示,避免卡片误标「未解析」
+    meta.extract_note = None;
+    Ok((meta, true))
+}
+
+/// 从附件中心把附件导入目标会话。
+///
+/// 与 `insert_attachment_to_session` 的区别:源会话已有该文档的解析块时,
+/// **直接复制 `doc_chunks` + FTS,不重新读盘解析**(省一次 PDF/Office 解析);
+/// 只有源侧从未解析成功时才回退到重新提取。
+#[tauri::command]
+pub async fn import_attachment_from_center(
+    target_session_id: String,
+    source_message_id: i64,
+    path: String,
+) -> Result<AttachmentMeta, String> {
+    crate::memory::validate_id(&target_session_id)?;
+    let p = std::path::Path::new(&path);
+    ensure_in_attachments_dir(p)?;
+    let fs_meta = std::fs::metadata(p).map_err(|e| format!("附件不存在或不可读: {e}"))?;
+    if fs_meta.len() > MAX_ATTACHMENT_BYTES {
+        return Err("附件超过 20MB 上限".into());
+    }
+    let path_str = p.to_string_lossy().to_string();
+
+    // 复用解析:读源元数据 → 配额校验 → 复制块(同一把锁内完成,避免元数据与块不一致)
+    let (mut out, reused) = {
+        let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
+        let (source_session, src_meta) = find_meta_on(&conn, source_message_id, &path_str)?;
+        crate::commands::attachment_quota::check_quota_on(
+            &conn,
+            &target_session_id,
+            Some(&path_str),
+            fs_meta.len(),
+        )?;
+        reuse_parsed_on(&conn, &source_session, &target_session_id, src_meta)?
+    };
+
+    out.path = path_str.clone();
+    out.size = fs_meta.len();
+    if !reused {
+        // 回退:源会话没有可复用的解析结果,重新提取一次(与旧行为一致)
+        let kind = attachment::classify(&out.name);
+        if !matches!(
+            kind,
+            attachment::AttachmentKind::Image | attachment::AttachmentKind::Other
+        ) {
+            let (text, note, chunks, summary, doc_id) =
+                extract_and_index(&target_session_id, &out.name, kind, &path_str);
+            out.extracted_text = text;
+            out.extract_note = note;
+            out.chunk_count = chunks;
+            out.summary = summary;
+            out.doc_id = doc_id;
+        }
+    }
+    Ok(out)
 }
 
 /// 从落盘文件名剥离 `{ts}_` 前缀,还原展示名(落盘格式:{yyyyMMdd-HHmmssSSS}_{safe})。
@@ -264,4 +460,120 @@ pub(crate) fn count_references_on(
         }
     }
     Ok(n)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::schema::migrate(&conn).unwrap();
+        for sid in ["s1", "s2"] {
+            conn.execute(
+                "INSERT INTO sessions(id,title,created,updated) VALUES(?1,'t','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
+                rusqlite::params![sid],
+            )
+            .unwrap();
+        }
+        conn
+    }
+
+    fn add_msg(conn: &rusqlite::Connection, session: &str, metas: &[AttachmentMeta]) -> i64 {
+        crate::db::messages::append_on(
+            conn,
+            session,
+            "user",
+            "x",
+            None,
+            0,
+            Some(&serde_json::to_string(metas).unwrap()),
+            None,
+            None,
+            "main",
+        )
+        .unwrap()
+    }
+
+    fn meta(name: &str, path: &str, doc_id: Option<&str>) -> AttachmentMeta {
+        AttachmentMeta {
+            name: name.into(),
+            path: path.into(),
+            kind: "pdf".into(),
+            size: 10,
+            extracted_text: Some("摘录".into()),
+            doc_id: doc_id.map(|s| s.into()),
+            chunk_count: None,
+            summary: None,
+            extract_note: None,
+        }
+    }
+
+    #[test]
+    fn list_session_docs_reports_parse_info() {
+        let conn = setup();
+        let text = "## 一\n多智能体协作提升完成率。";
+        let r = crate::doc::service::ingest(&conn, "s1", "a.pdf", "pdf", text);
+        let doc_id = r.doc_id.clone().unwrap();
+        let mut m = meta("a.pdf", r"D:\att\s1\a.pdf", Some(&doc_id));
+        m.summary = r.summary.clone();
+        add_msg(&conn, "s1", &[m]);
+
+        let docs = list_session_docs_on(&conn, "s1").unwrap();
+        assert_eq!(docs.len(), 1);
+        assert_eq!(docs[0].doc_name, "a.pdf");
+        assert_eq!(docs[0].chunks, r.chunks.unwrap() as i64);
+        assert_eq!(docs[0].summary, r.summary);
+        assert!(!docs[0].created.is_empty());
+    }
+
+    #[test]
+    fn list_session_docs_empty() {
+        let conn = setup();
+        assert!(list_session_docs_on(&conn, "s1").unwrap().is_empty());
+    }
+
+    #[test]
+    fn find_meta_locates_path_and_reports_missing() {
+        let conn = setup();
+        let msg = add_msg(&conn, "s1", &[meta("a.pdf", r"D:\att\s1\a.pdf", None)]);
+        let (sid, m) = find_meta_on(&conn, msg, r"D:\att\s1\a.pdf").unwrap();
+        assert_eq!(sid, "s1");
+        assert_eq!(m.name, "a.pdf");
+        assert!(find_meta_on(&conn, msg, r"D:\att\s1\ghost.pdf").is_err());
+        assert!(find_meta_on(&conn, 99999, r"D:\att\s1\a.pdf").is_err());
+    }
+
+    #[test]
+    fn reuse_parsed_copies_chunks_to_target() {
+        let conn = setup();
+        let r = crate::doc::service::ingest(&conn, "s1", "a.pdf", "pdf", "## 一\n乙丙丁乙丙丁");
+        let doc_id = r.doc_id.unwrap();
+        let mut m = meta("a.pdf", r"D:\att\s1\a.pdf", Some(&doc_id));
+        m.extract_note = Some("旧的失败提示".into());
+
+        let (out, reused) = reuse_parsed_on(&conn, "s1", "s2", m).unwrap();
+        assert!(reused);
+        assert_eq!(out.chunk_count, r.chunks);
+        assert!(out.extract_note.is_none(), "解析成功应清掉失败提示");
+
+        let target_docs = crate::doc::list_docs(&conn, "s2").unwrap();
+        assert_eq!(target_docs.len(), 1);
+        assert_eq!(target_docs[0].doc_id, doc_id);
+        assert!(crate::doc::search(&conn, "s2", "乙丙丁", None, 5)
+            .unwrap()
+            .hits
+            .len()
+            >= 1);
+    }
+
+    #[test]
+    fn reuse_parsed_falls_back_when_unparsed() {
+        let conn = setup();
+        let (out, reused) =
+            reuse_parsed_on(&conn, "s1", "s2", meta("a.pdf", r"D:\att\s1\a.pdf", None)).unwrap();
+        assert!(!reused);
+        assert!(out.chunk_count.is_none());
+        assert!(crate::doc::list_docs(&conn, "s2").unwrap().is_empty());
+    }
 }

@@ -1,14 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReasoningCapability } from '../../lib/ipc';
 import { THINKING_LEVEL_LABEL, effortHint } from '../../lib/thinkingHint';
 import type { ThinkingLevel, ThinkingSelection } from '../../stores/thinking';
 import {
+  IconAttach,
   IconBrain,
   IconChevronDown,
   IconGlobe,
   IconPlus,
   IconSend,
   IconStop,
+  IconUpload,
 } from '../icons';
 
 const ACCEPT =
@@ -35,8 +38,12 @@ interface Props {
   onSend: () => void;
   /** 本会话模型选择器:置于工具条右端、发送按钮之前 */
   model?: { name: string; ready: boolean; onOpen: () => void } | null;
+  /** 芯片只保留图标(小窗紧凑模式) */
+  iconOnly?: boolean;
   /** 追加到工具条的自定义 chip(智能体 / 会话设置等) */
   children?: ReactNode;
+  /** 打开「从附件中心导入」选择器;未提供时附件按钮保持直接选文件 */
+  onOpenAttachmentCenter?: () => void;
 }
 
 /** 输入框底部工具条:附件 / 联网 / 思考强度 / 自定义 chip / 发送或停止。 */
@@ -51,10 +58,14 @@ export default function ToolBar({
   canSend,
   onSend,
   model,
+  iconOnly,
   children,
+  onOpenAttachmentCenter,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [thinkMenu, setThinkMenu] = useState(false);
+  /** 附件来源浮层:本地上传 / 从附件中心导入 */
+  const [srcMenu, setSrcMenu] = useState(false);
   /**
    * 思考强度浮层的定位:固定定位,左边缘与「思考」chip 对齐(窄窗内自动钳制在窗口内)。
    * 这里实测 chip 的矩形,换算出浮层距窗口底部的距离、左偏移与可用最大高度,
@@ -94,7 +105,7 @@ export default function ToolBar({
   /**
    * 紧凑态判定:按 chip 实测总宽 + 右侧「模型(带名) + 发送」预留 200px 与工具条宽比较。
    * chip 总宽不受紧凑态影响(只收模型名),所以判定是稳定的,不会反复切换。
-   * ★ 不能用视口媒体查询:composer 自身有 720px 上限,窄视口下窗口宽度与输入条宽度无关。
+   * [注意] 不能用视口媒体查询:composer 自身有 720px 上限,窄视口下窗口宽度与输入条宽度无关。
    */
   const measureCompact = () => {
     const bar = barRef.current;
@@ -124,16 +135,52 @@ export default function ToolBar({
       <div className="toolbar-chips" ref={chipsRef}>
       {onPickFiles && (
         <>
-          <button
-            type="button"
-            className="tool-plus"
-            onClick={() => fileRef.current?.click()}
-            disabled={disabled}
-            title="添加附件(docx / xlsx / pdf / 图片)"
-            aria-label="添加附件"
-          >
-            <IconPlus size={15} />
-          </button>
+          <span className="attach-src-wrap">
+            <button
+              type="button"
+              className="tool-plus"
+              onClick={() => {
+                // 提供了附件中心入口才展开来源选择;否则保持原有直接选文件行为
+                if (onOpenAttachmentCenter) setSrcMenu((v) => !v);
+                else fileRef.current?.click();
+              }}
+              disabled={disabled}
+              title="添加附件(docx / xlsx / pdf / 图片 / 附件中心)"
+              aria-label="添加附件"
+            >
+              <IconPlus size={15} />
+            </button>
+            {srcMenu && onOpenAttachmentCenter && (
+              <>
+                <div className="pin-backdrop" onClick={() => setSrcMenu(false)} />
+                <div className="pin-menu attach-src-menu">
+                  <div className="pin-menu-title">添加附件</div>
+                  <button
+                    type="button"
+                    className="attach-src-item"
+                    onClick={() => {
+                      setSrcMenu(false);
+                      fileRef.current?.click();
+                    }}
+                  >
+                    <IconUpload size={14} />
+                    <span>从电脑上传</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="attach-src-item"
+                    onClick={() => {
+                      setSrcMenu(false);
+                      onOpenAttachmentCenter();
+                    }}
+                  >
+                    <IconAttach size={14} />
+                    <span>从附件中心导入</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </span>
           <input
             ref={fileRef}
             type="file"
@@ -157,7 +204,7 @@ export default function ToolBar({
           title={webSearch ? '联网搜索已开启(点击关闭)' : '开启联网搜索'}
         >
           <IconGlobe size={13} />
-          <span>联网</span>
+          {!iconOnly && <span>联网</span>}
         </button>
       )}
       {thinking && thinking.capability.enabled && (() => {
@@ -192,50 +239,57 @@ export default function ToolBar({
               title={chipTitle}
             >
               <IconBrain size={13} />
-              <span className="ctl-chip-text">
-                思考{!noLevels && sel.on ? ` · ${THINKING_LEVEL_LABEL[sel.level]}` : ''}
-              </span>
-              {!noLevels && <IconChevronDown size={11} />}
+              {!iconOnly && (
+                <>
+                  <span className="ctl-chip-text">
+                    思考{!noLevels && sel.on ? ` · ${THINKING_LEVEL_LABEL[sel.level]}` : ''}
+                  </span>
+                  {!noLevels && <IconChevronDown size={11} />}
+                </>
+              )}
             </button>
             {thinkMenu && !noLevels && (
-              <>
-                <div className="pin-backdrop" onClick={() => setThinkMenu(false)} />
-                <div
-                  className="pin-menu think-menu"
-                  style={{ bottom: thinkPos.bottom, left: thinkPos.left, maxHeight: thinkPos.maxH }}
-                >
-                  <div className="pin-menu-title">思考强度(实际发送参数)</div>
-                  {(['light', 'medium', 'high', 'ultra'] as ThinkingLevel[]).map((lv) => (
-                    <button
-                      key={lv}
-                      type="button"
-                      className={`think-item ${sel.on && sel.level === lv ? 'active' : ''}`}
-                      onClick={() => {
-                        thinking.onSelect({ on: true, level: lv });
-                        setThinkMenu(false);
-                      }}
-                    >
-                      <span>{THINKING_LEVEL_LABEL[lv]}</span>
-                      <span className="hint">{effortHint(thinking.providerId, thinking.model, lv)}</span>
-                    </button>
-                  ))}
-                  {cap.can_disable && (
-                    <>
-                      <div className="think-divider" />
+              createPortal(
+                <>
+                  <div className="pin-backdrop" onClick={() => setThinkMenu(false)} />
+                  <div
+                    className="pin-menu think-menu"
+                    style={{ bottom: thinkPos.bottom, left: thinkPos.left, maxHeight: thinkPos.maxH }}
+                  >
+                    <div className="pin-menu-title">思考强度(实际发送参数)</div>
+                    {(['light', 'medium', 'high', 'ultra'] as ThinkingLevel[]).map((lv) => (
                       <button
+                        key={lv}
                         type="button"
-                        className={`think-item ${!sel.on ? 'active' : ''}`}
+                        className={`think-item ${sel.on && sel.level === lv ? 'active' : ''}`}
                         onClick={() => {
-                          thinking.onSelect({ ...sel, on: false });
+                          thinking.onSelect({ on: true, level: lv });
                           setThinkMenu(false);
                         }}
                       >
-                        <span>关闭思考</span>
+                        <span>{THINKING_LEVEL_LABEL[lv]}</span>
+                        <span className="hint">{effortHint(thinking.providerId, thinking.model, lv)}</span>
                       </button>
-                    </>
-                  )}
-                </div>
-              </>
+                    ))}
+                    {cap.can_disable && (
+                      <>
+                        <div className="think-divider" />
+                        <button
+                          type="button"
+                          className={`think-item ${!sel.on ? 'active' : ''}`}
+                          onClick={() => {
+                            thinking.onSelect({ ...sel, on: false });
+                            setThinkMenu(false);
+                          }}
+                        >
+                          <span>关闭思考</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>,
+                document.body,
+              )
             )}
           </span>
         );

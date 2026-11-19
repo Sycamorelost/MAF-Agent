@@ -16,6 +16,8 @@ interface CardFile {
   /** 后端原始类型(doc/sheet/slides/...),用于判断可执行的操作 */
   rawKind?: string;
   isImage: boolean;
+  /** 文件大小(字节);正文路径解析兜底时为 undefined */
+  size?: number;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -23,7 +25,6 @@ const KIND_LABEL: Record<string, string> = {
   doc: '文档',
   sheet: '表格',
   slides: '演示文稿',
-  pdf: 'PDF',
   archive: '压缩包',
   text: '文本',
   html: '网页',
@@ -41,6 +42,7 @@ function fromDeliverable(d: DeliverableDto): CardFile {
     kind: KIND_LABEL[d.kind] ?? '文件',
     rawKind: d.kind,
     isImage: d.kind === 'image' || IMAGE_EXT.test(d.path),
+    size: d.size ?? undefined,
   };
 }
 
@@ -69,19 +71,10 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** 办公文档才提供「转 PDF」(LibreOffice 无头转换)。 */
-function canToPdf(file: CardFile) {
-  return (
-    ['doc', 'sheet', 'slides'].includes(file.rawKind ?? '') ||
-    /\.(docx?|xlsx?|xls|csv|pptx?|ppt|odt|ods|odp|rtf)$/i.test(file.path)
-  );
-}
-
-/** 操作:默认应用打开 / 文件管理器定位 / 复制路径 / 转 PDF。 */
+/** 操作:默认应用打开 / 文件管理器定位 / 复制路径 */
 function CardActions({ file, sessionId }: { file: CardFile; sessionId?: string }) {
   const [tip, setTip] = useState('');
   const [tipTitle, setTipTitle] = useState('');
-  const [busy, setBusy] = useState(false);
   const path = file.path;
 
   /** 短暂显示操作结果;title 放完整路径/错误,避免卡片被撑开。 */
@@ -120,25 +113,6 @@ function CardActions({ file, sessionId }: { file: CardFile; sessionId?: string }
       >
         <IconCopy size={13} />
       </button>
-      {canToPdf(file) && (
-        <button
-          type="button"
-          className="out-act out-act-pdf"
-          title="转换为 PDF(需本机安装 LibreOffice)"
-          aria-label="转换为 PDF"
-          disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            ipc
-              .exportFilePdf(path, sessionId)
-              .then((out) => flash('已生成', out))
-              .catch((e: unknown) => flash('转换失败', String(e)))
-              .finally(() => setBusy(false));
-          }}
-        >
-          {busy ? '…' : 'PDF'}
-        </button>
-      )}
       {tip && (
         <span className="out-act-tip" title={tipTitle}>
           {tip}
@@ -224,26 +198,57 @@ export function OutputCards({
   }, [all, messageId, content]);
 
   if (files.length === 0) return null;
+
+  const MAX_VISIBLE = 5;
+  const [expanded, setExpanded] = useState(false);
+  const tooMany = files.length > MAX_VISIBLE;
+  const visible = tooMany && !expanded ? files.slice(0, MAX_VISIBLE) : files;
+  const hiddenCount = files.length - MAX_VISIBLE;
+
   return (
-    <div className="out-cards">
-      {files.map((f) =>
+    <div className="out-list">
+      {visible.map((f) =>
         f.isImage ? (
           <ImageCard key={f.key} file={f} sessionId={sessionId} />
         ) : (
-          <div key={f.key} className="out-card">
-            <IconDoc size={16} />
-            <span className="out-card-info">
-              <span className="out-card-name" title={f.path}>
-                {f.name}
-              </span>
-              <span className="out-card-kind">
-                {f.note ? `${f.kind ?? '文件'} · ${f.note}` : (f.kind ?? '产物')}
-              </span>
-            </span>
+          <div key={f.key} className="out-list-row" title={f.path}>
+            <IconDoc size={14} />
+            <span className="out-list-name">{f.name}</span>
+            <span className="out-list-path" title={f.path}>{outputDirPath(f.path)}</span>
+            <span className="out-list-kind">{f.kind ?? '文件'}</span>
+            <span className="out-list-size">{formatSize(f.size)}</span>
             <CardActions file={f} sessionId={sessionId} />
           </div>
         ),
       )}
+      {tooMany && (
+        <button
+          type="button"
+          className="out-list-toggle"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? `收起 ${hiddenCount} 个` : `展开 ${hiddenCount} 个更多文件`}
+        </button>
+      )}
     </div>
   );
+}
+
+/** 从完整路径提取"目录/子目录"部分（文件名已单独显示）。 */
+function outputDirPath(fullPath: string): string {
+  const norm = fullPath.replace(/\\/g, '/');
+  const lastSlash = norm.lastIndexOf('/');
+  if (lastSlash <= 0) return '';
+  // 只显示最后 2 级目录,避免太长
+  const dir = norm.slice(0, lastSlash);
+  const parts = dir.split('/');
+  return parts.slice(-2).join('/');
+}
+
+/** 人类可读文件大小;空/null 返回空串。 */
+function formatSize(bytes?: number | null): string {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

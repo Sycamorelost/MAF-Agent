@@ -125,7 +125,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
         text: '2.2 "模型服务商"指由用户自行配置、凭 API Key 接入的第三方大模型服务提供方,包括用户自行添加的兼容接口。',
       },
       {
-        text: '2.3 "用户数据"指用户使用本软件过程中在本机产生或保存的数据,包括会话记录、消息、记忆文件、知识库笔记、附件、生成图片及配置信息。',
+        text: '2.3 "用户数据"指用户使用本软件过程中在本机产生或保存的数据,包括会话记录、消息、记忆文件、知识库笔记、附件及配置信息。',
       },
       { text: '2.4 "API Key"指用户向模型服务商申请、用于调用其模型服务的身份凭证。' },
     ],
@@ -135,7 +135,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
     name: '软件描述与授权范围',
     items: [
       {
-        text: '3.1 本软件（myAgent）是 MAF 团队旗下的 Agent 产品，一款专为学习、调研而创造的智能体框架软件，提供本地会话、文件即记忆、任务清单、知识库、翻译、绘画等框架功能。本软件自身不生产、不持有大模型内容,模型能力由用户自行配置的模型服务商提供。',
+        text: '3.1 本软件（myAgent）是 MAF 团队旗下的 Agent 产品，一款专为学习、调研而创造的智能体框架软件，提供本地会话、文件即记忆、任务清单、知识库、项目等框架功能。本软件自身不生产、不持有大模型内容,模型能力由用户自行配置的模型服务商提供。',
       },
       {
         text: '3.2 本软件以 Apache License 2.0 开源发布，源码见 https://github.com/Sycamorelost/MAF-Agent 。您对本软件的安装、运行、修改、分发以及商业使用，均以仓库根目录 LICENSE 授予的权利为准；本条款仅作补充说明，与 LICENSE 冲突时以 LICENSE 为准。(免费与无广告承诺见第十四条。)',
@@ -158,7 +158,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
           '加密与编码:操作系统提供的 Windows DPAPI,以及 aes-gcm、sha2、base64;',
           '文档解析与图像:docx-rs、calamine、pdf-extract、image;',
           '内容渲染:react-markdown、remark-gfm、remark-math、rehype-katex、katex、rehype-highlight、highlight.js、mermaid、echarts;',
-          '模型上下文协议(MCP)组件:@modelcontextprotocol/server-filesystem、server-memory、server-sequential-thinking(MIT),以及联网搜索组件 agent-search-mcp(Apache-2.0)——经 npx 按需启动,不随安装包捆绑,其许可文本见各自项目;',
+          '模型上下文协议(MCP)组件:@modelcontextprotocol/server-filesystem、server-memory、server-sequential-thinking(MIT),以及联网搜索组件 agent-search-mcp(Apache-2.0)——随应用启动经 npx 拉起,不随安装包捆绑,其许可文本见各自项目;',
         ],
       },
       {
@@ -201,7 +201,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
         text: '6.2 开发者不收集、不上传、不托管用户数据;本软件不包含由开发者运营的云端存储或账号体系。用户数据的保管、备份与保密由您自行负责。',
       },
       {
-        text: '6.3 API Key 在 Windows 上通过操作系统提供的 DPAPI 机制加密后保存于本机,本软件任何界面均不回显 Key 的明文;旧版本以其他方式保存的密钥文件按兼容方式读取。',
+        text: '6.3 API Key 在 Windows 上通过操作系统提供的 DPAPI 机制加密后保存于本机,DPAPI 不可用时回退为 AES-GCM 密钥链;本软件任何界面均不回显 Key 的明文,旧版本以其他方式保存的密钥文件按兼容方式读取。',
       },
       {
         text: '6.4 与模型服务商之间的网络通信发生在您的设备与该服务商之间,通信内容可能被其按自身隐私政策处理,开发者对此不承担责任。',
@@ -227,7 +227,7 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
         text: '7.2 大模型输出可能包含错误、过时或带有偏见的内容。您在将其用于学习、研究或其他决策前,应自行核实其准确性与适用性。',
       },
       {
-        text: '7.3 工具权限与放权:您可在「设置 - MCP - 工具权限」中选择审批档位。选择「完全信任」档后,包括高危命令、工作区外文件操作在内的全部工具调用均不再经人工确认而直接执行(操作全程记入本机审计日志)。您选择该档即视为已理解其风险,并自行承担因模型误用工具造成的后果;建议仅在受信任的隔离环境中使用该档。',
+        text: '7.3 工具权限与放权:您可在「设置 → MCP 工具 → 工具权限」中选择审批档位。选择「完全信任」档后,包括高危命令、工作区外文件操作在内的全部工具调用均不再经人工确认而直接执行(操作全程记入本机审计日志)。您选择该档即视为已理解其风险,并自行承担因模型误用工具造成的后果;建议仅在受信任的隔离环境中使用该档。',
       },
     ],
   },
@@ -305,10 +305,10 @@ export const TERMS: { no: number; name: string; items: TermItem[] }[] = [
     name: '输出格式边界',
     items: [
       {
-        text: '13.1 本软件的会话、学习计划与文档导出(Markdown / HTML / Word / PDF 打印)全部在本机生成;可用格式以应用内实际提供的导出入口为准。',
+        text: '13.1 本软件的会话导出以 Markdown 与系统打印(PDF)为主,表格类产物可导出 DOCX / XLSX;全部在本机生成,可用格式以应用内实际提供的导出入口为准。',
       },
       {
-        text: '13.2 本软件图示能力包括本地矢量图渲染与用户自行配置的模型服务图像生成;AI 生成图像仅作为概念草稿,不构成实验证据。',
+        text: '13.2 本软件的图示能力包括对话内的 Mermaid 流程图与 ECharts 图表渲染;图表内容仅作为示意,不构成实验证据。',
       },
     ],
   },

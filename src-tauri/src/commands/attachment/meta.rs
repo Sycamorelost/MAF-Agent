@@ -28,7 +28,7 @@ pub struct AttachmentMeta {
     /// 200 字摘要(「文档卡」注入用)
     #[serde(default)]
     pub summary: Option<String>,
-    /// 提取失败 / 无文本的原因(F7 失败显性化,前端标 ⚠ 提示)
+    /// 提取失败 / 无文本的原因(F7 失败显性化,前端标 [警告] 提示)
     #[serde(default)]
     pub extract_note: Option<String>,
 }

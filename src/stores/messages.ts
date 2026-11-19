@@ -1,10 +1,15 @@
 import { create } from 'zustand';
 import * as ipc from '../lib/ipc';
+import type { QuoteRef } from '../lib/quote';
 
 interface MessagesState {
   bySession: Record<string, ipc.MessageRow[]>;
+  /** P15:引用/追问的引用卡片,key = 消息 id(乐观临时 id 或真实落库 id) */
+  quotesByMessageId: Record<number, QuoteRef[]>;
   /** 正在流式输出的会话 -> 当前已累积的临时内容 */
   streaming: Record<string, string>;
+  /** P0-2a:每轮流式的自增 token,旧流 endStreaming 不匹配新 token 时直接丢弃缓冲 */
+  streamingToken: Record<string, number>;
   /** 正在流式输出的会话 -> 已累积的思考文本(v1.9.0;与正文分流,折叠块展示) */
   streamingReasoning: Record<string, string>;
   /** 思考元信息:token 数(端点上报)/思考耗时(ms);done 时定格 */
@@ -29,6 +34,8 @@ interface MessagesState {
     attachments?: string | null,
     /** P0-1:传入乐观渲染的临时行 id,落库成功后就地替换(不重插、不闪动) */
     optimisticId?: number,
+    /** P15:引用卡片(追问时的选中片段),乐观/真实 id 间自动迁移 */
+    quotes?: QuoteRef[],
   ) => Promise<number>;
   /** P0-1:乐观插入用户消息(临时负 id),返回临时 id;失败/取消时用 removeLocalRow 清掉 */
   appendUserOptimistic: (
@@ -36,9 +43,15 @@ interface MessagesState {
     content: string,
     modelId?: string | null,
     attachments?: string | null,
+    /** P15:引用卡片(追问时的选中片段) */
+    quotes?: QuoteRef[],
   ) => number;
   /** P0-1:移除本地临时行(发送失败/准备阶段取消时兜底) */
   removeLocalRow: (sessionId: string, id: number) => void;
+  /** P0-1:按真实落库 id 回滚 —— 同时调后端 deleteMessage + 从缓存移除两条 */
+  rollbackUser: (sessionId: string, optimisticId: number, realId: number) => Promise<void>;
+  /** P0-3:会话是否正在流式 */
+  isStreaming: (sessionId: string) => boolean;
   appendAssistant: (
     sessionId: string,
     content: string,
@@ -51,15 +64,16 @@ interface MessagesState {
   ) => Promise<number>;
   /** 删除单条消息并刷新 */
   remove: (sessionId: string, id: number) => Promise<void>;
-  startStreaming: (sessionId: string) => void;
+  startStreaming: (sessionId: string) => number;
   /** P0-2/P1-4:更新占位阶段文案(preparing/search/connecting;null = 恢复默认) */
   setStreamPhase: (sessionId: string, phase: string | null) => void;
-  pushStreamDelta: (sessionId: string, delta: string) => void;
-  pushStreamReasoning: (sessionId: string, delta: string) => void;
+  pushStreamDelta: (sessionId: string, delta: string, token?: number) => void;
+  pushStreamReasoning: (sessionId: string, delta: string, token?: number) => void;
   /** 记录思考 token(done chunk 上报;仅计数无明文端点用) */
   setStreamReasoningTokens: (sessionId: string, tokens: number | null) => void;
-  /** 结束流式:返回 { content, reasoning } 完整累积,便于持久化;思考耗时同步定格 */
-  endStreaming: (sessionId: string) => { content: string; reasoning: string };
+  /** 结束流式:返回 { content, reasoning } 完整累积,便于持久化;思考耗时同步定格
+   *  token 不匹配时是旧流收尾,直接丢弃缓冲,不覆盖新流 */
+  endStreaming: (sessionId: string, token?: number) => { content: string; reasoning: string };
 }
 
 /** 流式去抖缓冲:delta 先进缓冲,定时批量刷进 streaming map,避免每个 chunk 都触发 React 渲染。
@@ -93,8 +107,10 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
 
   return {
   bySession: {},
+  quotesByMessageId: {},
   hasMore: {},
   streaming: {},
+  streamingToken: {},
   streamingReasoning: {},
   streamingReasoningInfo: {},
   streamingPhase: {},
@@ -125,7 +141,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     }));
   },
 
-  appendUser: async (sessionId, content, modelId = null, attachments = null, optimisticId) => {
+  appendUser: async (sessionId, content, modelId = null, attachments = null, optimisticId, quotes) => {
     const row = await ipc.appendMessage({
       session_id: sessionId,
       role: 'user',
@@ -136,24 +152,42 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     });
     if (optimisticId !== undefined) {
       // P0-1:用真实行就地替换乐观行;临时行已被清掉(极端竞态)时按去重追加兜底
+      // P15:同时把引用卡片从临时 id 迁移到真实 id
       set((s) => {
         const list = s.bySession[sessionId] ?? [];
         const idx = list.findIndex((m) => m.id === optimisticId);
+        const nextQuotes = { ...s.quotesByMessageId };
+        const prev = nextQuotes[optimisticId];
+        if (prev) {
+          nextQuotes[row.id] = prev;
+          delete nextQuotes[optimisticId];
+        } else if (quotes && quotes.length > 0) {
+          nextQuotes[row.id] = quotes;
+        }
         if (idx < 0) {
           if (list.some((m) => m.id === row.id)) return {};
-          return { bySession: { ...s.bySession, [sessionId]: [...list, row] } };
+          return {
+            bySession: { ...s.bySession, [sessionId]: [...list, row] },
+            quotesByMessageId: nextQuotes,
+          };
         }
         const next = [...list];
         next[idx] = row;
-        return { bySession: { ...s.bySession, [sessionId]: next } };
+        return {
+          bySession: { ...s.bySession, [sessionId]: next },
+          quotesByMessageId: nextQuotes,
+        };
       });
     } else {
       await pushRow(sessionId, row);
+      if (quotes && quotes.length > 0) {
+        set((s) => ({ quotesByMessageId: { ...s.quotesByMessageId, [row.id]: quotes } }));
+      }
     }
     return row.id;
   },
 
-  appendUserOptimistic: (sessionId, content, modelId = null, attachments = null) => {
+  appendUserOptimistic: (sessionId, content, modelId = null, attachments = null, quotes) => {
     // 负 id 与 SQLite 自增 id 不会冲突;仅在落库前存在,成功后由真实行替换
     const tempId = -Date.now();
     const row: ipc.MessageRow = {
@@ -172,6 +206,11 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     };
     set((s) => ({
       bySession: { ...s.bySession, [sessionId]: [...(s.bySession[sessionId] ?? []), row] },
+      // P15:存引用卡片(有 quotes 才写)
+      quotesByMessageId:
+        quotes && quotes.length > 0
+          ? { ...s.quotesByMessageId, [tempId]: quotes }
+          : s.quotesByMessageId,
     }));
     return tempId;
   },
@@ -183,6 +222,30 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
         [sessionId]: (s.bySession[sessionId] ?? []).filter((m) => m.id !== id),
       },
     }));
+  },
+
+  /** P0-1:按真实落库 id 回滚 —— 同时调后端 deleteMessage + 从缓存移除两条 */
+  rollbackUser: async (sessionId, optimisticId, realId) => {
+    // 先删后端真实行,再清缓存两条
+    try {
+      await ipc.deleteMessage(realId);
+    } catch {
+      // 后端删失败也要清缓存,至少 UI 不留幽灵
+    }
+    set((s) => ({
+      bySession: {
+        ...s.bySession,
+        [sessionId]: (s.bySession[sessionId] ?? []).filter(
+          (m) => m.id !== optimisticId && m.id !== realId,
+        ),
+      },
+    }));
+  },
+
+  /** P0-3:会话是否正在流式 */
+  isStreaming: (sessionId) => {
+    const s = get();
+    return s.streaming[sessionId] !== undefined;
   },
 
   appendAssistant: async (
@@ -210,6 +273,8 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
 
   startStreaming: (sessionId) => {
     reasoningStarts[sessionId] = 0; // 0 = 尚未开始计时
+    // P0-2a:自增 token —— 旧流收尾 endStreaming 不匹配新 token 时直接丢弃缓冲
+    const token = (get().streamingToken[sessionId] ?? 0) + 1;
     set((s) => ({
       streaming: { ...s.streaming, [sessionId]: '' },
       streamingReasoning: { ...s.streamingReasoning, [sessionId]: '' },
@@ -217,7 +282,9 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
       // P0-2:占位初始阶段为「准备中」;后续由联网搜索/后端 ack 推进
       streamingPhase: { ...s.streamingPhase, [sessionId]: 'preparing' },
       streamStartedAt: { ...s.streamStartedAt, [sessionId]: Date.now() },
+      streamingToken: { ...s.streamingToken, [sessionId]: token },
     }));
+    return token;
   },
 
   setStreamPhase: (sessionId, phase) => {
@@ -229,10 +296,12 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     await get().load(sessionId, true);
   },
 
-  pushStreamDelta: (sessionId, delta) => {
+  pushStreamDelta: (sessionId, delta, token) => {
     // 流已结束(startStreaming 之后被 endStreaming 清掉):丢弃晚到的 chunk。
     // 否则这些 delta 会把 streaming 重新创建出来,留下一个永远收不住的闪烁光标。
     if (get().streaming[sessionId] === undefined) return;
+    // P0-2a:旧流 token 不匹配新 token,直接丢弃,不污染新流缓冲
+    if (token !== undefined && get().streamingToken[sessionId] !== token) return;
     // 首个正文 chunk 到达:思考阶段结束,定格耗时
     if (reasoningStarts[sessionId]) {
       const elapsed = Date.now() - reasoningStarts[sessionId];
@@ -271,9 +340,11 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     }, FLUSH_MS);
   },
 
-  pushStreamReasoning: (sessionId, delta) => {
+  pushStreamReasoning: (sessionId, delta, token) => {
     // 同正文:流结束后的思考 chunk 直接丢弃,不复活气泡
     if (get().streamingReasoning[sessionId] === undefined) return;
+    // P0-2a:旧流 token 不匹配新 token,直接丢弃
+    if (token !== undefined && get().streamingToken[sessionId] !== token) return;
     if (!reasoningStarts[sessionId]) reasoningStarts[sessionId] = Date.now();
     reasoningBuffers[sessionId] = (reasoningBuffers[sessionId] ?? '') + delta;
     if (reasoningTimers[sessionId]) return;
@@ -313,7 +384,18 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     }));
   },
 
-  endStreaming: (sessionId) => {
+  endStreaming: (sessionId, token) => {
+    // P0-2a:旧流收尾,token 不匹配当前活跃流 → 直接丢弃缓冲,不覆盖新流
+    const curToken = get().streamingToken[sessionId];
+    if (token !== undefined && curToken !== undefined && curToken !== token) {
+      // 只清本地缓冲,不动 zustand state
+      streamBuffers[sessionId] = '';
+      reasoningBuffers[sessionId] = '';
+      for (const timers of [streamTimers, reasoningTimers] as const) {
+        if (timers[sessionId]) { clearTimeout(timers[sessionId]); timers[sessionId] = undefined; }
+      }
+      return { content: '', reasoning: '' };
+    }
     // 冲掉正文与思考两条缓冲里未刷出的内容,保证返回完整累积
     for (const timers of [streamTimers, reasoningTimers] as const) {
       const timer = timers[sessionId];

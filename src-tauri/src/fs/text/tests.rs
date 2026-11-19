@@ -231,7 +231,7 @@ fn chunked_write_restores_large_file_exactly() {
     let root = ws();
     let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
     // 100 段 × 1.5 万字符(≈4.3MB 字节),模拟模型分段输出
-    let chunk = "分批写入测试内容🙂\n".repeat(1500);
+    let chunk = "分批写入测试内容 [测试标记]\n".repeat(1500);
     let total_chars = chunk.chars().count() * 100;
     let st = write_chunk_begin_in(&root, "big/out.txt", &tmp, None).unwrap();
     assert!(write_chunk_known(&st.write_id));
@@ -385,7 +385,7 @@ fn chunked_write_supports_unicode_nested_path() {
     let tmp = std::env::temp_dir().join(format!("maf-part-{}", uuid::Uuid::new_v4()));
     let rel = "中文目录/深层结构/实验报告.md";
     let st = write_chunk_begin_in(&root, rel, &tmp, None).unwrap();
-    let chunk = "# 标题\n正文🙂\n".repeat(100);
+    let chunk = "# 标题\n正文 [测试标记]\n".repeat(100);
     for _ in 0..3 {
         write_chunk_append(&st.write_id, &chunk).unwrap();
     }

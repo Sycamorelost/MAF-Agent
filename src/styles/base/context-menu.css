@@ -2,7 +2,8 @@
    严格匹配 .nav-pop 玻璃风格:backdrop-filter 模糊 + 低透明度背景 + border + shadow-card-h。
    z-index:var(--z-menu)=40,与 .perm-menu 同层。 */
 .ctx-menu{
-  min-width:calc(168px * var(--ui-scale));padding:var(--space-1);
+  min-width:calc(168px * var(--ui-scale));max-height:70vh;padding:var(--space-1);
+  overflow-y:auto;
   background:rgba(var(--bg-main-rgb),.94);
   backdrop-filter:blur(50px) saturate(1.8);
   -webkit-backdrop-filter:blur(50px) saturate(1.8);
@@ -49,6 +50,18 @@
 }
 .ctx-arr{font-size:var(--font-h3);color:var(--text-4);flex:none;line-height:1}
 .ctx-sep{height:1px;margin:var(--space-1) var(--space-2);background:var(--border)}
+
+/* 路径项:底部灰字 + 省略 + 不可点击 + 字号更小 */
+.ctx-path-item{
+  font-size:var(--font-caption);
+  color:var(--text-4);
+  letter-spacing:.01em;
+}
+.ctx-path-item:hover:not(.disabled){
+  background:transparent;
+  color:var(--text-3);
+}
+.ctx-path-item.disabled{opacity:.75}
 
 /* ---------- 首启预热提示(后端自启组件期间右下角浮层,完成即消失) ---------- */
 .boot-hint{

@@ -72,5 +72,37 @@ export function extractOutputFiles(content: string): OutputFile[] {
   for (const m of content.matchAll(/(?<![A-Za-z0-9_])[A-Za-z]:[\\/][^\s<>"'`|?*]+/g)) push(m[0]);
   for (const m of content.matchAll(/(?:^|[\s(])(\/(?:[\w.-]+\/)+[\w.-]+)/g)) push(m[1]);
 
+  // 4) 根目录发现 + 纯文件名补全:
+  //    AI 经常会说 "已在 D:\NUDT\草稿 创建了 foo.txt、bar.txt",
+  //    这里先找到目录,再把孤立的 .txt/.md 文件补成完整路径。
+  const rootDir = discoverRootDir(content);
+  if (rootDir) {
+    for (const m of content.matchAll(/(?<![\\/])([\u4e00-\u9fa5A-Za-z0-9_.-]+\.(?:txt|md|json|csv|doc|docx|xlsx|pptx|pdf|html|rs|ts|js|py))/gi)) {
+      const name = m[1];
+      // 过滤已经被完整路径提过的(用 seen 检查)
+      const full = rootDir.replace(/[\\/]+$/, '') + '\\' + name;
+      const key = full.replace(/\\/g, '/').toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ path: full, name, isImage: IMAGE_EXT.test(name) });
+    }
+  }
+
   return out.slice(0, 12);
+}
+
+/** 从 AI 回复里提取工作目录:
+ *  - Windows:`D:\xxx\yyy` / `D:/xxx/yyy` 或"目录:xxx"
+ *  - POSIX:`/home/user/xxx`、`~/xxx`
+ * 取第一个出现的、且不在代码块内的目录。 */
+function discoverRootDir(content: string): string | null {
+  // 跳过代码块(```...```) 里的内容,避免把 Linux 代码里的 /tmp/xxx 当成目录
+  const outside = content.replace(/```[\s\S]*?```/g, '');
+  // Windows 完整路径(负向断言排除 https:// 里被误认成盘符的 s:/)
+  const winMatch = outside.match(/(?<![A-Za-z0-9_])[A-Za-z]:[\\/][^\s<>"'`|?*]{3,}?[\\/][^\s<>"'`|?*]+/);
+  if (winMatch) return winMatch[0];
+  // POSIX /home 或 /tmp 开头
+  const posixMatch = outside.match(/(?:^|[\s(])(\/(?:home|tmp|var|usr|opt|data|workspace|Users|mnt)[^\s<>"'`|?*]+)/);
+  if (posixMatch) return posixMatch[1];
+  return null;
 }

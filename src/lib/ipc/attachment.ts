@@ -1,4 +1,4 @@
-﻿import { invoke } from '@tauri-apps/api/core';
+﻿﻿import { invoke } from '@tauri-apps/api/core';
 
 import type { AttachmentMeta } from './types';
 
@@ -69,6 +69,37 @@ export const listAllAttachments = () => invoke<AttachmentEntry[]>('list_all_atta
 /** 把附件中心已有文件再次引入某会话(复用磁盘文件,重新生成元数据)。 */
 export const insertAttachmentToSession = (sessionId: string, path: string) =>
   invoke<AttachmentMeta>('insert_attachment_to_session', { sessionId, path });
+
+/** 会话级文档清单条目(系统提示 doc manifest / 附件中心解析信息)。 */
+export interface SessionDoc {
+  doc_id: string;
+  doc_name: string;
+  kind: string;
+  /** 驻留块数 */
+  chunks: number;
+  /** 正文字符数 */
+  chars: number;
+  /** 上传时生成的摘要(可能缺省) */
+  summary: string | null;
+  /** 首次入库时间 */
+  created: string;
+}
+
+/** 列出本会话已解析文档(按 doc_id 聚合块数/摘要)。 */
+export const listSessionDocs = (sessionId: string) =>
+  invoke<SessionDoc[]>('list_session_docs', { sessionId });
+
+/** 从附件中心导入:源会话已解析时复用 doc_chunks(不重新提取),否则回退重解析。 */
+export const importAttachmentFromCenter = (
+  targetSessionId: string,
+  sourceMessageId: number,
+  path: string,
+) =>
+  invoke<AttachmentMeta>('import_attachment_from_center', {
+    targetSessionId,
+    sourceMessageId,
+    path,
+  });
 
 /** 删除附件:从来源消息 JSON 移除条目;全库无引用时清理磁盘文件。 */
 export const deleteAttachment = (messageId: number, path: string) =>

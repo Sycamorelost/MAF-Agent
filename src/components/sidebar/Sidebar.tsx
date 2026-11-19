@@ -8,7 +8,8 @@ import { sessionPath } from '../../lib/workbench';
 import { useSessionsStore } from '../../stores/sessions';
 import { useUiStore } from '../../stores/ui';
 import type { NoteMeta, ProjectRow, SessionRow } from '../../lib/ipc';
-import { IconChevronRight, IconPlus } from '../icons';
+import { IconChevronRight, IconPlus, IconSearch, IconX } from '../icons';
+import { createPortal } from 'react-dom';
 import Toast from '../Toast';
 import { useToast } from '../../lib/useToast';
 import {
@@ -58,6 +59,7 @@ export default function Sidebar() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsed);
   const [projectsOpen, setProjectsOpen] = useState(readProjectsOpen);
+  const [sessionsOpen, setSessionsOpen] = useState(true);
   const { toast, showToast, hideToast } = useToast();
 
   // ====== 分区数据(知识库按需加载) ======
@@ -71,6 +73,31 @@ export default function Sidebar() {
   const [renamingProject, setRenamingProject] = useState<ProjectRow | null>(null);
   /** 拖拽调宽中:临时关闭抽屉宽度过渡,保证跟手 */
   const [dragging, setDragging] = useState(false);
+  /** P16:弹出式搜索面板状态(和 Titlebar 共用 store) */
+  const searchOpen = useUiStore((s) => s.searchPaletteOpen);
+  const setSearchOpen = useUiStore((s) => s.setSearchPaletteOpen);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // P16:Esc 关闭搜索面板(Ctrl+K 由 Titlebar 监听)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && searchOpen) {
+        setSearchOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [searchOpen, setSearchOpen]);
+
+  // P16:搜索面板打开时聚焦输入框
+  useEffect(() => {
+    if (searchOpen) {
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    } else {
+      setSearchQuery('');
+    }
+  }, [searchOpen]);
 
   const projectMenu = useContextMenu<ProjectRow>();
   const sessionMenu = useContextMenu<SessionRow>();
@@ -279,6 +306,11 @@ export default function Sidebar() {
         const count = grouped.projectGroups.find((g) => g.project.id === p.id)?.items.length ?? 0;
         setPendingProjectDel({ projectId: p.id, label: p.name, count });
       } },
+    // 最底部:项目路径,自动省略 + 悬停全名 + 不可点击
+    ...(p.path ? [
+      { divider: true, key: 's3' },
+      { key: 'project-path', label: p.path, disabled: true, title: p.path, className: 'ctx-path-item' },
+    ] : []),
   ];
 
   const buildSessionMenu = (s: SessionRow): MenuItem[] => {
@@ -336,20 +368,22 @@ export default function Sidebar() {
         aria-hidden={!visible}
       >
         <aside className="sidebar" aria-label="侧边栏">
-        <button
-          type="button"
-          className="side-new"
-          title="新建会话"
-          onClick={() => void handleNewSession(null)}
-        >
-          <IconPlus size={15} />
-          <span>新对话</span>
-        </button>
+        {/* 顶部固定区:新对话按钮,全宽胶囊 + 贴顶部 + 右侧与会话区同高 */}
+        <div className="side-top">
+          <button
+            type="button"
+            className="side-new"
+            title="新建会话"
+            onClick={() => void handleNewSession(null)}
+          >
+            <IconPlus size={15} />
+            <span>新对话</span>
+          </button>
+        </div>
 
-        <NavRail />
-
-        {/* 新建对话固定在上方;导航以下的全部列表共用一个滚动容器 */}
+        {/* 滚动区:NavRail + 列表 */}
         <div className="side-scroll">
+        <NavRail />
         {section === 'chat' && (
           <div className="side-proj-sec">
             <div className="side-sec-head">
@@ -417,11 +451,24 @@ export default function Sidebar() {
         {section === 'chat' && showSessions && (
           <div className="side-sec">
             <div className="side-sec-head">
-              <span className="side-sec-title">会话</span>
-              {grouped.uncatItems.length > 0 && (
-                <span className="side-sec-count">{grouped.uncatItems.length}</span>
-              )}
+              <button
+                type="button"
+                className="side-sec-toggle"
+                aria-expanded={sessionsOpen}
+                aria-label={sessionsOpen ? '折叠会话' : '展开会话'}
+                onClick={() => setSessionsOpen((v) => !v)}
+              >
+                <IconChevronRight
+                  size={12}
+                  className={`chevron${sessionsOpen ? ' down' : ''}`}
+                />
+                <span className="side-sec-title">会话</span>
+                {grouped.uncatItems.length > 0 && (
+                  <span className="side-sec-count">{grouped.uncatItems.length}</span>
+                )}
+              </button>
             </div>
+            {sessionsOpen && (
             <div className="side-list">
               <TimeListView
                 sessions={grouped.uncatItems}
@@ -436,6 +483,7 @@ export default function Sidebar() {
                 onSessionContextMenu={(e, s) => sessionMenu.open(e, s)}
               />
             </div>
+            )}
           </div>
         )}
 
@@ -479,7 +527,10 @@ export default function Sidebar() {
 
         </div>
 
-        <NavRail foot />
+        {/* 底部固定区:设置按钮,右对齐贴底 */}
+        <div className="side-bottom">
+          <NavRail foot />
+        </div>
 
         <div
           className="side-resize"
@@ -516,6 +567,80 @@ export default function Sidebar() {
         onConfirmRenameProject={confirmRenameProject}
       />
       <Toast text={toast} onClose={hideToast} />
+      {/* P16:弹出式搜索面板(Portal 到 body,浮层覆盖全窗口) */}
+      {searchOpen && createPortal(
+        <SearchPalette
+          query={searchQuery}
+          onQuery={setSearchQuery}
+          sessions={sessions}
+          onClose={() => setSearchOpen(false)}
+          onOpenSession={(id) => { setSearchOpen(false); nav(`/chat/${id}`); }}
+          inputRef={searchInputRef}
+        />,
+        document.body,
+      )}
     </>
+  );
+}
+
+/** P16:弹出式搜索面板(类似图 2 样式)。 */
+function SearchPalette({
+  query, onQuery, sessions, onClose, onOpenSession, inputRef,
+}: {
+  query: string;
+  onQuery: (v: string) => void;
+  sessions: SessionRow[];
+  onClose: () => void;
+  onOpenSession: (id: string) => void;
+  inputRef: React.MutableRefObject<HTMLInputElement | null>;
+}) {
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sessions.slice(0, 20);
+    return sessions
+      .filter((s) => (s.title || '').toLowerCase().includes(q))
+      .slice(0, 20);
+  }, [query, sessions]);
+
+  const handleBg = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  return (
+    <div className="palette-mask" onMouseDown={handleBg}>
+      <div className="palette-panel" role="dialog" aria-label="搜索会话">
+        <div className="palette-head">
+          <IconSearch size={15} />
+          <input
+            ref={inputRef}
+            type="text"
+            className="palette-input"
+            placeholder="搜索会话名称"
+            value={query}
+            onChange={(e) => onQuery(e.target.value)}
+          />
+          <button className="palette-close" onClick={onClose} title="关闭 (Esc)">
+            <IconX size={14} />
+          </button>
+        </div>
+        <div className="palette-list">
+          {filtered.length === 0 ? (
+            <div className="palette-empty">没有匹配的会话</div>
+          ) : (
+            filtered.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="palette-item"
+                onClick={() => onOpenSession(s.id)}
+              >
+                <span className="palette-item-title">{s.title || '(无标题)'}</span>
+                {s.agent_id && <span className="palette-item-tag">{s.agent_id}</span>}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -24,7 +24,7 @@ interface ChatStreamParams {
   thinkingSel: ThinkingSelection | undefined;
   setSending: (v: boolean) => void;
   setError: (msg: string | null) => void;
-  cancelRef: { current: (() => void) | null };
+  cancelRef: { current: (() => void | Promise<void>) | null };
 }
 
 /** 流式发送子流程:组装请求、写流式缓冲、落库助手消息、触发记忆自动提炼。 */
@@ -58,8 +58,14 @@ export function useChatStream({
       let interrupted = false;
       let chunks: ReturnType<typeof createStreamChunks> | null = null;
       const sourcesJson = sources && sources.length > 0 ? JSON.stringify(sources) : null;
+      // P0-2a:token 在 try 外声明,以便 catch 里的 endStreaming 也能访问
+      let token = 0;
       try {
-        startStreaming(sessionId);
+        // P0-2a:startStreaming 现在返回 token,旧流 endStreaming 不匹配时丢弃缓冲
+        token = startStreaming(sessionId);
+        // 包装 push 函数带 token 归属校验
+        const pushDelta = (sid: string, delta: string) => pushStreamDelta(sid, delta, token);
+        const pushReasoning = (sid: string, delta: string) => pushStreamReasoning(sid, delta, token);
         // 思考参数:模型不支持 → null(后端能力门控二次兜底);用户关闭 → 'off';否则档位
         const reasoningEffort = resolveReasoningEffort(thinkCap, thinkingSel);
         // P2-8:工具收集(MCP list_tools)也可能耗时数秒 —— 期间允许「停止」:
@@ -72,12 +78,12 @@ export function useChatStream({
         const tools = await collectSessionTools(agent, sessionId);
         if (preCancelled) {
           // 工具收集期间被停止:未发起任何请求,直接收掉占位
-          endStreaming(sessionId);
+          endStreaming(sessionId, token);
           return;
         }
         chunks = createStreamChunks(
           sessionId,
-          { pushStreamDelta, pushStreamReasoning, setStreamReasoningTokens, setStreamPhase },
+          { pushStreamDelta: pushDelta, pushStreamReasoning: pushReasoning, setStreamReasoningTokens, setStreamPhase },
           // 工具块打上当前进行中任务 id(val.md §5.4):检查器流水/产物按任务归集
           () => runningTask(useTasksStore.getState().bySession[sessionId])?.id ?? null,
         );
@@ -101,7 +107,7 @@ export function useChatStream({
           cancelRef.current();
         }
         await done;
-        const { content: fullText, reasoning } = endStreaming(sessionId);
+        const { content: fullText, reasoning } = endStreaming(sessionId, token);
         if (fullText) {
           await appendAssistant(
             sessionId, fullText, eff.model, chunks.getTokens(),
@@ -112,7 +118,7 @@ export function useChatStream({
       } catch (e) {
         // P1:断流/报错时已生成的内容不能丢 —— 以 partial 落库,气泡标记「已中断」,
         // 用户仍可复制、搜索、让模型在此基础上续写。
-        const { content: partialText, reasoning: partialReasoning } = endStreaming(sessionId);
+        const { content: partialText, reasoning: partialReasoning } = endStreaming(sessionId, token);
         if (partialText.trim()) {
           try {
             await appendAssistant(

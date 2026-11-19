@@ -6,13 +6,17 @@ use serde_json::Value;
 
 /// 本模块负责的工具名。
 pub(super) fn handles(name: &str) -> bool {
-    matches!(name, "todo_write" | "todo_read" | "doc_search" | "doc_read")
+    matches!(
+        name,
+        "todo_write" | "todo_read" | "doc_list" | "doc_search" | "doc_read"
+    )
 }
 
 pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (String, bool) {
     match name {
         "todo_write" => todo_write_exec(args, session_id),
         "todo_read" => todo_read_exec(session_id),
+        "doc_list" => doc_list_exec(session_id),
         "doc_search" => doc_search_exec(args, session_id),
         "doc_read" => doc_read_exec(args, session_id),
         _ => ("未知内置工具".into(), false),
@@ -122,6 +126,32 @@ fn todo_read_exec(session_id: Option<&str>) -> (String, bool) {
         out.push_str(&format!("- [{}] {} ({})\n", t.status, t.content, t.id));
     }
     (out, true)
+}
+
+/// doc_list:列出会话内已解析文档(名称 / doc_id / 块数 / 字符数)。
+fn doc_list_exec(session_id: Option<&str>) -> (String, bool) {
+    let Some(sid) = session_id else {
+        return ("文档清单需要会话上下文,当前不可用".into(), false);
+    };
+    let conn = match crate::db::conn().lock() {
+        Ok(c) => c,
+        Err(e) => return (format!("db lock 失败: {e}"), false),
+    };
+    match crate::doc::list_docs(&conn, sid) {
+        Ok(docs) if docs.is_empty() => ("本会话还没有已解析的文档".into(), true),
+        Ok(docs) => {
+            let mut s = format!("本会话已解析文档共 {} 份:\n", docs.len());
+            for d in docs.iter().take(50) {
+                s.push_str(&format!(
+                    "\n- 《{}》({}) · {} 块 · 约 {} 字符 · doc_id={}",
+                    d.doc_name, d.kind, d.chunks, d.chars, d.doc_id
+                ));
+            }
+            s.push_str("\n\n细节用 doc_search(query=…) 检索、doc_read(doc=…, start=…) 回看。");
+            (s, true)
+        }
+        Err(e) => (format!("文档清单读取失败:{e}"), false),
+    }
 }
 
 /// doc_search:会话内文档分块检索(C2)。

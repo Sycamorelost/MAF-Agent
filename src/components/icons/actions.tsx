@@ -14,8 +14,9 @@ export const IconX = (p: IconProps) => (
 
 export const IconSend = (p: IconProps) => (
   <I {...p}>
-    <path d="m22 2-7 20-4-9-9-4Z" />
-    <path d="M22 2 11 13" />
+    {/* 居中向上箭头:几何重心 (12,12) 正好是 viewBox 中心 */}
+    <path d="M12 19V5" />
+    <path d="m5 12 7-7 7 7" />
   </I>
 );
 

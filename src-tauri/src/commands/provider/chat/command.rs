@@ -84,12 +84,14 @@ pub async fn chat_stream(
         ..Default::default()
     };
     // D7:记录本轮请求的规模与消息指纹(压缩/注入都会让指纹变化,便于事后比对)
+    // P7:完整三层估算(L1 官方 BPE × L2 历史校准 - L3 Segmented Cache 预估)
     super::super::event_log::record_request(
         input.session_id.as_deref(),
         &spec.provider_id,
         &req.model,
         &req.messages,
-        req.tools.as_ref().map_or(0, |t| t.len()),
+        req.tools.as_deref(),
+        None, // prev_messages:Layer 3 cache 预估暂不传,后续从 event_log 取上轮指纹
     );
 
     // 3. 归因上下文:会话 → 助手(按助手归因)+ 模型卡定价(成本)

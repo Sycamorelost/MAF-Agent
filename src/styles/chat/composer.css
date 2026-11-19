@@ -398,43 +398,95 @@
   display: block;
 }
 
-/* 会话产物卡:AI 回复中提到的本地文件,点击在文件管理器中定位 */
-.out-cards {
+/* 会话产物列表:AI 回复中提到的本地文件,按行展示(类似 git diff 列表) */
+.out-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: 0;
   margin-top: var(--space-2);
   max-width: 100%;
-}
-.out-card {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+.out-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px var(--space-3);
+  background: var(--bg-surface);
   color: var(--text-2);
   font-size: var(--font-caption);
   text-align: left;
-  transition: border-color .12s, background .12s;
+  transition: background .12s;
+  border-bottom: 1px solid var(--border);
 }
-.out-card:hover { border-color: var(--brand); background: var(--bg-hover); }
-.out-card-info { display: flex; flex-direction: column; min-width: 0; }
-.out-card-name {
-  max-width: calc(220px * var(--ui-scale));
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.out-list-row:last-child { border-bottom: none; }
+.out-list-row:hover { background: var(--bg-hover); }
+.out-list-row > svg { flex-shrink: 0; color: var(--text-3); }
+.out-list-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px var(--space-3);
+  width: 100%;
+  background: var(--bg-hover);
+  border: none;
+  border-top: 1px solid var(--border);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--font-micro);
+  cursor: pointer;
+  transition: background .12s;
+}
+.out-list-toggle:hover { background: var(--bg-surface); }
+.out-list-name {
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: var(--font-caption);
   color: var(--text-1);
-}
-.out-card-kind {
-  max-width: calc(220px * var(--ui-scale));
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  max-width: 200px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.out-list-path {
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: var(--font-micro);
+  color: var(--text-4);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.out-list-kind {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-3);
+  font-size: var(--font-micro);
+  line-height: 1.4;
+}
+.out-list-size {
+  flex-shrink: 0;
   color: var(--text-4);
   font-size: var(--font-micro);
+  min-width: 48px;
+  text-align: right;
+}
+/* 图片产物:仍用卡片预览 */
+.out-list .out-card-image {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--bg-surface);
 }
 /* 操作组:打开 / 定位 / 复制路径 / 转 PDF */
 .out-card-actions {
@@ -537,22 +589,28 @@
 
 /* 钉入记忆的节选择浮层(F8) */
 .pin-wrap { position: relative; display: inline-flex; }
-.pin-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); cursor: default; }
+/* P0-3b:思考强度浮层 —— 抽屉风格,从底部滑出;z-index 80 置于任务条之上 */
+.pin-backdrop {
+  position: fixed; inset: 0;
+  z-index: 80; /* 高于 --z-menu(40) 和 --z-modal(50),覆盖 Inspector */
+  cursor: default;
+  animation: fadeIn 0.15s ease;
+}
 .pin-menu {
   position: absolute;
   bottom: calc(28px * var(--ui-scale));
   right: 0;
-  z-index: var(--z-menu);
+  z-index: 80; /* P0-3b:提升到 80,置于任务条之上 */
   display: flex;
   flex-direction: column;
   min-width: calc(168px * var(--ui-scale));
   padding: var(--space-1);
-  /* --bg-1 在 tokens 中并不存在(原写法静默失效=全透明),浮层必须不透明;
-     用 surface 而非 main:深色主题下浮层才比页面更亮、边界可辨 */
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
   box-shadow: var(--shadow-card-h);
+  /* P0-3b:抽屉式滑出动画 */
+  animation: drawerUp 0.2s ease-out;
 }
 .pin-menu-title {
   padding: var(--space-2) var(--space-3);
@@ -567,64 +625,6 @@
   font-size: var(--font-sub);
   text-align: left;
 }
-
-/* 消息操作栏溢出菜单:复制常驻,其余收入「⋯」(折叠冗余、窄窗不溢出) */
-.more-wrap { position: relative; display: inline-flex; }
-.more-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); cursor: default; }
-.more-menu {
-  position: absolute;
-  bottom: calc(28px * var(--ui-scale));
-  right: 0;
-  z-index: var(--z-menu);
-  display: flex;
-  flex-direction: column;
-  min-width: calc(160px * var(--ui-scale));
-  padding: var(--space-1);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  box-shadow: var(--shadow-card-h);
-}
-.more-menu > button, .more-sub > button {
-  display: flex !important;
-  align-items: center;
-  gap: var(--space-2);
-  justify-content: flex-start !important;
-  width: 100% !important;
-  height: auto !important;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-sub);
-  color: var(--text-2);
-  text-align: left;
-  border-radius: var(--radius-s);
-}
-.more-menu > button:hover, .more-sub > button:hover { background: var(--bg-hover); color: var(--text-1); }
-.more-menu > button.danger:hover { color: var(--err); background: var(--err-soft); }
-.more-sub { position: relative; display: block; }
-.more-sub-menu {
-  position: absolute;
-  top: 0;
-  right: 100%;
-  margin-right: var(--space-1);
-  display: flex;
-  flex-direction: column;
-  min-width: calc(132px * var(--ui-scale));
-  padding: var(--space-1);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  box-shadow: var(--shadow-card-h);
-}
-.more-sub-menu button {
-  justify-content: flex-start !important;
-  width: 100% !important;
-  height: auto !important;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-sub);
-  text-align: left;
-  border-radius: var(--radius-s);
-}
-.more-sub-menu button:hover { background: var(--bg-hover); color: var(--text-1); }
 
 /* msg-meta 排版收紧:模型/时间/tokens 与操作栏视觉分组,间距遵循 token */
 .msg-meta { gap: var(--space-1) var(--space-2); }
@@ -674,3 +674,9 @@
 .think-item.active .hint { color: var(--brand); }
 .think-divider { height: 1px; margin: var(--space-1) var(--space-2); background: var(--border); }
 
+
+/* P0-3b:抽屉式滑出动画 —— 从底部 30px 位置向上滑入 */
+@keyframes drawerUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0);      opacity: 1; }
+}

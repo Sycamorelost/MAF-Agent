@@ -1,4 +1,4 @@
-//! HITL 审批通道(Cline 43k⭐同款)。
+//! HITL 审批通道(Cline 43k GitHub stars 同款)。
 //!
 //! 架构:
 //!   ChatStream 检测到 tool_call → emit Tauri event + 保存 oneshot::Sender 到 HashMap

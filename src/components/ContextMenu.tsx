@@ -16,6 +16,10 @@ export interface MenuItem {
   divider?: boolean;
   onClick?: () => void;
   children?: MenuItem[];
+  /** 鼠标悬停 tooltip(用于长路径显示全名) */
+  title?: string;
+  /** 自定义 class(如路径项的省略样式) */
+  className?: string;
 }
 
 interface ContextMenuProps {
@@ -114,12 +118,13 @@ export function ContextMenu({ x, y, items, onClose, _inline }: ContextMenuProps)
           >
             <button
               type="button"
-              className={`ctx-item${it.danger ? ' danger' : ''}${it.disabled ? ' disabled' : ''}${it.checked ? ' checked' : ''}`}
+              className={`ctx-item${it.danger ? ' danger' : ''}${it.disabled ? ' disabled' : ''}${it.checked ? ' checked' : ''}${it.className ? ` ${it.className}` : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 handleClick(it);
               }}
               disabled={it.disabled}
+              title={it.title}
             >
               <span className="ctx-item-ico">{it.icon}</span>
               <span className="ctx-item-label">{it.label}</span>

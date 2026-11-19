@@ -11,7 +11,7 @@ import { composeSystemPrompt, compressMemoryIfOverBudget } from './memoryContext
 import { CHAT_CANCEL_EVENT } from '../../lib/chatCancel';
 import { DEFAULT_SYSTEM_PROMPT, withBase } from '../../lib/systemPrompt';
 import { resolveHumanVoice } from '../../lib/humanVoice';
-import { buildUserContent, buildSendHistory, rebuildSendHistory } from './attachments';
+import { buildUserContent, buildSendHistory, rebuildSendHistory, formatDocManifest } from './attachments';
 import { useChatSettings } from './useChatSettings';
 import { useChatStream } from './useChatStream';
 import { useMessageActions } from './useMessageActions';
@@ -49,13 +49,15 @@ export function useChatSend({
   composerText, setComposerText, pendingAttachments, pendingImages,
   setPendingAttachments, setPendingImages, quotes, setQuotes, forkAndReload,
 }: ChatSendParams) {
-  const { appendUser, appendUserOptimistic, removeLocalRow, startStreaming, endStreaming, setStreamPhase } = useMessagesStore();
+  const { appendUser, appendUserOptimistic, removeLocalRow, rollbackUser, startStreaming, endStreaming, setStreamPhase } = useMessagesStore();
   const loadMemory = useMemoryStore((s) => s.load);
   const setWebSearch = useSessionsStore((s) => s.setWebSearch);
   const thinkingSel = useThinkingStore((s) => (sessionId ? s.bySession[sessionId] : undefined));
   const [sending, setSending] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 本会话已解析文档清单:常驻 system 尾部,滑窗滚过后模型仍知道有哪些文件 */
+  const [docManifest, setDocManifest] = useState('');
   /** 记忆自动压缩提示(D3.5) */
   const [compressNotice, setCompressNotice] = useState<string | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
@@ -68,7 +70,7 @@ export function useChatSend({
         // P2-8:与 onCancel 同口径 —— 准备阶段也能停止
         prepCancelRef.current = true;
         cancelRef.current?.();
-        setSending(false);
+        // P0-2c:不立即 setSending(false) —— 统一由 runStream.finally 释放,阻止并发两条流
       }
     };
     window.addEventListener(CHAT_CANCEL_EVENT, onCancelReq);
@@ -101,6 +103,25 @@ export function useChatSend({
       alive = false;
     };
   }, [sessionId, session?.preset_id, session?.preset_version, agent?.agent_id]);
+  /** 拉取会话级文档清单:消息新增或待发附件变化时刷新(上传后即落库,清单随之更新)。 */
+  useEffect(() => {
+    if (!sessionId) {
+      setDocManifest('');
+      return;
+    }
+    let alive = true;
+    ipc
+      .listSessionDocs(sessionId)
+      .then((docs) => {
+        if (alive) setDocManifest(formatDocManifest(docs));
+      })
+      .catch(() => {
+        if (alive) setDocManifest('');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [sessionId, messages.length, pendingAttachments.length]);
   /** 上次做过记忆预算检查的正文快照:内容没变就不重复检查(避免每轮同步等待提炼调用) */
   const lastBudgetMemRef = useRef<string | null>(null);
   /** 用指定记忆正文 + 策略组 system(交接确认时用最新值,不等 state 生效)。
@@ -114,7 +135,7 @@ export function useChatSend({
         DEFAULT_SYSTEM_PROMPT;
       // Base 分层(R3 A1):人格来自会话/智能体提示,系统层只追加 [身份锚(全裸模式可关)] + 物理契约
       // 文字质感(去 AI 味):仅白名单内的生成型智能体注入,代码/翻译/JSON 等场景自动 off
-      return composeSystemPrompt(
+      const sys = composeSystemPrompt(
         withBase(core, {
           identity: !bareMode,
           customContract,
@@ -123,8 +144,12 @@ export function useChatSend({
         memBody,
         strategy,
       );
+      // 文档清单常驻:不放进滑窗消息,避免被 context.max_messages 裁掉
+      return docManifest ? `${sys}\n\n${docManifest}` : sys;
     },
-    [session?.system_prompt, agent, bareMode, customContract, humanVoiceLevel],
+    [
+      session?.system_prompt, agent, bareMode, customContract, humanVoiceLevel, docManifest,
+    ],
   );
   const buildSystem = useCallback(
     (): string => buildSystemWith(memoryBody, session?.memory_injection_strategy ?? 'hybrid'),
@@ -202,7 +227,7 @@ export function useChatSend({
     const displayContent = text; // 前端展示只存原始输入,附件在元数据卡片展示
     const attachmentsJson = atts.length > 0 ? JSON.stringify(atts) : null;
     const optimisticId = appendUserOptimistic(
-      sessionId, displayContent, current?.model ?? null, attachmentsJson,
+      sessionId, displayContent, current?.model ?? null, attachmentsJson, quoteRefs,
     );
     // 即时响应:气泡出现后再点亮占位,随后做联网搜索/落库/记忆预算等耗时准备;
     // 正文/思考内容等流式 chunk 到达后才填充显示(runStream 内的 startStreaming 为幂等复位)
@@ -216,6 +241,8 @@ export function useChatSend({
     setPendingAttachments([]);
     setPendingImages({});
     setQuotes([]);
+    // P0-1:realUserId 声明在 try 外,以便 catch 里判断是否拿到真实 id
+    let realUserId: number | undefined = undefined;
     try {
       // 1. 组装用户消息原始内容(用于 db 展示)与注入内容(用于 LLM)
       // F9:LLM 注入侧把 [@note:..]/[@memory:..] 占位替换为检索片段正文;展示侧保留原始输入
@@ -256,8 +283,9 @@ export function useChatSend({
       // P2-8:准备阶段任意时点可「停止」(哨兵取消,静默收尾,不当错误提示)
       if (prepCancelRef.current) throw new PrepCancelled();
       // 2. 持久化用户消息(就地替换乐观行) 与 2.5 记忆预算护栏并行
-      await Promise.all([
-        appendUser(sessionId, displayContent, current?.model ?? null, attachmentsJson, optimisticId),
+      // P0-1:解构 Promise.all 拿到真实落库 id,取消时调 rollbackUser 回滚 DB 行
+      [realUserId] = await Promise.all([
+        appendUser(sessionId, displayContent, current?.model ?? null, attachmentsJson, optimisticId, quoteRefs),
         enforceMemoryBudget(),
       ]);
       if (prepCancelRef.current) throw new PrepCancelled();
@@ -278,8 +306,12 @@ export function useChatSend({
       await runStream(buildHistory({ content: llmContent, images }), sources);
     } catch (e) {
       setSearching(false);
-      // P0-1:失败/取消时移除乐观行,不留幽灵气泡
-      removeLocalRow(sessionId, optimisticId);
+      // P0-1:失败/取消时移除幽灵行 —— 拿到真实 id 时从 DB 回滚,否则只清乐观行
+      if (realUserId !== undefined) {
+        rollbackUser(sessionId, optimisticId, realUserId);
+      } else {
+        removeLocalRow(sessionId, optimisticId);
+      }
       // 会话在发送过程中被删除(如空会话清理竞态),提示用户重建;
       // PrepCancelled 是用户主动停止,静默收尾即可
       if (!(e instanceof PrepCancelled)) {
@@ -303,7 +335,7 @@ export function useChatSend({
     // P2-8:准备阶段(搜索/预检索/落库,流式句柄尚未创建)也允许停止
     prepCancelRef.current = true;
     cancelRef.current?.();
-    setSending(false);
+    // P0-2c:不立即 setSending(false) —— 统一由 runStream.finally 释放,阻止并发两条流
   };
   const onRecall = () => {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');

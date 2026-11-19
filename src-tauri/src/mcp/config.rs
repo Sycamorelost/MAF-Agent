@@ -80,9 +80,9 @@ fn default_true() -> bool {
 /// 当前预置服务版本 —— 新增/修改预置项时 +1。
 /// v2:预置 server 由默认关闭改为默认启用(开箱即用),旧配置合并时一次性置为启用。
 /// v3:builtin_tools 默认开启(开箱即用,对话直接可用 shell_exec/fs_*),旧配置合并时一次性点亮。
-/// v4:新增「联网搜索」预置(Tavily 官方 MCP,github.com/tavily-ai/tavily-mcp,2.4k★,MIT);
+/// v4:新增「联网搜索」预置(Tavily 官方 MCP,github.com/tavily-ai/tavily-mcp,2.4k GitHub stars,MIT);
 ///     启动时自动注入已保存的 Tavily 搜索 Key,供联网搜索「MCP 调用」模式直接复用。
-/// v5:「联网搜索」默认换为 **agent-search-mcp**(github.com/lennney/agent-search-mcp,112★,Apache2.0),
+/// v5:「联网搜索」默认换为 **agent-search-mcp**(github.com/lennney/agent-search-mcp,112 GitHub stars,Apache2.0),
 ///     零 Key、9 引擎并行、原生中文适配;Tavily 官方 MCP 保留但降为「付费档可选预置」(需显式启用)。
 pub const PRESETS_VERSION: u32 = 5;
 

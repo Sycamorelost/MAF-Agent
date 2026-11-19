@@ -20,6 +20,8 @@ export interface AttachmentCardProps {
   selected: boolean;
   confirming: boolean;
   retrying: boolean;
+  /** 正在插入当前会话(禁用按钮防重复提交) */
+  inserting?: boolean;
   onPreview: (e: AttachmentEntry) => void;
   onInsert: (e: AttachmentEntry) => void;
   onLocate: (e: AttachmentEntry) => void;
@@ -35,6 +37,7 @@ export function AttachmentCard({
   selected,
   confirming,
   retrying,
+  inserting,
   onPreview,
   onInsert,
   onLocate,
@@ -68,11 +71,12 @@ export function AttachmentCard({
       >
         {thumb ? <img src={thumb} alt={e.meta.name} /> : <KindIcon kind={e.meta.kind} />}
       </div>
-      <div className="att-name" title={e.meta.name}>
+      <div className="att-name" title={e.meta.summary ?? e.meta.name}>
         {e.meta.name}
       </div>
       <div className="att-meta">
-        {KIND_LABEL[e.meta.kind]} · {fmtSize(e.meta.size)} · {fmtDate(e.created)}
+        {KIND_LABEL[e.meta.kind]} · {fmtSize(e.meta.size)}
+        {(e.meta.chunk_count ?? 0) > 0 && ` · ${e.meta.chunk_count} 块`} · {fmtDate(e.created)}
       </div>
       {retryable && (
         <div className="att-warn" title={e.meta.extract_note ?? undefined}>
@@ -98,7 +102,11 @@ export function AttachmentCard({
               <IconEye size={14} />
             </button>
           )}
-          <button title="插入当前会话" onClick={() => onInsert(e)}>
+          <button
+            title={inserting ? '正在插入…' : '插入当前会话'}
+            disabled={inserting}
+            onClick={() => onInsert(e)}
+          >
             <IconPlus size={14} />
           </button>
           <button title="定位来源消息" onClick={() => onLocate(e)}>

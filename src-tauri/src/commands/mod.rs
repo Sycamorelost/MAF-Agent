@@ -17,6 +17,7 @@ pub mod mcp;
 pub mod mcp_diagnosis;
 pub mod memory;
 pub mod notes;
+pub mod popout;
 pub mod presets;
 pub mod projects;
 pub mod provider;
@@ -94,6 +95,9 @@ macro_rules! all_commands {
             crate::commands::attachment::center::list_all_attachments,
             crate::commands::attachment::center::insert_attachment_to_session,
             crate::commands::attachment::center::delete_attachment,
+            // 会话级文档清单 + 附件中心导入(复用已解析块,不重新提取)
+            crate::commands::attachment::center::list_session_docs,
+            crate::commands::attachment::center::import_attachment_from_center,
             // 附件中心增强(F7.1):批量清理 / 失败重试 / 拒绝原因留存
             crate::commands::attachment_center::delete_attachments_batch,
             crate::commands::attachment_center::retry_attachment_extract,
@@ -168,9 +172,12 @@ macro_rules! all_commands {
             // 通用导出(另存为令牌 / 打印导出 PDF)
             crate::commands::export::pick_save_path,
             crate::commands::export::export_pdf,
-            crate::commands::export::export_file_pdf,
             // 全局搜索
             crate::commands::search::search_all,
+            // 小窗 Popout
+            crate::commands::popout::toggle_popout,
+            crate::commands::popout::move_popout,
+            crate::commands::popout::dock_popout,
             // 知识库 / 笔记库(迭代 D8)
             crate::commands::notes::notes_list,
             crate::commands::notes::notes_get,

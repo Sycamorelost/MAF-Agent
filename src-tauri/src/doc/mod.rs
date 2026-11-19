@@ -33,7 +33,7 @@ pub use read::{READ_MAX_CHARS, read_range};
 #[allow(unused_imports)]
 pub use search::{SearchHit, SearchOutcome, query_tokens, search, search_with_policy};
 #[allow(unused_imports)]
-pub use store::{DocInfo, index_document, list_docs, outline};
+pub use store::{copy_document, DocInfo, index_document, list_docs, outline};
 
 // 基准测试(bench)直接调用打分路,保持 `crate::doc::coverage_candidates` 可用。
 #[allow(unused_imports)]

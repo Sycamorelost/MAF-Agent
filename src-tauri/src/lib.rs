@@ -36,8 +36,25 @@ mod tasks;
 mod websearch;
 
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// 当前毫秒时间戳(用于手势节流判断)。
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+/// 托盘手势代次:每次有效单击/双击自增。延迟执行的单击先记住代次,
+/// 到点时若代次已变(期间发生了第二次单击或双击)则放弃执行 —— 严格保证
+/// 「双击只开小窗、单击只开主窗」,互不串台。
+static CLICK_GEN: AtomicU64 = AtomicU64::new(0);
+/// 双击后的抑制窗口(ms 时间戳):Windows 双击会附带额外的 Click 事件,
+/// 在其后短时间内直接忽略 Click,避免双击结束后又触发一次单击。
+static SUPPRESS_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
 
 /// 关闭主窗口时隐藏到托盘:先移除任务栏按钮,再 hide。
 fn hide_to_tray(window: &tauri::Window) {
@@ -55,32 +72,65 @@ fn show_main_window(app: &AppHandle) {
     }
 }
 
-/// 创建系统托盘:左键点击 / 菜单「显示」恢复主窗口,菜单「退出」结束应用。
+/// 创建系统托盘:
+/// - 左键双击 → 打开 popout 小窗(显示并聚焦)
+/// - 左键单击 → 打开主窗口(隐藏小窗后显示主窗)
+/// - 菜单「显示」→ 恢复主窗口
+/// - 菜单「退出」→ 结束应用
 fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     // 读取用户自定义应用名称(空 = "myAgent")
     let app_name = crate::settings::load()
         .custom_app_name
         .unwrap_or_else(|| "myAgent".to_string());
     let show_label = format!("显示 {}", app_name);
-    let show = MenuItem::with_id(app, "tray_show", &show_label, true, None::<&str>)?;
+    let popout_label = "小窗对话";
     let quit = MenuItem::with_id(app, "tray_quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let show = MenuItem::with_id(app, "tray_show", &show_label, true, None::<&str>)?;
+    let popout_item = MenuItem::with_id(app, "tray_popout", popout_label, true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &popout_item, &quit])?;
     let mut builder = TrayIconBuilder::new()
         .menu(&menu)
         .tooltip(&app_name)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "tray_show" => show_main_window(app),
+            "tray_popout" => crate::commands::popout::toggle_popout_from_tray(app),
             "tray_quit" => app.exit(0),
             _ => {}
         })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
+        .on_tray_icon_event(|tray, event| match event {
+            // 双击:只打开小窗,不作废延迟单击之外不做任何主窗动作
+            TrayIconEvent::DoubleClick {
                 button: MouseButton::Left,
                 ..
-            } = event
-            {
-                show_main_window(tray.app_handle());
+            } => {
+                CLICK_GEN.fetch_add(1, Ordering::SeqCst);
+                SUPPRESS_UNTIL_MS.store(now_ms() + 500, Ordering::SeqCst);
+                crate::commands::popout::show_popout_from_tray(tray.app_handle());
             }
+            // 单击(仅在抬起时处理,避免按下/抬起各触发一次)
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } => {
+                if now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::SeqCst) {
+                    return;
+                }
+                let click_gen = CLICK_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+                let handle = tray.app_handle().clone();
+                // 等一个双击判定窗口:期间若有第二次点击或双击,代次变化 → 放弃单击动作
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(320));
+                    if CLICK_GEN.load(Ordering::SeqCst) != click_gen
+                        || now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::SeqCst)
+                    {
+                        return;
+                    }
+                    crate::commands::popout::hide_popout(&handle);
+                    show_main_window(&handle);
+                });
+            }
+            _ => {}
         });
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
@@ -207,6 +257,14 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // P0:popout 小窗关闭 → 隐藏而非销毁(保留状态,下次 show 直接恢复)
+            if window.label() == "popout" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                return;
+            }
             // 仅处理主窗口的关闭请求;最小化是普通最小化,不进托盘
             if window.label() != "main" {
                 return;

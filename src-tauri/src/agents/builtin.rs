@@ -142,19 +142,7 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             true,
             &["资料", "待办"],
         ),
-        t(
-            "translator",
-            "翻译专家",
-            "languages",
-            "create",
-            "专业翻译 + 术语一致 + 格式保留",
-            "glm-translate-4",
-            "none",
-            prompt_for("translator"),
-            &["翻译成中文", "翻译成英文", "这份技术文档转英文"],
-            false,
-            &[],
-        ),
+        // translator（翻译专家）已删除 —— 用户要求去掉
         // 五、Ops 类（1 个核心）
         t(
             "compliance-check",
@@ -281,60 +269,7 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             true,
             &["实验记录", "关键事实与结论"],
         ),
-        // —— R3 B4：去 AI 味 · AI 生成概率分析 专用智能体（4 个，val.md §5.4）——
-        // tool_policy/doc_pipeline 按 §5.4 表：detector/rewriter/voice 走 inline，anchor 全离线。
-        AgentTemplate {
-            tool_policy: Some(vec!["fs_read".into()]),
-            doc_pipeline: "inline".into(),
-            opening_message:
-                "把要判定的文本发我，我会基于本地统计结果逐句说明「哪里像 AI、为什么」。".into(),
-            suggestions: vec![
-                "解读这份检测报告".into(),
-                "哪些句子最像 AI".into(),
-                "改写优先级怎么排".into(),
-            ],
-            ..t(
-                "ai-flavor-detector",
-                "AI 味检测官",
-                "search",
-                "doc",
-                "解读本地统计结果，输出证据化的句子级研判报告",
-                "",
-                "none",
-                prompt_for("ai-flavor-detector"),
-                &["解读这份检测报告", "哪些句子最像 AI", "改写优先级怎么排"],
-                false,
-                &[],
-            )
-        },
-        AgentTemplate {
-            tool_policy: Some(vec!["fs_read".into(), "fs_write".into()]),
-            doc_pipeline: "inline".into(),
-            opening_message:
-                "发我一段文本，我按轻度/中度/深度三档改成人味表达，事实与观点一律不动。".into(),
-            suggestions: vec![
-                "轻度改写这段文字".into(),
-                "按我的风格锚点深度重写".into(),
-                "只去套话别动结构".into(),
-            ],
-            ..t(
-                "ai-flavor-rewriter",
-                "去 AI 味改写师",
-                "edit",
-                "doc",
-                "三档人味化改写：轻度去套话 / 中度调节奏 / 深度按锚点重写",
-                "",
-                "none",
-                prompt_for("ai-flavor-rewriter"),
-                &[
-                    "轻度改写这段文字",
-                    "按我的风格锚点深度重写",
-                    "只去套话别动结构",
-                ],
-                false,
-                &[],
-            )
-        },
+        // AI味检测 + 去AI味改写已删除 —— 用户要求去掉（detector + rewriter）
         AgentTemplate {
             tool_policy: Some(vec!["fs_read".into()]),
             doc_pipeline: "resident".into(),

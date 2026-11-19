@@ -4,6 +4,7 @@ import React from 'react';
 // 若导入浅色主题(github.css),其 `.hljs{color:#24292e}` 会把灰字压到深底上,可读性崩塌。
 import 'highlight.js/styles/vs2015.css';
 import type { MessageRow, SourceItem } from '../lib/ipc';
+import type { QuoteRef } from '../lib/quote';
 import { MemoMarkdown, CodeBlock } from './MemoMarkdown';
 import ReasoningBlock from './ReasoningBlock';
 import { ToolTrace, ToolTraceGroup } from './ToolTrace';
@@ -11,7 +12,7 @@ import { AttachmentCards } from './bubble/AttachmentCards';
 import { OutputCards } from './bubble/OutputCards';
 import { SourceCards } from './bubble/SourceCards';
 import { groupTraceSegments, splitTraceSegments } from '../lib/toolTrace';
-import { IconCheck, IconCopy, IconEdit, IconMore, IconPin, IconQuote, IconRefresh, IconSwap, IconTrash } from './icons';
+import { IconCheck, IconChevronDown, IconCopy, IconEdit, IconMore, IconPin, IconQuote, IconRefresh, IconSwap, IconTrash } from './icons';
 
 /** 记忆 6 个标准节(与后端 KNOWN_SECTIONS 严格一致)。 */
 export const MEMORY_SECTIONS = [
@@ -44,6 +45,8 @@ interface Props {
   sessionId?: string;
   /** 是否为最后一条 AI 回复(决定显示「重新生成」) */
   isLastAssistant?: boolean;
+  /** P15:引用卡片(追问时选中的片段,>5 行自动折叠) */
+  quotes?: QuoteRef[];
   /** 引用:message 级别摘要,完整原文由外层保存(选区优先在调用方处理) */
   onQuote?: (content: string, meta?: { role?: string; createdAt?: string }) => void;
   onEditResend?: (msg: BubbleMessage) => void;
@@ -112,10 +115,47 @@ function cutSegments(
   return out;
 }
 
+/** P15:引用卡片 —— 追问/引用展示。>5 行自动折叠,点展开/收起。
+ *  内容用 MemoMarkdown 渲染,LaTeX 公式/Markdown/代码块都能正确显示。 */
+function QuoteCard({ quote }: { quote: QuoteRef }) {
+  const MAX_LINES = 5;
+  const [open, setOpen] = useState(false);
+  const lines = quote.text.split('\n').length;
+  const tooLong = lines > MAX_LINES;
+  const showFull = open || !tooLong;
+  const roleLabel = quote.role === 'assistant' ? 'AI' : '我';
+
+  return (
+    <div className={`quote-card ${tooLong ? 'foldable' : ''} ${open ? 'open' : ''}`}>
+      <div className="quote-head">
+        <IconQuote size={12} />
+        <span className="quote-label">引用自 {roleLabel}</span>
+        {tooLong && (
+          <button
+            type="button"
+            className="quote-toggle"
+            onClick={() => setOpen((v) => !v)}
+            title={open ? '收起' : '展开'}
+          >
+            {open ? '收起' : `展开 ${lines} 行`}
+            <span className={`chevron ${open ? 'open' : ''}`}>
+              <IconChevronDown size={10} />
+            </span>
+          </button>
+        )}
+      </div>
+      <div className={`quote-body ${showFull ? '' : 'collapsed'}`}>
+        <MemoMarkdown content={quote.text} withCodeBlock={false} />
+      </div>
+    </div>
+  );
+}
+
 function MessageBubbleInner({
   msg,
   sessionId,
   isLastAssistant,
+  quotes,
   onQuote,
   onEditResend,
   onDelete,
@@ -163,6 +203,12 @@ function MessageBubbleInner({
   return (
     <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
       <div className="msg-col">
+        {/* P15:引用卡片 —— 追问/引用展示,用户消息前 */}
+        {isUser && quotes && quotes.length > 0 && (
+          <div className="quote-cards">
+            {quotes.map((q) => <QuoteCard key={q.id} quote={q} />)}
+          </div>
+        )}
         <AttachmentCards attachments={msg.attachments} />
         {reasoning && <ReasoningBlock text={reasoning} />}
         {isUser
@@ -315,7 +361,10 @@ const MessageBubble = React.memo(MessageBubbleInner, (prev, next) => {
     a.reasoning === b.reasoning &&
     a.tokens === b.tokens &&
     a.partial === b.partial &&
-    prev.isLastAssistant === next.isLastAssistant
+    prev.isLastAssistant === next.isLastAssistant &&
+    // P15:引用卡片 id 列表相同就跳过(不深比 text,引用卡片本身带 memo)
+    (prev.quotes?.map((q) => q.id).join(',') ?? '') ===
+      (next.quotes?.map((q) => q.id).join(',') ?? '')
   );
 });
 

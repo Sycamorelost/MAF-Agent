@@ -1,6 +1,7 @@
 import { HashRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import Titlebar from './components/Titlebar';
 import Sidebar from './components/sidebar/Sidebar';
@@ -23,6 +24,7 @@ import './styles/phase.css';
 import './styles/tools.css';
 import './styles/memory.css';
 import './styles/settings.css';
+import './styles/popout.css';
 import './styles/workbench.css';
 import './styles/preset.css';
 import 'katex/dist/katex.min.css';
@@ -76,6 +78,66 @@ function OnboardingGate() {
   }, []);
   if (!need) return null;
   return <OnboardingDialog onDone={() => setNeed(false)} />;
+}
+
+/** Popout 小窗简化内容:无 Sidebar / Titlebar / Inspector,只留消息区 + Composer。
+ *  内部用 CSS 隐藏 ChatPage 的额外面板,复用同一套会话/Send/Stream 逻辑。 */
+function PopoutApp() {
+  const nav = useNavigate();
+  const [err, setErr] = useState<string | null>(null);
+  // popout 一启动就创建新会话、跳到 /chat/:id、定位到右下角贴任务栏
+  useEffect(() => {
+    let disposed = false;
+    (async () => {
+      try {
+        // 先定位再加载内容（避免白屏闪到中心）
+        await invoke('dock_popout').catch(() => {});
+        const { id } = await ipc.createSession('', '');
+        if (disposed) return;
+        // 让 useSessionsStore 也拿到这个新会话(同 DB,主窗口也能看到)
+        await useSessionsStore.getState().refresh();
+        if (!disposed) nav(`/chat/${id}`, { replace: true });
+      } catch (e) {
+        if (!disposed) setErr(String(e ?? '新建会话失败'));
+      }
+    })();
+    return () => { disposed = true; };
+    // 仅 mount 时跑一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="popout-root">
+      {/* 自定义标题栏:关闭按钮 */}
+      <div className="popout-cap" data-tauri-drag-region>
+        <span className="popout-title">myAgent</span>
+        <button
+          className="popout-x"
+          title="关闭小窗(Esc)"
+          onClick={() => void invoke<boolean>('toggle_popout').catch(() => {})}
+        >×</button>
+      </div>
+      {/* 内容区:复用 ChatPage,但通过 CSS 隐藏 Sidebar/Titlebar/Inspector */}
+      {err ? (
+        <div style={{ padding: 24, color: '#999', fontSize: 13 }}>{err}</div>
+      ) : (
+        <Suspense fallback={<div style={{ padding: 24, color: '#999', fontSize: 13 }}>加载中…</div>}>
+          <Routes>
+            <Route path="/chat/:id" element={<PopoutSessionGate />} />
+            <Route path="*" element={<div style={{ padding: 24, color: '#999', fontSize: 13 }}>正在新建会话…</div>} />
+          </Routes>
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+/** Popout 专用会话门:不 Navigate 回根(会落入白屏),直接渲染 ChatPage;
+ *  sessions 未就绪时 ChatPage 内部有自己的空状态处理。 */
+function PopoutSessionGate() {
+  const { id } = useParams<{ id: string }>();
+  if (!id) return <ChatPage compactTools />;
+  return <ChatPage key={id} compactTools />;
 }
 
 /** 主窗口内容:监听「跳转会话」/「打开设置页」事件并导航。 */
@@ -244,9 +306,10 @@ export default function App() {
     <HashRouter>
       <DataDirGate />
       <OnboardingGate />
-      <BootstrapHint />
+      {/* 启动提示只属于主窗口:小窗晚于 bootstrap 创建,收不到 bootstrap_done,会永久卡住 */}
+      {label !== 'popout' && <BootstrapHint />}
       <ErrorBoundary>
-        <MainApp />
+        {label === 'popout' ? <PopoutApp /> : <MainApp />}
       </ErrorBoundary>
       <McpApprovalDialog />
       <ConfirmHost />

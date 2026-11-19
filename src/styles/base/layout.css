@@ -98,8 +98,9 @@ a:hover { text-decoration: underline; }
   .tb-search-pop { width: min(calc(340px * var(--ui-scale)), calc(100vw - var(--space-6))); }
 }
 
-/* Sidebar(会话历史抽屉):基础由 _tokens.css 提供,此处追加项目分组视图样式 */
-/* 新建对话以下的内容共用一个滚动容器(项目 + 会话 + 记忆 + 知识库一起滚) */
+/* Sidebar(会话历史抽屉):三段式布局 —— side-top(固定) + side-scroll(中间滚) + side-bottom(固定)
+   sidebar 本身右侧 padding=0,新对话/设置直接贴右边界;
+   列表内容由 side-scroll 提供右侧 padding,保持视觉间距 */
 .side-scroll {
   flex: 1;
   min-height: 0;
@@ -108,7 +109,7 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  margin-top: var(--space-2);
+  padding-right: calc(var(--pad-x-narrow) * .25);
   padding-bottom: var(--space-2);
 }
 .side-scroll::-webkit-scrollbar { width: 8px; }

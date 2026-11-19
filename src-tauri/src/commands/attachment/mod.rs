@@ -21,7 +21,8 @@ mod tests;
 
 #[allow(unused_imports)]
 pub use center::{
-    AttachmentEntry, delete_attachment, insert_attachment_to_session, list_all_attachments,
+    AttachmentEntry, SessionDoc, delete_attachment, import_attachment_from_center,
+    insert_attachment_to_session, list_all_attachments, list_session_docs,
 };
 #[allow(unused_imports)]
 pub use meta::AttachmentMeta;

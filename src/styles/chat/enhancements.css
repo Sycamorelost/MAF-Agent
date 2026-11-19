@@ -50,7 +50,6 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
   transition: height 0.35s ease-out, padding 0.25s ease-out;
   padding: 0 var(--space-3);
 }
@@ -439,6 +438,46 @@
   color: var(--text-3);
 }
 
+/* ============ 划词选中浮动工具栏 ============ */
+.sel-float-tool {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(var(--bg-main-rgb), 0.96);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card-h);
+  z-index: 100;
+  animation: sel-tool-in 120ms ease-out;
+  user-select: none;
+}
+@keyframes sel-tool-in {
+  from { opacity: 0; transform: translate(-50%, -90%); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+.sel-ft-btn {
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-family: var(--font);
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, color .12s;
+}
+.sel-ft-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+.sel-ft-btn.primary {
+  background: var(--brand);
+  color: #fff;
+}
+.sel-ft-btn.primary:hover { filter: brightness(1.1); background: var(--brand); }
+
 /* 用户消息内 Markdown:保持浅底块风格,只开放行内格式(粗体/斜体/行内码/链接) */
 .msg.user .bubble .md p { margin: 0; }
 .msg.user .bubble .md code {
@@ -450,4 +489,62 @@
 }
 .msg.user .bubble .md strong { font-weight: 600; }
 .msg.user .bubble .md em { font-style: italic; }
+
+/* 消息操作栏溢出菜单:复制常驻,其余收入「⋯」(折叠冗余、窄窗不溢出) */
+.more-wrap { position: relative; display: inline-flex; }
+.more-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); cursor: default; }
+.more-menu {
+  position: absolute;
+  bottom: calc(28px * var(--ui-scale));
+  right: 0;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  min-width: calc(160px * var(--ui-scale));
+  padding: var(--space-1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card-h);
+}
+.more-menu > button, .more-sub > button {
+  display: flex !important;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: flex-start !important;
+  width: 100% !important;
+  height: auto !important;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-sub);
+  color: var(--text-2);
+  text-align: left;
+  border-radius: var(--radius-s);
+}
+.more-menu > button:hover, .more-sub > button:hover { background: var(--bg-hover); color: var(--text-1); }
+.more-menu > button.danger:hover { color: var(--err); background: var(--err-soft); }
+.more-sub { position: relative; display: block; }
+.more-sub-menu {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  margin-right: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  min-width: calc(132px * var(--ui-scale));
+  padding: var(--space-1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card-h);
+}
+.more-sub-menu button {
+  justify-content: flex-start !important;
+  width: 100% !important;
+  height: auto !important;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-sub);
+  text-align: left;
+  border-radius: var(--radius-s);
+}
+.more-sub-menu button:hover { background: var(--bg-hover); color: var(--text-1); }
 

@@ -35,8 +35,7 @@ pub fn prompt_for(agent_id: &str) -> &'static str {
         "exp-designer" => include_str!("agents_prompts/exp-designer.md"),
         "data-analyst" => include_str!("agents_prompts/data-analyst.md"),
         "lab-report-writer" => include_str!("agents_prompts/lab-report-writer.md"),
-        "ai-flavor-detector" => include_str!("agents_prompts/ai-flavor-detector.md"),
-        "ai-flavor-rewriter" => include_str!("agents_prompts/ai-flavor-rewriter.md"),
+        // ai-flavor-detector + ai-flavor-rewriter 已删除（用户要求）
         "academic-voice" => include_str!("agents_prompts/academic-voice.md"),
         "style-anchor" => include_str!("agents_prompts/style-anchor.md"),
         _ => "",

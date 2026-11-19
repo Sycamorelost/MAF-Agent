@@ -53,7 +53,7 @@ async fn fs_tools_edit_and_chunked_write_roundtrip() {
     let st: serde_json::Value = serde_json::from_str(&content).unwrap();
     let write_id = st["write_id"].as_str().unwrap().to_string();
 
-    let chunk = "分批写入校验🙂".repeat(5000);
+    let chunk = "分批写入校验 [测试标记]".repeat(5000);
     let mut total = 0u64;
     for _ in 0..3 {
         let (content, ok) = execute_builtin(

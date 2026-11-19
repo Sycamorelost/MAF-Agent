@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import * as ipc from '../../lib/ipc';
-import type { AttachmentMeta, MessageRow } from '../../lib/ipc';
+import type { AttachmentMeta, MessageRow, SessionDoc } from '../../lib/ipc';
 import type { BubbleMessage } from '../../components/MessageBubble';
 import { resolveAtRefs } from '../../lib/atRefs';
 
@@ -21,6 +21,30 @@ export const DOC_CARD_THRESHOLD = 12000;
 /** 文档注入策略:resident = 智能体 doc_pipeline=resident,所有已分块文档一律走文档卡。 */
 export interface DocPipelineOpts {
   resident?: boolean;
+}
+
+/** 常驻文档清单最多列出的份数(其余交给 doc_list 工具)。 */
+export const DOC_MANIFEST_MAX = 8;
+/** 清单里单份文档摘要的最大字符数。 */
+const MANIFEST_SUMMARY_CHARS = 160;
+
+/** 生成常驻 system 的「本会话文档」清单:不随滑窗变化,解决早期文档失忆。 */
+export function formatDocManifest(docs: SessionDoc[]): string {
+  if (docs.length === 0) return '';
+  const shown = docs.slice(0, DOC_MANIFEST_MAX);
+  const lines = shown.map((d) => {
+    const sum = d.summary
+      ? ` · 摘要:${
+          d.summary.length > MANIFEST_SUMMARY_CHARS
+            ? `${d.summary.slice(0, MANIFEST_SUMMARY_CHARS)}…`
+            : d.summary
+        }`
+      : '';
+    return `- 《${d.doc_name}》 doc_id=${d.doc_id} · ${d.chunks} 块${sum}`;
+  });
+  const rest = docs.length - shown.length;
+  const tail = rest > 0 ? `\n…另有 ${rest} 份未列出,可用 doc_list 查看完整清单。` : '';
+  return `【本会话文档 · 长期可用】以下文档已解析并驻留,细节请用 doc_search 检索、doc_read 回看;未检索到的内容不要臆测。\n${lines.join('\n')}${tail}`;
 }
 
 /** 单个附件的注入文本:图片占位 / 文档卡 / 全文 / 失败提示(F7)。

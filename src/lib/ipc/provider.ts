@@ -408,9 +408,10 @@ export interface ToolDef {
   };
 }
 
-/** 通知后端中止指定的流式请求(chat / translate)。 */
+/** 通知后端中止指定的流式请求(chat / translate)。
+ *  P0-2b:不再吞错,让调用方决定是否兜底。 */
 export const cancelStream = (cancelId: string) =>
-  invoke<void>('cancel_stream', { cancelId }).catch(() => {});
+  invoke<void>('cancel_stream', { cancelId });
 
 /**
  * 流式对话。返回一个 { done, cancel } 句柄:
@@ -421,7 +422,7 @@ export const cancelStream = (cancelId: string) =>
 export function chatStream(
   input: ChatStreamInput,
   onChunk: (chunk: StreamChunk) => void,
-): { done: Promise<void>; cancel: () => void } {
+): { done: Promise<void>; cancel: () => Promise<void> } {
   const channel = new Channel<StreamChunk>();
   let cancelled = false;
   let resolveDone!: () => void;
@@ -452,10 +453,12 @@ export function chatStream(
 
   return {
     done,
-    cancel: () => {
+    // P0-2b:cancel 改为 async,等 cancelStream 送达后端后再 resolveDone;
+    //        cancelStream 失败也 resolveDone(前端停止渲染即可),不 reject done
+    cancel: async () => {
       if (cancelled) return;
       cancelled = true;
-      cancelStream(cancelId);
+      try { await cancelStream(cancelId); } catch { /* 送达失败也收流 */ }
       resolveDone();
     },
   };

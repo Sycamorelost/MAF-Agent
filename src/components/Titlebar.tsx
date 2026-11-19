@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useProvidersStore } from '../stores/providers';
 import { useSessionsStore } from '../stores/sessions';
 import { useUiStore } from '../stores/ui';
 import { sessionPath } from '../lib/workbench';
-import GlobalSearch from './GlobalSearch';
 import AgentPickerDialog from './AgentPickerDialog';
-import { IconEdit, IconSearch, IconX } from './icons';
+import { IconSearch } from './icons';
 
 /**
  * 自定义标题栏(简洁模式):
@@ -19,31 +18,25 @@ export default function Titlebar() {
   const [pinned, setPinned] = useState(false);
 
   const nav = useNavigate();
-  const loc = useLocation();
   const current = useProvidersStore((s) => s.current);
   const create = useSessionsStore((s) => s.create);
   const pruneEmpty = useSessionsStore((s) => s.pruneEmpty);
 
-  const [searchOpen, setSearchOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const setSearchPaletteOpen = useUiStore((s) => s.setSearchPaletteOpen);
 
-  // 路由变化收起浮层(搜索跳转 / 导航后不残留);抽屉开启状态持久化,不随路由复位
-  useEffect(() => {
-    setSearchOpen(false);
-  }, [loc.pathname]);
-
-  // Ctrl/Cmd + K 打开搜索浮层(GlobalSearch 内部负责聚焦)
+  // Ctrl/Cmd + K 打开搜索面板(和侧栏、快捷键统一入口)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setSearchOpen(true);
+        setSearchPaletteOpen(true);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [setSearchPaletteOpen]);
 
   useEffect(() => {
     void win.isAlwaysOnTop().then(setPinned).catch(() => {});
@@ -75,7 +68,7 @@ export default function Titlebar() {
 
   return (
     <div className="titlebar" data-tauri-drag-region>
-      {/* 玻璃组件组:侧栏折叠 / 全局搜索 / 新建对话(导航已移入侧栏) */}
+      {/* 玻璃组件组:侧栏折叠 + 全局搜索(统一走 store 里的搜索面板) */}
       <div className="tb-pill">
         <button
           className={`tb-pill-btn${sidebarOpen ? ' on' : ''}`}
@@ -89,11 +82,13 @@ export default function Titlebar() {
             <path d="M6 2.5v11" />
           </svg>
         </button>
-        <button className="tb-pill-btn" title="搜索 (Ctrl+K)" aria-label="搜索 (Ctrl+K)" onClick={() => setSearchOpen((v) => !v)}>
+        <button
+          className="tb-pill-btn"
+          title="搜索会话 (Ctrl+K)"
+          aria-label="搜索会话 (Ctrl+K)"
+          onClick={() => setSearchPaletteOpen(true)}
+        >
           <IconSearch size={15} />
-        </button>
-        <button className="tb-pill-btn" title="新建对话" aria-label="新建对话" onClick={() => setPickerOpen(true)}>
-          <IconEdit size={15} />
         </button>
       </div>
 
@@ -125,22 +120,7 @@ export default function Titlebar() {
         </svg>
       </button>
 
-      {/* 全局搜索浮层(玻璃卡片,挂在 pill 下方) */}
-      {searchOpen && (
-        <>
-          <div className="tb-pop-backdrop" onClick={() => setSearchOpen(false)} />
-          <div className="tb-search-pop">
-            <div className="tb-search-head">
-              <span>搜索</span>
-              <button className="panel-toggle" title="关闭" aria-label="关闭搜索" onClick={() => setSearchOpen(false)}>
-                <IconX size={13} />
-              </button>
-            </div>
-            <GlobalSearch />
-          </div>
-        </>
-      )}
-
+      {/* 全局搜索浮层已移除,搜索统一走侧栏 Ctrl+K */}
       {pickerOpen && (
         <AgentPickerDialog
           currentAgentId={null}

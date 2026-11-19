@@ -1,13 +1,13 @@
 use super::*;
 
 #[test]
-fn builtin_has_22_unique_agents() {
+fn builtin_has_19_unique_agents() {
     let list = builtin_templates();
-    assert_eq!(list.len(), 22);
+    assert_eq!(list.len(), 19);
     let mut ids: Vec<&str> = list.iter().map(|t| t.agent_id.as_str()).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(ids.len(), 22, "agent_id 必须唯一");
+    assert_eq!(ids.len(), 19, "agent_id 必须唯一");
     for t in &list {
         assert!(
             CATEGORIES.contains(&t.category.as_str()),
@@ -23,13 +23,13 @@ fn builtin_has_22_unique_agents() {
         );
         assert!(!t.input_hints.is_empty(), "{} 缺 input_hints", t.agent_id);
     }
-    // R4:内置模板收缩为 22 个后,不再要求每个分类至少 4 个;
-    // 只校验分类分布与设计一致,防止后续增删时悄悄漂移。
+    // 删除 translator + ai-flavor-detector/rewriter 后:chat=3,doc=2(少了 ai-flavor-detector+rewriter),
+    // create=1(少了 translator),其他不变。总计 3+2+2+1+1+2+2+2+4=19
     let expect = [
         ("chat", 3),
-        ("doc", 4),
+        ("doc", 2),
         ("dev", 2),
-        ("create", 2),
+        ("create", 1),
         ("ops", 1),
         ("meta", 2),
         ("study", 2),
@@ -69,8 +69,7 @@ fn builtin_prompts_match_templates() {
 fn builtin_aiflavor_agents_policy() {
     let list = builtin_templates();
     let expect = [
-        ("ai-flavor-detector", vec!["fs_read"], "inline"),
-        ("ai-flavor-rewriter", vec!["fs_read", "fs_write"], "inline"),
+        // ai-flavor-detector + rewriter 已删除
         ("academic-voice", vec!["fs_read"], "resident"),
         ("style-anchor", vec![], "off"),
     ];

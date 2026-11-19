@@ -4,9 +4,12 @@ import { Virtualizer, type VirtualizerHandle } from 'virtua';
 import MessageBubble, { type BubbleMessage } from '../../components/MessageBubble';
 import * as ipc from '../../lib/ipc';
 import type { MessageRow } from '../../lib/ipc';
+import type { QuoteRef } from '../../lib/quote';
 
 interface MessageListProps {
   messages: MessageRow[];
+  /** P15:引用卡片映射(消息 id -> 引用列表) */
+  quotesByMessageId: Record<number, QuoteRef[]>;
   /** 消息滚动容器(.chat-scroll):虚拟列表复用现有滚动条,不额外嵌套一层 */
   scrollRef: RefObject<HTMLDivElement | null>;
   /** 虚拟列表句柄:供搜索跳转按 index 定位(离屏消息不挂载,无法用 id 查找) */
@@ -28,6 +31,7 @@ interface MessageListProps {
  *  - 流式刷新时整棵历史子树跳过渲染(流式气泡由 StreamingBubble 独立订阅)。 */
 export const MessageList = memo(function MessageList({
   messages,
+  quotesByMessageId,
   scrollRef,
   listRef,
   startMargin,
@@ -51,11 +55,12 @@ export const MessageList = memo(function MessageList({
     >
       {(m: MessageRow) => (
         // 虚拟列表内不再有 .chat-inner 的 gap,用内边距保持消息间距
-        <div key={m.id} id={`msg-${m.id}`} style={{ paddingBottom: 'var(--space-4)' }}>
+        <div key={m.id} id={`msg-${m.id}`} data-msg-id={m.id} style={{ paddingBottom: 'var(--space-4)' }}>
           <MessageBubble
             msg={m}
             sessionId={m.session_id}
             isLastAssistant={m.role === 'assistant' && m.id === lastAssistantId}
+            quotes={m.role === 'user' ? quotesByMessageId[m.id] : undefined}
             onQuote={onQuote}
             onEditResend={m.role === 'user' ? onEditResend : undefined}
             onDelete={onDelete}

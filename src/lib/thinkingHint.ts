@@ -10,7 +10,7 @@ export const THINKING_LEVEL_LABEL: Record<ThinkingLevel, string> = {
 
 /**
  * 档位 → 该模型实际发送的参数值(透明化展示用)。
- * ⚠️ 与后端 openai.rs::apply_reasoning_params 五家映射表保持一致,两侧改动必须同步。
+ * [警告] 与后端 openai.rs::apply_reasoning_params 五家映射表保持一致,两侧改动必须同步。
  */
 export function effortHint(providerId: string, model: string, level: ThinkingLevel): string {
   const m = model.toLowerCase();

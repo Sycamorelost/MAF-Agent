@@ -32,7 +32,7 @@ const readWidth = () => {
   }
 };
 
-/** 全局 UI 状态(标题栏 ↔ 侧栏/页面抽屉联动)。 */
+/** 全局 UI 状态(标题栏与侧栏/页面抽屉联动)。 */
 interface UiState {
   /** 侧栏是否展开(false = 折叠为 56px 图标轨;持久化到 localStorage) */
   sidebarOpen: boolean;
@@ -40,6 +40,9 @@ interface UiState {
   /** 侧栏展开态宽度(200–320px,拖拽调整;持久化) */
   sidebarWidth: number;
   setSidebarWidth: (v: number) => void;
+  /** P16:弹出式搜索面板开关(Titlebar / Sidebar 共用;不持久化) */
+  searchPaletteOpen: boolean;
+  setSearchPaletteOpen: (v: boolean) => void;
 }
 
 /**
@@ -62,4 +65,6 @@ export const useUiStore = create<UiState>((set) => ({
     }
     set({ sidebarWidth: w });
   },
+  searchPaletteOpen: false,
+  setSearchPaletteOpen: (v) => set({ searchPaletteOpen: v }),
 }));

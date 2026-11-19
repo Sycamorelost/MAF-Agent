@@ -29,6 +29,7 @@ export function useMessageActions({
   setError, showToast, forkAndReload, runStream, rebuildHistory, retryTarget, setRetryTarget,
 }: MessageActionsParams) {
   const remove = useMessagesStore((s) => s.remove);
+  const isStreaming = useMessagesStore((s) => s.isStreaming);
   const loadMemory = useMemoryStore((s) => s.load);
 
   // ---------- 消息操作(useCallback 稳定引用,配合 MessageList memo) ----------
@@ -55,13 +56,15 @@ export function useMessageActions({
   const onRegenerate = useCallback(
     async (msg: BubbleMessage) => {
       if (!sessionId) return;
+      // P0-3:流式期间禁止重新生成 —— busy 守卫,避免 cancelRef 被覆盖导致旧请求失控
+      if (isStreaming(sessionId)) { showToast('请等待当前回复生成完毕'); return; }
       // F4:分叉替代物理删除;新分支可见历史 = 该 AI 消息之前的前缀
       await forkAndReload(msg.id);
       // 用新分支的最新历史重发(无新用户消息)
       await runStream(rebuildHistory());
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessionId, forkAndReload, runStream],
+    [sessionId, forkAndReload, runStream, isStreaming, showToast],
   );
   /** 选定模型后:从该条 AI 消息处分叉并以新模型重发;取消弹窗 = 仅 setRetryTarget(null)。 */
   const onPickRetryModel = useCallback(
@@ -69,12 +72,14 @@ export function useMessageActions({
       const msg = retryTarget;
       setRetryTarget(null);
       if (!sessionId || !msg) return;
+      // P0-3:流式期间禁止换模型重试
+      if (isStreaming(sessionId)) { showToast('请等待当前回复生成完毕'); return; }
       // F4:分叉替代物理删除
       await forkAndReload(msg.id);
       await runStream(rebuildHistory(), null, { providerId, model });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessionId, retryTarget, forkAndReload, runStream],
+    [sessionId, retryTarget, forkAndReload, runStream, isStreaming, showToast],
   );
 
   // ---------- 来源存入记忆(写入 memory.md「资料」节) ----------

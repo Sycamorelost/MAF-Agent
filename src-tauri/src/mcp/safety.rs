@@ -1,4 +1,4 @@
-//! MCP 安全层:防御性路径 / 命令校验,参考 OpenCode (22k⭐) 与 Cherry Studio CVE 教训。
+//! MCP 安全层:防御性路径 / 命令校验,参考 OpenCode (22k GitHub stars) 与 Cherry Studio CVE 教训。
 //!
 //! # 防御纵深
 //! 1. **NUL/CR/LF 拒绝** —— 经典命令注入载体,Windows 上 NUL 还会截断路径

@@ -135,31 +135,48 @@ function extractCode(children: React.ReactNode): { lang: string; text: string } 
 
 /**
  * 把 LaTeX 原生定界符 \(...\) / \[...\] 归一化为 remark-math 支持的 $...$ / $$...$$。
+ * 同时把 ```latex / ```tex / ```math 代码围栏转为 $$...$$ 块级公式
+ * （不少模型用代码围栏包裹公式，而不是 $ 定界符）。
  *
- * 不少模型直接输出 LaTeX 定界符,而 remark-math 只识别 $;且 CommonMark 会把
- * \( \[ 当成转义字符渲染成字面 ( [。这里在解析前先归一化。
  * 围栏代码块与行内 code 先占位保护,避免误伤其中的代码。
  */
 function normalizeMathDelimiters(src: string): string {
-  if (!src.includes('\\(') && !src.includes('\\[')) return src;
+  // 快速路径:没有任何数学迹象 → 原样返回(避免每次正则扫描)
+  const hasCodeFenceMath = /```\s*(?:latex|tex|math)\b/i.test(src);
+  const hasLatexDelim = src.includes('\\(') || src.includes('\\[');
+  if (!hasCodeFenceMath && !hasLatexDelim) return src;
+
   const stashed: string[] = [];
   const hide = (m: string) => {
     stashed.push(m);
     return `\u0000${stashed.length - 1}\u0000`;
   };
+
+  // 先把普通代码围栏(非 latex/tex/math)和行内 code 占位保护
   let s = src
-    .replace(/```[\s\S]*?```/g, hide)
-    .replace(/~~~[\s\S]*?~~~/g, hide)
+    .replace(/```(?!\s*(?:latex|tex|math)\b)[\s\S]*?```/gi, hide)
+    .replace(/~~~(?!\s*(?:latex|tex|math)\b)[\s\S]*?~~~/gi, hide)
     .replace(/`[^`\n]*`/g, hide);
-  // 独占整行的 \[...\](LaTeX 行间公式)转块级 $$,其余转行内 $;
-  // 行内公式不可跨行,故多行内容一律走块级。
+
+  // 1. ```latex / ```tex / ```math 围栏 → $$...$$
+  if (hasCodeFenceMath) {
+    s = s.replace(
+      /```\s*(?:latex|tex|math)\s*\n?([\s\S]*?)```/gi,
+      (_m, body: string) => `\n\n$$\n${body.trim()}\n$$\n\n`,
+    );
+  }
+
+  // 2. \[...\] / \(...\) LaTeX 定界符归一化
   const toBlock = (body: string) => `\n\n$$\n${body.trim()}\n$$\n\n`;
   const toInline = (body: string) =>
     body.includes('\n') ? toBlock(body) : `$${body.trim()}$`;
-  s = s
-    .replace(/(^[ \t]*)\\\[([\s\S]*?)\\\]([ \t]*$)/gm, (_m, _lead, body: string) => toBlock(body))
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_m, body: string) => toInline(body))
-    .replace(/\\\(([\s\S]*?)\\\)/g, (_m, body: string) => toInline(body));
+  if (hasLatexDelim) {
+    s = s
+      .replace(/(^[ \t]*)\\\[([\s\S]*?)\\\]([ \t]*$)/gm, (_m, _lead, body: string) => toBlock(body))
+      .replace(/\\\[([\s\S]*?)\\\]/g, (_m, body: string) => toInline(body))
+      .replace(/\\\(([\s\S]*?)\\\)/g, (_m, body: string) => toInline(body));
+  }
+
   return s.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => stashed[Number(i)] ?? '');
 }
 

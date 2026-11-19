@@ -9,11 +9,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   deleteAttachment,
-  insertAttachmentToSession,
+  importAttachmentFromCenter,
   readAttachmentData,
   retryAttachmentExtract,
   type AttachmentEntry,
 } from '../lib/ipc';
+import { uiConfirm } from '../components/confirmService';
 import { useSessionsStore } from '../stores/sessions';
 import { useAttachmentInsertStore } from '../stores/attachmentInsert';
 import { sessionPath } from '../lib/workbench';
@@ -40,6 +41,8 @@ export default function AttachmentsPage() {
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
+  /** 正在插入的附件 key(防重复提交) */
+  const [inserting, setInserting] = useState<string | null>(null);
   const [rejectsOpen, setRejectsOpen] = useState(false);
 
   const flash = (text: string) => {
@@ -121,19 +124,31 @@ export default function AttachmentsPage() {
     }
   };
 
-  /** 插入「当前会话」= 最近更新的会话;经队列交给 ChatPage 输入框。 */
+  /** 插入「当前会话」= 最近更新的会话;经队列交给 ChatPage 输入框。
+   *  硬约束:先确认再执行,执行中禁用按钮防止重复提交。 */
   const onInsert = async (e: AttachmentEntry) => {
+    if (inserting) return;
     const target = [...sessions].sort((a, b) => b.updated.localeCompare(a.updated))[0];
     if (!target) {
       flash('没有可用会话,请先新建会话');
       return;
     }
+    const ok = await uiConfirm({
+      title: '插入附件',
+      message: `将把《${e.meta.name}》插入会话「${target.title || target.id}」。\n已解析的文档会复用现有解析结果，不会重新读取源文件。\n\n是否继续？`,
+      confirmText: '插入',
+    });
+    if (!ok) return;
+    const key = delKey(e);
+    setInserting(key);
     try {
-      const meta = await insertAttachmentToSession(target.id, e.meta.path);
+      const meta = await importAttachmentFromCenter(target.id, e.message_id, e.meta.path);
       enqueue(target.id, [meta]);
       nav(sessionPath(target.id));
     } catch (err) {
       flash('插入失败: ' + String(err));
+    } finally {
+      setInserting(null);
     }
   };
 
@@ -269,6 +284,7 @@ export default function AttachmentsPage() {
                     selected={batch.selected.has(delKey(e))}
                     confirming={confirmDel === delKey(e)}
                     retrying={retrying.has(delKey(e))}
+                    inserting={inserting === delKey(e)}
                     onPreview={onPreview}
                     onInsert={onInsert}
                     onLocate={onLocate}

@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { VirtualizerHandle } from 'virtua';
 import { mcpClearSessionAllowed } from '../../lib/ipc/mcp';
 import StreamingBubble from '../../components/StreamingBubble';
 import Composer from '../../components/Composer';
 import Toast from '../../components/Toast';
-import { ResizeHandle } from '../../components/ResizeHandle';
-import { usePanelWidth } from '../../lib/usePanelWidth';
-import MemPanel from '../../components/MemPanel';
 import MemoryHandoffDialog from '../../components/MemoryHandoffDialog';
 import ModelSwitchDialog from '../../components/ModelSwitchDialog';
 import AgentPickerDialog from '../../components/AgentPickerDialog';
@@ -34,15 +32,17 @@ import { useDraftHandoff } from './useDraftHandoff';
 import { useChatInspector } from './useChatInspector';
 import { ChatBanners } from './ChatBanners';
 import { ChatEmptyState } from './ChatEmptyState';
+import AttachmentCenterPicker from '../../components/composer/AttachmentCenterPicker';
 import { buildQuote, type QuoteRef } from '../../lib/quote';
 
 /** 稳定空数组:避免 `?? []` 每次渲染生成新引用导致 MessageList memo 失效。 */
 const EMPTY_MESSAGES: MessageRow[] = [];
 
-export default function ChatPage() {
+export default function ChatPage({ compactTools = false }: { compactTools?: boolean }) {
   const { id: sessionId } = useParams<{ id: string }>();
-  const memPanel = usePanelWidth('mempanel', 320, 240, 520, 'right');
   const { bySession, load } = useMessagesStore();
+  /** P15:引用卡片映射(按消息 id 查 quotes) */
+  const quotesByMessageId = useMessagesStore((s) => s.quotesByMessageId);
   const hasMore = useMessagesStore((s) => (sessionId ? s.hasMore[sessionId] === true : false));
   const loadOlder = useMessagesStore((s) => s.loadOlder);
   // 流式状态用 boolean selector:只在开始/结束变化两次,ChatPage 不随 50ms 去抖重渲染
@@ -66,6 +66,8 @@ export default function ChatPage() {
   const [composerText, setComposerText] = useState('');
   const [pendingAttachments, setPendingAttachments] = useState<AttachmentMeta[]>([]);
   const [pendingImages, setPendingImages] = useState<Record<string, string>>({});
+  /** 从附件中心导入的选择器开关 */
+  const [centerPickerOpen, setCenterPickerOpen] = useState(false);
   /** 引用条:完整原文留在 state,输入框只显示摘要;发送时作为独立上下文注入 */
   const [quotes, setQuotes] = useState<QuoteRef[]>([]);
   /** 引用消息(选区优先):最多保留 3 条,超出替换最早一条 */
@@ -79,6 +81,8 @@ export default function ChatPage() {
   );
   const [modelSwitchOpen, setModelSwitchOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  /** 划词选中浮动工具栏:文本 + 屏幕坐标(相对视口,Portal 到 body 直接用) + 来源消息 id */
+  const [selTool, setSelTool] = useState<{ text: string; x: number; y: number; msgId?: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<VirtualizerHandle | null>(null);
   const listWrapRef = useRef<HTMLDivElement>(null);
@@ -89,11 +93,10 @@ export default function ChatPage() {
   const messages = sessionId ? (bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
 
   // ---------- D16 / val.md §5.8:工作台能力永久开启(工作台页已并入会话页) ----------
-  // isWork 已删除,PresetChip / Inspector / MemPanel 永远按工作台能力呈现
+  // isWork 已删除,PresetChip / Inspector 永远按工作台能力呈现
 
-  // ---------- 检查器(P3-1:工作台能力永久开启,检查器默认开;与记忆面板互斥,右栏同时只开一个) ----------
-  const { chatInspectorOpen, toggleChatInspector, onToggleMemPanel, chromeValue } =
-    useChatInspector(memPanel.collapsed, memPanel.toggleCollapse);
+  // ---------- 检查器(P3-1:工作台能力永久开启,检查器默认开) ----------
+  const { chatInspectorOpen, toggleChatInspector, chromeValue } = useChatInspector();
 
   /** 前插历史标记:加载更早一页时抑制「自动滚到底部」,避免把视口甩走 */
   const prependingRef = useRef(false);
@@ -128,6 +131,52 @@ export default function ChatPage() {
     }
     return () => ro.disconnect();
   }, [sessionId]);
+
+  // ---------- 划词选中浮动工具栏(mouseup 检测选区,定位到选区上方) ----------
+  useEffect(() => {
+    const onMouseUp = () => {
+      const sel = window.getSelection();
+      const text = sel?.toString().trim() ?? '';
+      // 只在消息区(listWrapRef 内)选中非空文本时弹工具栏
+      if (!text || !sel || sel.isCollapsed) { setSelTool(null); return; }
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) { setSelTool(null); return; }
+      // 确保选区在消息列表容器内(不是 Composer 或其他区域)
+      const list = listWrapRef.current;
+      if (list && !list.contains(range.commonAncestorContainer)) { setSelTool(null); return; }
+      // 向上找最近的 [data-msg-id] 容器,拿到来源消息 id
+      let node: Node | null = range.commonAncestorContainer;
+      let msgId: number | undefined;
+      while (node) {
+        if (node.nodeType === 1) {
+          const el = node as HTMLElement;
+          const idStr = el.getAttribute?.('data-msg-id');
+          if (idStr) { msgId = Number(idStr); break; }
+        }
+        node = node.parentNode;
+      }
+      setSelTool({
+        text: text.slice(0, 500), // 截断防极长
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+        msgId,
+      });
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      // 点到工具栏自身时不关闭
+      const t = e.target as HTMLElement;
+      if (t?.closest?.('.sel-float-tool')) return;
+      setSelTool(null);
+    };
+    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('mousedown', onMouseDown);
+    return () => {
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, []);
+
   // ---------- B2:当前会话绑定的 Agent ----------
   const agent = useMemo(
     () => (session?.agent_id ? agentTemplates.find((t) => t.agent_id === session.agent_id) ?? null : null),
@@ -300,6 +349,23 @@ export default function ChatPage() {
     onNotice: (msg: string) => chat.showToast(msg, 5200),
   });
 
+  /** 附件中心导入完成:追加待发区;图片补读 data URL 供视觉模型使用 */
+  const handleCenterImported = useCallback(async (metas: AttachmentMeta[]) => {
+    setPendingAttachments((prev) => [...prev, ...metas]);
+    const imgs: Record<string, string> = {};
+    for (const m of metas) {
+      if (m.kind !== 'image') continue;
+      try {
+        imgs[m.path] = await ipc.readAttachmentData(m.path);
+      } catch {
+        // 忽略读取失败:图片仍以占位形式随消息发送
+      }
+    }
+    if (Object.keys(imgs).length > 0) {
+      setPendingImages((prev) => ({ ...prev, ...imgs }));
+    }
+  }, []);
+
   // 新消息到达 / 切换会话时:平滑滚动到底部
   // (?msg 定位期间不抢滚动,否则会把 scrollIntoView 的目标甩到底部;
   //  用 ref 读取最新目标,避免定位完成后清空 query 触发本 effect 再次拉到底部)
@@ -370,15 +436,16 @@ export default function ChatPage() {
           }}
         >
           {/* 会话头部:标题 + 右侧本会话模型选择(每个对话可自定义模型) */}
-          <ChatHeader
-            title={session?.title ?? '对话'}
-            sessionId={sessionId}
-            activeBranch={activeBranch}
-            branchRefresh={branchRefresh}
-            memCollapsed={memPanel.collapsed}
-            onToggleMemPanel={onToggleMemPanel}
-            onError={chat.setError}
-          />
+          {/* 小窗紧凑态不渲染会话头(标题/分支/导出/检查器等工具条整组移除) */}
+          {!compactTools && (
+            <ChatHeader
+              title={session?.title ?? '对话'}
+              sessionId={sessionId}
+              activeBranch={activeBranch}
+              branchRefresh={branchRefresh}
+              onError={chat.setError}
+            />
+          )}
           <div className="chat-scroll" ref={scrollRef} onScroll={onScrollFollow}>
             <div className="chat-inner">
               <ChatBanners
@@ -401,6 +468,7 @@ export default function ChatPage() {
               <div ref={listWrapRef}>
                 <MessageList
                   messages={messages}
+                  quotesByMessageId={quotesByMessageId}
                   scrollRef={scrollRef}
                   listRef={listRef}
                   startMargin={listMargin}
@@ -447,9 +515,11 @@ export default function ChatPage() {
             variant="docked"
             sending={chat.sending}
             onStop={chat.onCancel}
+            iconOnlyTools={compactTools}
             attachments={pendingAttachments}
             onPickFiles={handlePickFiles}
             onRemoveAttachment={handleRemoveAttachment}
+            onOpenAttachmentCenter={() => setCenterPickerOpen(true)}
             quotes={quotes}
             onRemoveQuote={(qid) => setQuotes((prev) => prev.filter((q) => q.id !== qid))}
             onRecall={chat.onRecall}
@@ -485,29 +555,28 @@ export default function ChatPage() {
                 const Icon = agentIconComponent(agent?.icon ?? 'bot');
                 return <Icon size={13} />;
               })()}
-              <span className="agent-chip-text">{agent?.name ?? '智能体'}</span>
+              {!compactTools && <span className="agent-chip-text">{agent?.name ?? '智能体'}</span>}
             </button>
           </Composer>
+          {centerPickerOpen && sessionId && (
+            <AttachmentCenterPicker
+              sessionId={sessionId}
+              onClose={() => setCenterPickerOpen(false)}
+              onImported={(metas) => void handleCenterImported(metas)}
+              onError={chat.setError}
+            />
+          )}
           {/* 会话纲要:右缘贴边短横线(每条 = 一次回答),hover 展开完整浮层;两种模式都保留(P1) */}
           <OutlinePanel messages={messages} onJump={onOutlineJump} />
         </div>
-        {!memPanel.collapsed && (
-          <>
-            <ResizeHandle panel={memPanel} />
-            <MemPanel
-              sessionId={sessionId}
-              width={memPanel.width}
-              narrow={memPanel.narrow}
-              onCollapse={memPanel.toggleCollapse}
-            />
-          </>
+        {/* 检查器(P3-1:两态通用;小窗紧凑态不渲染) */}
+        {!compactTools && (
+          <Inspector
+            sessionId={sessionId}
+            collapsed={!chatInspectorOpen}
+            onToggleCollapse={toggleChatInspector}
+          />
         )}
-        {/* 检查器(P3-1:两态通用,与记忆面板互斥) */}
-        <Inspector
-          sessionId={sessionId}
-          collapsed={!chatInspectorOpen}
-          onToggleCollapse={toggleChatInspector}
-        />
       </div>
 
       {modelSwitchOpen && (
@@ -559,6 +628,43 @@ export default function ChatPage() {
       )}
 
       {chat.toast && <Toast text={chat.toast} onClose={chat.hideToast} />}
+
+      {/* 划词选中浮动工具栏 —— Portal 到 body,绝对定位在选区上方 */}
+      {selTool && createPortal(
+        <div
+          className="sel-float-tool"
+          style={{ left: selTool.x, top: selTool.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            className="sel-ft-btn"
+            onClick={() => {
+              void navigator.clipboard.writeText(selTool.text).catch(() => {});
+              setSelTool(null);
+            }}
+            title="复制"
+          >复制</button>
+          <button
+            className="sel-ft-btn primary"
+            onClick={() => {
+              // P15:用来源消息的**原始 Markdown content** 构建引用,
+              // 而不是 window.getSelection().toString() 拿到的渲染后纯文本(公式等会丢失定界符)
+              const srcMsg = selTool.msgId != null
+                ? messages.find((m) => m.id === selTool.msgId)
+                : undefined;
+              const quoteText = srcMsg?.content?.trim() || selTool.text;
+              const quoteRole = srcMsg?.role ?? 'assistant';
+              setQuotes((prev) => [
+                ...prev,
+                buildQuote(quoteText, quoteRole, srcMsg?.created),
+              ].slice(-3));
+              setSelTool(null);
+            }}
+            title="引用并追问"
+          >追问</button>
+        </div>,
+        document.body,
+      )}
     </WorkbenchChromeContext.Provider>
   );
 }
