@@ -4,7 +4,7 @@ use docx_rs::*;
 
 use super::super::DocRequest;
 use super::super::style::DocStyle;
-use super::document::add_text_runs;
+use super::body::add_text_runs;
 use super::metrics;
 
 pub(super) fn add_cover(mut docx: Docx, req: &DocRequest, style: &DocStyle) -> Docx {
@@ -50,6 +50,21 @@ pub(super) fn header_para(style: &DocStyle, title: &str) -> Paragraph {
     Paragraph::new()
         .style("Normal")
         .align(AlignmentType::Right)
+        .indent(Some(0), Some(SpecialIndentType::FirstLine(0)), None, None)
+        .add_run(
+            Run::new()
+                .add_text(title.trim())
+                .size(18)
+                .color("808080")
+                .fonts(metrics::body_fonts(style)),
+        )
+}
+
+/// 偶数页页眉:标题左对齐,与奇数页右对齐区分(配合 evenAndOddHeaders)。
+pub(super) fn even_header_para(style: &DocStyle, title: &str) -> Paragraph {
+    Paragraph::new()
+        .style("Normal")
+        .align(AlignmentType::Left)
         .indent(Some(0), Some(SpecialIndentType::FirstLine(0)), None, None)
         .add_run(
             Run::new()

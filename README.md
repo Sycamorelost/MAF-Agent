@@ -4,7 +4,7 @@
 
 myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不做模型托管，也不做数据中转：你填入自己的 OpenAI 兼容端点与 API Key，应用只与该端点直连；其余数据（会话、分支、记忆、笔记、附件、产物、用量）写入本地 SQLite 与纯文本文件。
 
-**当前版本**：v2.8.0
+**当前版本**：v2.10.0
 **许可证**：Apache-2.0（第三方衍生声明见 [NOTICE](NOTICE)）
 **平台**：Windows 10 / 11（64 位）
 
@@ -32,15 +32,15 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 
 | 维度 | 说明 |
 |---|---|
-| 形态 | 无边框主窗口 + 托盘常驻；双击托盘图标弹出贴任务栏的窄版小窗 |
+| 形态 | 无边框主窗口 + 托盘常驻；双击托盘图标弹出贴任务栏的窄版小窗，右键弹出同主题自定义菜单（左键单击无动作） |
 | 前端 | React 19 + TypeScript 5.8 + Vite 6 + Zustand 5 + React Router 7 |
-| 后端 | Rust（edition 2024，rust-version 1.90），180 个 `#[tauri::command]` IPC 入口 |
-| 数据库 | SQLite（rusqlite bundled），迁移版本 `SCHEMA_VERSION = 38` |
+| 后端 | Rust（edition 2024，rust-version 1.90），179 个 `#[tauri::command]` IPC 入口 |
+| 数据库 | SQLite（rusqlite bundled），迁移版本 `SCHEMA_VERSION = 40` |
 | 模型接入 | OpenAI 兼容协议，内置 OpenAI / DeepSeek / Kimi / 通义千问 / 智谱 GLM 模板，可自定义端点 |
 | 工具 | 内置 38 个（19 只读 / 13 写 / 6 GUI 自动化）+ 外部 MCP Server |
 | 渲染 | react-markdown + KaTeX + Mermaid + ECharts + highlight.js |
 
-安装包约 17 MB（NSIS），前端构建产物约 8.7 MB。体积主要来自复用系统 WebView2，而不是捆绑 Chromium。
+安装包约 19 MB（NSIS）/ 26 MB（MSI），前端构建产物约 8.7 MB。体积主要来自复用系统 WebView2，而不是捆绑 Chromium。
 
 ---
 
@@ -56,7 +56,7 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 - 公式容错：除 `$...$`、`$$...$$`、`\(...\)`、`\[...\]` 外，以 `latex`、`tex`、`math` 作为语言标记的代码围栏也会被归一化为块级公式，避免模型用代码块输出公式。
 - 选中消息文字弹出复制 / 追问浮条。追问与引用是同一能力：引用片段以卡片形式显示在提问气泡上方，复用 Markdown 与 KaTeX 渲染；超过 5 行自动折叠，可展开。
 - 消息中的产物路径自动整理为列表视图（文件名、目录、类型、大小、打开/定位操作），超过 5 条折叠；正文只写文件名时，会结合上下文目录补全识别。
-- 上下文超出预算时自动压缩：先截断旧的工具结果，再把最早轮次交给模型摘要，尾部保留约 55% 预算；压缩只作用于本次请求，数据库中的历史消息不变。
+- 上下文超出预算时自动压缩并持久化：先截断旧的工具结果，再把最早轮次交给模型摘要，尾部保留约 55% 预算；压缩快照写入 `session_compactions` 表并维持水位线（`id > watermark` 单调推进），下一轮直接复用已压缩历史，避免重复计费。
 
 ### 项目
 
@@ -102,7 +102,7 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 ### MCP
 
 - 基于 rmcp 官方 SDK，支持 stdio（子进程）与 Streamable HTTP 两种传输。
-- 预置四个服务，均为运行时经 `npx` 启动（应用启动时拉起并预热工具列表），不随安装包分发：
+- 预置四个服务，均为运行时经 `npx` 启动（应用启动时按需拉起已启用的服务，不再预热全量），不随安装包分发：
   1. 项目文件 — `@modelcontextprotocol/server-filesystem`
   2. 长期记忆 — `@modelcontextprotocol/server-memory`
   3. 顺序思考 — `@modelcontextprotocol/server-sequential-thinking`
@@ -145,18 +145,12 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 - 委派：`delegate` 工具把独立子任务交给指定智能体，在隔离上下文中单轮执行并返回结果；子智能体没有工具权限，也不能再委派。
 - 设置页「角色设置」可编辑全局 base prompt，留空恢复默认。
 
-### 运行时预设
+### 工具与上下文加载
 
-预设是一份可合并的配置清单，用来决定工具集、上下文窗口、记忆策略、审批建议与检索参数。它不改变界面布局，也不替代全局权限档位。
-
-| 档位 | 定位 | 工具 | 上下文 | 检索 |
-|---|---|---|---|---|
-| 经济 | 快问快答、弱模型 | 7 个：`get_now` `fs_read` `fs_list` `doc_search` `doc_read` `present` `shell_exec` | 20 条 / 24k 字符 | 3-gram，Top-3 |
-| 标准 | 日常默认 | 15 个：常用读写、文档解析与媒体生成，无子代理、删除、GUI | 40 条 / 48k 字符 | 3-gram + 向量，Top-5 |
-| 深度 | 长文档、多步调研 | 全量 | 30 条 / 48k 字符 | 3-gram + 向量 + 重排，Top-5 |
-| 代码 | 改码与重构 | 全量 | 40 条 / 64k 字符 | 3-gram，Top-5 |
-
-合并优先级：会话钉住 > Agent 模板默认 > 全局默认。会话创建时钉住预设清单版本，老会话不随内置预设升级漂移，切换需显式确认。可在数据目录放置 `presets.json` 覆盖同名内置档或追加新档。同一设置页还可设定单次生成的总时长上限（1–1440 分钟），到点只结束本次生成，已输出内容保留。
+- 内置工具按需加载：`tool_load` 按分组（文档 / 表格 / 演示 / 媒体 / 文件 / 系统 / 代理）加载，只下发当前需要的工具规格。
+- 外部 MCP 工具按**单个工具**加载：首轮仅下发核心只读子集；完整清单通过 `tool_load` 的 `mcp:<server>` 或 `mcp__<server>__<tool>` 按需加载。工具名统一加命名空间，不同 server 的同名工具互不冲突。
+- 上下文窗口：会话 `max_context_messages=0` 表示「全部」，只按模型预算裁剪；超预算时后端自动把早期对话压缩为摘要并持久化，下一轮直接复用（不重复计费）。
+- 同一设置页可设定单次生成的总时长上限（1–1440 分钟），到点只结束本次生成，已输出内容保留。
 
 ### 用量与预算
 
@@ -164,12 +158,12 @@ myAgent 是一个基于 **Tauri 2 + Rust + React 19** 的桌面应用。它不�
 - 请求预算三层校准：
   1. 模型名匹配官方 BPE 词表（deepseek_v3/v4、qwen2、kimi_k2/k3、glm4/glm5、minimax_m2、o200k_base、cl100k_base 等），逐 token 计数；
   2. 取本会话最近 10 轮「真实 `input_tokens` / 估算值」的中位数作校准系数；
-  3. 与上一轮消息比较最长公共前缀，按服务商的缓存命中率预估分段缓存节省量。
+  3. 与上一轮消息比较最长公共前缀，按服务商的缓存命中率预估分段缓存节省量（DeepSeek ≈ 0.85、豆包 ≈ 0.90，未知或中转站按 0 保守处理，避免系统性低估成本）。
 - 每条请求在 `session_events` 中留档，`payload` 含 `est_tokens` 与 `breakdown`（`messages`、`tools`、`l1_raw`、`calibration`、`l2_calibrated`、`cache_saved`），可与 `usage_record` 的真实值逐轮对账。
 
 ### 设置
 
-- 分组：模型（服务商 / 智能体管理 / 记忆管理）、能力（联网搜索 / 媒体能力）、界面（外观与首页 / 导航菜单 / 运行时预设）、扩展（MCP 工具）、数据（用量统计 / 存储位置 / 关于）。
+- 分组：模型（服务商 / 智能体管理 / 记忆管理）、能力（联网搜索 / 媒体能力）、界面（外观与首页 / 导航菜单）、扩展（MCP 工具）、数据（用量统计 / 存储位置 / 关于）。
 - 外观可调整主题、字号与首页提示语；导航菜单可拖拽排序，并可隐藏记忆库、知识库、附件入口。
 - 存储位置支持整体迁移数据目录，迁移时同步改写数据库中附件记录的绝对路径。
 
@@ -260,7 +254,7 @@ object-src 'none'; base-uri 'none'; frame-ancestors 'none'
 | `pnpm dev` | 仅启动 Vite（端口 1420） |
 | `pnpm build` | `tsc -b` + `vite build` |
 | `pnpm preview` | 预览前端构建产物 |
-| `pnpm test` | `vitest run` |
+| `pnpm test` / `node node_modules/vitest/vitest.mjs run` | 运行前端 35 个测试文件 |
 | `pnpm audit` | `pnpm audit --audit-level=high` |
 | `pnpm tauri dev` | 开发模式（Vite 热更新 + Tauri 窗口） |
 | `pnpm tauri build` | 前端构建、Rust 编译、NSIS 打包 |
@@ -316,7 +310,7 @@ myAgent/
         ├── memory/               # memory.md 读写、版本、监听
         ├── websearch/            # 搜索引擎、抓取、正文提取
         ├── retrieval.rs          # 3-gram 展开、覆盖率打分、RRF
-        ├── presets/              # 内置四档预设与合并
+        ├── presets/              # 预留空壳(运行时预设已移除)
         ├── gui/                  # UI Automation 工具
         ├── doc/                  # 文档库切块与索引
         └── settings.rs
@@ -358,7 +352,7 @@ data/
 | `notes` | 知识库笔记 |
 | `doc_chunks` / `doc_chunks_fts` | 文档块与 FTS5 trigram 索引 |
 
-迁移全自动且幂等：磁盘 `user_version` 落后时按版本顺序补迁移，存量数据回填；索引表缺失或分词器过旧会重建。深度研究、学习中心、翻译、绘画页面已从界面移除，其中研究相关的 `research_sessions` 表在 V23 迁移中删除；`data/research/**`、`data/images/**` 等历史文件仍保留在数据目录，可自行删除。
+迁移全自动且幂等：磁盘 `user_version` 落后时按版本顺序补迁移，存量数据回填；索引表缺失或分词器过旧会重建。数据库升级前自动 VACUUM 快照（保留最近 2 份），异常可手工回滚。
 
 记忆与笔记均为纯文本，可用任意编辑器修改。备份整个数据目录即可迁移全部数据。
 
@@ -372,7 +366,7 @@ data/
 | `Ctrl + S`（笔记页） | 保存笔记 |
 | `Esc` | 关闭搜索面板 / 取消重命名 |
 
-鼠标操作：双击会话标题重命名；双击托盘图标打开小窗；点击托盘图标恢复主窗口。
+鼠标操作：双击会话标题重命名；左键双击托盘图标打开小窗；左键单击托盘图标无动作；右键托盘图标弹出自定义菜单（显示主窗 / 小窗 / 退出）。
 
 ---
 

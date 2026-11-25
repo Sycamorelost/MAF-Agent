@@ -10,15 +10,21 @@
 //! - 表格用固定列宽 + 三线表(学术模板)或浅灰网格表(通用模板)。
 //!
 //! 职责拆分:
-//! - `document.rs`:文档装配、封面、页眉页脚、块渲染与行内文本 run;
-//! - `table.rs`:表格结构、表头/单元格样式与列宽分配;
-//! - `image.rs`:图片定位、缩放与段落封装;
-//! - `styles.rs`:Word 样式表。
+//! - `document.rs`:装配调度(封面/目录/分节)与打包;
+//! - `body.rs`:块 → 段落、行内 run、书签挂载;
+//! - `field.rs`:REF/SEQ/TOC 域;
+//! - `numbering.rs`:原生多级编号(`w:numPr`);
+//! - `section.rs`:封面/前置/正文/附录分节参数;
+//! - `table.rs` / `image.rs` / `styles.rs`:表格、图片、样式表。
 
+mod body;
 mod document;
+mod field;
 mod front_matter;
 mod image;
 mod metrics;
+mod numbering;
+mod section;
 mod styles;
 mod table;
 

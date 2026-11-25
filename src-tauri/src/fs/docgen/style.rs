@@ -3,6 +3,9 @@
 //! 只描述「应该长什么样」,不依赖 docx-rs;由 `writer` 翻译成 Word 样式。
 //! 数值单位:字号为半点(half-point,12pt=24),间距为 twip(1pt=20)。
 
+pub mod brand;
+
+use super::FormulaMode;
 use super::profile::Profile;
 
 /// A4 纸张宽度(twip)。
@@ -13,8 +16,6 @@ pub const PAGE_H: u32 = 16_838;
 pub const MARGIN_TB: i32 = 1_440;
 /// 左右页边距 3cm。
 pub const MARGIN_LR: i32 = 1_701;
-/// 默认正文可用宽度(twip)= A4 − 左右边距。
-pub const CONTENT_W: usize = (PAGE_W as i32 - 2 * MARGIN_LR) as usize;
 
 /// 标题自动编号方案。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -33,12 +34,12 @@ pub enum HeadingNumbering {
 /// 一套文档版式。
 #[derive(Debug, Clone)]
 pub struct DocStyle {
-    /// 西文字体
-    pub latin: &'static str,
+    /// 西文字体(可来自参数包/reference DOCX 导入)
+    pub latin: String,
     /// 正文中文字体
-    pub east_asia: &'static str,
+    pub east_asia: String,
     /// 标题中文字体
-    pub heading_east_asia: &'static str,
+    pub heading_east_asia: String,
     /// 正文字号(半点)
     pub body_size: usize,
     /// 正文行距(240 = 单倍)
@@ -71,12 +72,18 @@ pub struct DocStyle {
     pub margin_right: i32,
     /// 标题自动编号
     pub numbering: HeadingNumbering,
+    /// 页面宽度(twip),reference DOCX 可覆盖
+    pub page_w: u32,
+    /// 页面高度(twip)
+    pub page_h: u32,
     /// 是否三线表
     pub three_line: bool,
     /// 表头是否加浅色底纹(通用文档用)
     pub header_fill: bool,
     /// 正文是否两端对齐(中文报告默认)
     pub justify: bool,
+    /// 公式落地方式(默认 OMML)
+    pub formula_mode: FormulaMode,
 }
 
 impl DocStyle {
@@ -84,9 +91,9 @@ impl DocStyle {
         match profile {
             // 中文报告/论文:宋体小四、1.5 倍行距、首行缩进 2 字符、黑体标题、三线表
             Profile::Experiment | Profile::Paper | Profile::Practice => DocStyle {
-                latin: "Times New Roman",
-                east_asia: "宋体",
-                heading_east_asia: "黑体",
+                latin: "Times New Roman".into(),
+                east_asia: "宋体".into(),
+                heading_east_asia: "黑体".into(),
                 body_size: 24,
                 body_line: 360,
                 fixed_line: None,
@@ -103,15 +110,18 @@ impl DocStyle {
                 margin_left: MARGIN_LR,
                 margin_right: MARGIN_LR,
                 numbering: HeadingNumbering::None,
+                page_w: PAGE_W,
+                page_h: PAGE_H,
                 three_line: profile.three_line_table(),
                 header_fill: !profile.three_line_table(),
                 justify: true,
+                formula_mode: FormulaMode::Omml,
             },
             // 通用文档:微软雅黑 11pt、1.15 倍行距、无首行缩进、网格表
             Profile::General => DocStyle {
-                latin: "Calibri",
-                east_asia: "微软雅黑",
-                heading_east_asia: "微软雅黑",
+                latin: "Calibri".into(),
+                east_asia: "微软雅黑".into(),
+                heading_east_asia: "微软雅黑".into(),
                 body_size: 22,
                 body_line: 276,
                 fixed_line: None,
@@ -128,16 +138,19 @@ impl DocStyle {
                 margin_left: MARGIN_LR,
                 margin_right: MARGIN_LR,
                 numbering: HeadingNumbering::None,
+                page_w: PAGE_W,
+                page_h: PAGE_H,
                 three_line: false,
                 header_fill: true,
                 justify: false,
+                formula_mode: FormulaMode::Omml,
             },
         }
     }
 
     /// 当前版式的正文可用宽度(twip)。
     pub fn content_w(&self) -> usize {
-        (PAGE_W as i32 - self.margin_left - self.margin_right).max(0) as usize
+        (self.page_w as i32 - self.margin_left - self.margin_right).max(0) as usize
     }
 }
 
@@ -153,7 +166,7 @@ mod tests {
         assert_eq!(s.body_indent, 480); // 2 字符
         assert!(s.three_line);
         assert_eq!(s.east_asia, "宋体");
-        assert_eq!(s.content_w(), CONTENT_W);
+        assert_eq!(s.content_w(), 8504);
     }
 
     #[test]
@@ -164,8 +177,4 @@ mod tests {
         assert!(s.header_fill);
     }
 
-    #[test]
-    fn content_width_matches_a4_minus_margins() {
-        assert_eq!(CONTENT_W, 8504);
-    }
 }

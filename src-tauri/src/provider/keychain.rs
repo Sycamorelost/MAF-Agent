@@ -62,15 +62,15 @@ fn restrict_dir_permissions(dir: &std::path::Path) -> Result<(), String> {
         .map_err(|e| format!("chmod 0700 {}: {e}", dir.display()))
 }
 
-/// Windows:用 `icacls` 断开 ACL 继承,只保留当前用户的完全控制。
-/// 只处理目录本身:旧实现对 `/T` 子文件套用 `(OI)(CI)` 时,部分文件会留下空 ACL
-/// (读取报 os error 5),因此改为目录设置继承规则 + 逐个文件幂等补齐。
+/// Windows:用 `icacls` 断开 ACL 继承;只处理目录本身,并逐个文件幂等补齐(旧实现会留下空 ACL)。
 #[cfg(target_os = "windows")]
 fn restrict_dir_permissions(dir: &std::path::Path) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
     let user = std::env::var("USERNAME").map_err(|_| "缺少 USERNAME 环境变量".to_string())?;
     let status = std::process::Command::new("icacls")
         .arg(dir)
         .args(["/inheritance:r", "/grant:r", &format!("{user}:(OI)(CI)F"), "/Q"])
+        .creation_flags(0x0800_0000)
         .status()
         .map_err(|e| format!("运行 icacls 失败: {e}"))?;
     if !status.success() {
@@ -91,12 +91,12 @@ fn restrict_dir_permissions(dir: &std::path::Path) -> Result<(), String> {
 /// Windows:给单个文件补当前用户完全控制(不带继承标记,避免空 ACL)。
 #[cfg(target_os = "windows")]
 fn grant_current_user(path: &std::path::Path) -> bool {
-    let Ok(user) = std::env::var("USERNAME") else {
-        return false;
-    };
+    use std::os::windows::process::CommandExt;
+    let Ok(user) = std::env::var("USERNAME") else { return false; };
     std::process::Command::new("icacls")
         .arg(path)
         .args(["/inheritance:r", "/grant:r", &format!("{user}:F"), "/Q"])
+        .creation_flags(0x0800_0000)
         .status()
         .map(|s| s.success())
         .unwrap_or(false)

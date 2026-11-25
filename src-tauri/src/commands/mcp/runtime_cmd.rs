@@ -1,9 +1,7 @@
 //! MCP 运行时相关命令:启动/停止 server、列工具、带审批的工具调用、白名单 shell。
 
 use super::McpState;
-use crate::mcp::{
-    self, ApprovalResult, ApprovalStore, McpRuntime, McpServerConfig, McpToolCall,
-};
+use crate::mcp::{self, ApprovalResult, ApprovalStore, McpRuntime, McpServerConfig, McpToolCall};
 use crate::paths::data_dir as data_dir_fn;
 use tauri::{AppHandle, Emitter, State};
 

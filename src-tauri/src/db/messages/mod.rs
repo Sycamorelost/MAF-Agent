@@ -19,7 +19,7 @@ pub use crud::{
     delete_from_on, delete_one, delete_one_on, get_by_id, get_by_id_on, update_content,
 };
 #[allow(unused_imports)]
-pub use search::{list, list_on, list_page, list_page_on, recent, recent_on};
+pub use search::{after_id, after_id_on, list, list_on, list_page, list_page_on, recent_on};
 
 use serde::{Deserialize, Serialize};
 
@@ -266,6 +266,22 @@ mod tests {
         let all = recent_on(&conn, "s1", "main", 99).unwrap();
         assert_eq!(all.len(), 4);
         assert_eq!(all[0].id, a);
+    }
+
+    #[test]
+    fn chain_after_id_returns_gap_free_batches() {
+        let conn = setup();
+        let _a = add(&conn, "user", "问一", "main");
+        let b = add(&conn, "assistant", "答一", "main");
+        let c = add(&conn, "user", "问二", "main");
+        let d = add(&conn, "assistant", "答二", "main");
+
+        // 水位线 = b:按时间正序返回其后消息,不是"最近 N 条"
+        let first = after_id_on(&conn, "s1", "main", b, 2).unwrap();
+        assert_eq!(ids(&first), vec![c, d]);
+        // 小批量分批消费:水位线推进到 c,下一批不会跳过 d
+        let next = after_id_on(&conn, "s1", "main", c, 2).unwrap();
+        assert_eq!(ids(&next), vec![d]);
     }
 
     #[test]

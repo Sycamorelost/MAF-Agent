@@ -15,6 +15,7 @@ use std::sync::LazyLock;
 use crate::provider::{ToolDef, ToolFunctionDef};
 
 mod media;
+mod meta;
 mod readonly;
 mod write;
 

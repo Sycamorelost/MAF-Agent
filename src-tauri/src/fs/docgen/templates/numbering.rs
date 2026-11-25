@@ -2,7 +2,57 @@
 //!
 //! 只做字符串组装,不关心样式;由 writer 在写标题前调用。
 
+use super::super::markdown::Block;
 use super::super::style::HeadingNumbering;
+
+/// 预计算每级标题编号;用户已手写编号的标题返回 None。
+///
+/// writer 与引用扫描共用本函数,保证正文编号与「第 N 章」引用一致。
+pub fn heading_prefixes(blocks: &[Block], kind: HeadingNumbering) -> Vec<Option<String>> {
+    if kind == HeadingNumbering::None {
+        return vec![None; blocks.len()];
+    }
+    let mut counters = [0usize; 4];
+    // 以正文中最浅的标题层级作为编号第 1 级(常见写法从 `##` 开始)
+    let min_level = blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Heading { level, .. } if *level <= 4 => Some(*level),
+            _ => None,
+        })
+        .min()
+        .unwrap_or(1);
+    blocks
+        .iter()
+        .map(|b| match b {
+            Block::Heading { level, text } if *level <= 4 => {
+                let l = level.saturating_sub(min_level).min(3);
+                counters[l] += 1;
+                for c in counters.iter_mut().skip(l + 1) {
+                    *c = 0;
+                }
+                if has_manual(text) {
+                    None
+                } else {
+                    Some(prefix(kind, &counters, l + 1))
+                }
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// 标题层级归一化:最浅标题视为第 1 级,`level` 为 1 起。
+pub fn top_level(blocks: &[Block]) -> usize {
+    blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Heading { level, .. } if *level <= 4 => Some(*level),
+            _ => None,
+        })
+        .min()
+        .unwrap_or(1)
+}
 
 /// 生成某一级标题的前缀。`counters` 为各一级计数(0 起不含,调用方已自增)。
 pub fn prefix(kind: HeadingNumbering, counters: &[usize; 4], level: usize) -> String {
@@ -38,7 +88,9 @@ pub fn has_manual(text: &str) -> bool {
         return false;
     };
     if "一二三四五六七八九十".contains(first) {
-        return chars.next().is_some_and(|c| c == '、' || c == ' ' || c == '.');
+        return chars
+            .next()
+            .is_some_and(|c| c == '、' || c == ' ' || c == '.');
     }
     if first == '（' || first == '(' {
         return true;

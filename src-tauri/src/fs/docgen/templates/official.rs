@@ -8,9 +8,9 @@ const fn mm(v: i32) -> i32 {
 }
 
 pub(super) fn apply(s: &mut DocStyle) {
-    s.latin = "Times New Roman";
-    s.east_asia = "仿宋_GB2312";
-    s.heading_east_asia = "方正小标宋简体";
+    s.latin = "Times New Roman".into();
+    s.east_asia = "仿宋_GB2312".into();
+    s.heading_east_asia = "方正小标宋简体".into();
     s.body_size = 32; // 三号 16pt
     s.body_indent = 640; // 首行缩进 2 字符
     s.body_line = 580;

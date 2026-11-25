@@ -4,8 +4,10 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
+use super::chart::ChartStyle;
+use super::diagram::DiagramSpec;
 use super::slides_parse::parse_args;
 use super::slides_render::build_and_write;
 use super::slides_templates::SlideTemplate;
@@ -13,7 +15,8 @@ use super::slides_templates::SlideTemplate;
 /// 指标卡上限(解析与渲染共用)。
 pub(super) const MAX_KPIS: usize = 4;
 
-/// 单页版式:段落型 / 两栏 / 右图 / 表格 / 图表 / 指标卡 / 章节过渡 / 结束页。
+/// 单页版式:段落型 / 两栏 / 右图 / 表格 / 图表 / 指标卡 / 结构图 /
+/// 卡片 / 引用 / 章节过渡 / 结束页。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Layout {
     Bullets,
@@ -22,6 +25,9 @@ pub(super) enum Layout {
     Table,
     Chart,
     Kpi,
+    Diagram,
+    Cards,
+    Quote,
     Section,
     Closing,
 }
@@ -35,6 +41,9 @@ impl Layout {
             "table" | "data" => Layout::Table,
             "chart" | "trend" | "data-chart" => Layout::Chart,
             "kpi" | "metrics" | "numbers" => Layout::Kpi,
+            "diagram" | "structure" | "flow" => Layout::Diagram,
+            "cards" | "card" | "grid" | "reading-notes" => Layout::Cards,
+            "quote" | "citation" | "pull-quote" => Layout::Quote,
             "section" | "divider" => Layout::Section,
             "closing" | "end" | "thanks" => Layout::Closing,
             _ => return None,
@@ -43,25 +52,45 @@ impl Layout {
     }
 }
 
+#[derive(Debug, Clone, Default)]
 pub(super) struct SlideTable {
     pub(super) header: Vec<String>,
     pub(super) rows: Vec<Vec<String>>,
 }
 
 /// 指标卡:一个大数字 + 一行解释,最多 4 张并排。
+#[derive(Debug, Clone)]
 pub(super) struct Kpi {
     pub(super) value: String,
     pub(super) label: String,
 }
 
-/// 原生图表:柱/折线/饼/环形/面积。
+/// 原生图表:柱/折线/饼/环形/面积;unit/source 用于图表页脚。
+#[derive(Debug, Clone)]
 pub(super) struct SlideChart {
     pub(super) kind: String,
     pub(super) title: String,
     pub(super) categories: Vec<String>,
     pub(super) series: Vec<(String, Vec<f64>)>,
+    pub(super) unit: String,
+    pub(super) source: String,
 }
 
+/// 卡片:读书卡片 / 要点卡,2×N 网格排布。
+#[derive(Debug, Clone, Default)]
+pub(super) struct Card {
+    pub(super) title: String,
+    pub(super) text: String,
+}
+
+/// 引用页:引文 + 出处。
+#[derive(Debug, Clone, Default)]
+pub(super) struct Quote {
+    pub(super) text: String,
+    pub(super) source: String,
+}
+
+#[derive(Debug, Clone)]
 pub(super) struct Slide {
     pub(super) title: String,
     pub(super) bullets: Vec<String>,
@@ -71,6 +100,20 @@ pub(super) struct Slide {
     pub(super) table: Option<SlideTable>,
     pub(super) kpis: Vec<Kpi>,
     pub(super) chart: Option<SlideChart>,
+    /// 图表渲染方式:默认 native(兼容旧输出)
+    pub(super) chart_style: ChartStyle,
+    /// raster 模式的严格校验结果
+    pub(super) raster_chart: Option<super::chart::ChartSpec>,
+    /// 结构图(Mermaid 子集)
+    pub(super) diagram: Option<DiagramSpec>,
+    /// 卡片内容(读书卡片等)
+    pub(super) cards: Vec<Card>,
+    /// 引用页内容
+    pub(super) quote: Option<Quote>,
+    /// 公式原文(TeX),渲染时并入讲稿备注
+    pub(super) formula_note: Option<String>,
+    /// 预检后的正文字号
+    pub(super) body_pt: u32,
 }
 
 pub(super) struct Deck {
@@ -84,13 +127,23 @@ pub(super) struct Deck {
     pub(super) template: Option<&'static SlideTemplate>,
     /// 结构/数据缺口提示(非阻断)
     pub(super) warnings: Vec<String>,
+    /// 预检诊断(阻断级,但产物仍保留)
+    pub(super) diagnostics: Vec<String>,
+    /// 自动分页记录:(原页 1-based, 续页数)
+    pub(super) page_split: Vec<(usize, usize)>,
 }
 
 pub(crate) async fn exec(args: &Value, session_id: Option<&str>) -> (String, bool) {
-    let deck = match parse_args(args, session_id) {
+    let mut deck = match parse_args(args, session_id) {
         Ok(d) => d,
         Err(e) => return (format!("演示文稿生成失败:{e}"), false),
     };
+    // 出稿预检:超容量要点自动分页、字号降级与诊断,在渲染前回填,续页也参与渲染
+    let (slides, report) = super::slides_preflight::run(&deck.slides, &deck.theme);
+    deck.slides = slides;
+    deck.warnings.extend(report.warnings);
+    deck.diagnostics = report.diagnostics;
+    deck.page_split = report.page_split;
     match build_and_write(&deck, session_id) {
         Ok(msg) => {
             let mut msg = msg;
@@ -101,6 +154,22 @@ pub(crate) async fn exec(args: &Value, session_id: Option<&str>) -> (String, boo
                 msg.push_str(&format!("模板检查:{}", deck.warnings.join(";")));
                 msg.push('\n');
                 msg.push_str(&t.plan_hint());
+            }
+            if !deck.warnings.is_empty() || !deck.diagnostics.is_empty() {
+                let split: usize = deck.page_split.iter().map(|(_, n)| n).sum();
+                let mut line = format!(
+                    "预检:{} 条告警 / {} 条诊断",
+                    deck.warnings.len(),
+                    deck.diagnostics.len()
+                );
+                if split > 0 {
+                    line.push_str(&format!(",自动分页 {split} 页"));
+                }
+                if let Some(first) = deck.diagnostics.first().or_else(|| deck.warnings.first()) {
+                    line.push_str(&format!(";首条:{first}"));
+                }
+                msg.push('\n');
+                msg.push_str(&line);
             }
             (msg, true)
         }
@@ -169,173 +238,4 @@ fn write_outline(deck: &Deck) -> Result<String, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn ws() -> PathBuf {
-        let p = std::env::temp_dir().join(format!("maf-slides-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&p).unwrap();
-        p
-    }
-
-    fn deck_in(root: &Path) -> Deck {
-        Deck {
-            title: "季度复盘".into(),
-            subtitle: Some("2026 Q3".into()),
-            theme: "corporate".into(),
-            root: root.to_path_buf(),
-            target: root.join("deck.pptx"),
-            slides: vec![
-                Slide {
-                    title: "营收概览".into(),
-                    bullets: vec!["营收同比 +12%".into(), "成本下降 3%".into()],
-                    image: None,
-                    notes: Some("先讲大盘".into()),
-                    layout: Layout::Bullets,
-                    table: None,
-                    kpis: Vec::new(),
-                    chart: None,
-                },
-                Slide {
-                    title: "下一步".into(),
-                    bullets: vec!["推进交付".into()],
-                    image: None,
-                    notes: None,
-                    layout: Layout::Bullets,
-                    table: None,
-                    kpis: Vec::new(),
-                    chart: None,
-                },
-            ],
-            template: None,
-            warnings: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn parses_kpi_and_chart() {
-        let root = ws();
-        let args = json!({
-            "title": "经营看板",
-            "path": root.join("k.pptx").to_string_lossy(),
-            "slides": [
-                {
-                    "title": "核心指标",
-                    "layout": "kpi",
-                    "kpis": [
-                        { "value": "1.2 亿", "label": "营业收入" },
-                        { "value": "+18%", "label": "同比增长" }
-                    ]
-                },
-                {
-                    "title": "月度趋势",
-                    "layout": "chart",
-                    "chart": {
-                        "type": "line",
-                        "categories": ["1月", "2月", "3月"],
-                        "series": [{ "name": "营收", "values": [10, 12, 15] }]
-                    }
-                }
-            ]
-        });
-        let deck = parse_args(&args, None).unwrap();
-        assert_eq!(deck.slides[0].layout, Layout::Kpi);
-        assert_eq!(deck.slides[0].kpis.len(), 2);
-        assert_eq!(deck.slides[1].layout, Layout::Chart);
-        let c = deck.slides[1].chart.as_ref().unwrap();
-        assert_eq!(c.categories.len(), 3);
-        assert_eq!(c.series[0].1, vec![10.0, 12.0, 15.0]);
-        build_and_write(&deck, None).unwrap();
-        // 图表页与指标卡页都能正常出包
-        let text = crate::fs::formats::pptx_text(&deck.target).unwrap();
-        assert!(text.contains("核心指标"), "读回内容: {text}");
-    }
-
-    #[test]
-    fn applies_template_theme_and_returns_warnings() {
-        let root = ws();
-        let args = json!({
-            "title": "论文答辩",
-            "path": root.join("d.pptx").to_string_lossy(),
-            "template": "defense",
-            "slides": [
-                { "title": "研究背景", "bullets": ["问题一"] },
-                { "title": "方法", "bullets": ["方案"] }
-            ]
-        });
-        let deck = parse_args(&args, None).unwrap();
-        assert_eq!(deck.theme, "academic");
-        assert_eq!(deck.template.unwrap().id, "defense");
-        assert!(deck.warnings.iter().any(|w| w.contains("页数")));
-        assert!(deck.warnings.iter().any(|w| w.contains("图表")));
-    }
-
-    #[test]
-    fn explicit_theme_overrides_template() {
-        let root = ws();
-        let args = json!({
-            "title": "组会",
-            "path": root.join("g.pptx").to_string_lossy(),
-            "template": "group-meeting",
-            "theme": "dark",
-            "slides": [{ "title": "进展", "bullets": ["完成 A"] }]
-        });
-        assert_eq!(parse_args(&args, None).unwrap().theme, "dark");
-    }
-
-    #[test]
-    fn parses_layout_and_table() {
-        let root = ws();
-        let args = json!({
-            "title": "数据看板",
-            "path": root.join("t.pptx").to_string_lossy(),
-            "slides": [{
-                "title": "指标",
-                "layout": "table",
-                "table": { "headers": ["指标", "值"], "rows": [["营收", "120"]] }
-            }]
-        });
-        let deck = parse_args(&args, None).unwrap();
-        assert_eq!(deck.slides[0].layout, Layout::Table);
-        let t = deck.slides[0].table.as_ref().unwrap();
-        assert_eq!(t.header, vec!["指标".to_string(), "值".to_string()]);
-        assert_eq!(t.rows[0], vec!["营收".to_string(), "120".to_string()]);
-        // 版式与表格都能正常出包
-        build_and_write(&deck, None).unwrap();
-        let text = crate::fs::formats::pptx_text(&deck.target).unwrap();
-        assert!(text.contains("营收"), "读回内容: {text}");
-    }
-
-    #[test]
-    fn build_deck_roundtrips_text() {
-        let root = ws();
-        let deck = deck_in(&root);
-        build_and_write(&deck, None).unwrap();
-        let text = crate::fs::formats::pptx_text(&deck.target).unwrap();
-        assert!(text.contains("营收概览"), "读回内容: {text}");
-        assert!(text.contains("营收同比 +12%"));
-        assert!(text.contains("下一步"));
-    }
-
-    #[test]
-    fn outline_contains_titles_and_bullets() {
-        let root = ws();
-        let md = outline_markdown(&deck_in(&root));
-        assert!(md.contains("# 季度复盘"));
-        assert!(md.contains("## 营收概览"));
-        assert!(md.contains("- 成本下降 3%"));
-    }
-
-    #[test]
-    fn rejects_too_many_slides_and_bad_title() {
-        let root = ws();
-        let too_many = json!({
-            "title": "x",
-            "path": root.join("x.pptx").to_string_lossy(),
-            "slides": (0..31).map(|i| json!({"title": format!("p{i}")})).collect::<Vec<_>>()
-        });
-        assert!(parse_args(&too_many, None).is_err());
-        let empty_title = json!({"title": "  ", "slides": [{"title": "a"}]});
-        assert!(parse_args(&empty_title, None).is_err());
-    }
-}
+mod tests;

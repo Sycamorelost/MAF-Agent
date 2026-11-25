@@ -1,23 +1,16 @@
 import type { ApprovalMode, McpConfig } from '../../lib/ipc/mcp';
-import type { AppSettings } from '../../lib/ipc/memory';
 
 /** 工具能力卡片:下发开关 + 当前生效能力摘要(随审批模式实时变化)。 */
 export function ToolCapabilityCard({
   cfg,
-  settings,
   mode,
   onToggleTools,
   onToggleBuiltin,
-  onToggleBareMode,
-  onSetHumanVoice,
 }: {
   cfg: McpConfig;
-  settings: AppSettings | null;
   mode: ApprovalMode;
   onToggleTools: (enabled: boolean) => void;
   onToggleBuiltin: (enabled: boolean) => void;
-  onToggleBareMode: (enabled: boolean) => void;
-  onSetHumanVoice: (level: AppSettings['human_voice_level']) => void;
 }) {
   const fullTrust = mode === 'full';
   const enabledServers = cfg.servers.filter((s) => s.enabled).length;
@@ -38,51 +31,38 @@ export function ToolCapabilityCard({
           checked={!!cfg.builtin_tools}
           onChange={(e) => onToggleBuiltin(e.target.checked)}
         />
-        <span>只读内置工具(取时间 / 列目录 / 读文件 / 检索 / 提取正文 / 列 zip)</span>
+        <span>内置工具总开关(文件 / 系统 / 文档 / 任务清单 / 交付卡)</span>
       </label>
-      <label className="mcp-builtin-toggle">
-        <input
-          type="checkbox"
-          checked={!!settings?.bare_mode}
-          onChange={(e) => onToggleBareMode(e.target.checked)}
-        />
-        <span>自由人格模式:不追加「你是 myAgent 助手」身份锚(物理契约仍保留)</span>
-      </label>
-      <div className="mcp-builtin-toggle" style={{ flexWrap: 'wrap', cursor: 'default' }}>
-        <span>文字质感(去 AI 味)</span>
-        <select
-          className="pg-field"
-          style={{ width: 'auto', minWidth: 240 }}
-          value={settings?.human_voice_level ?? 'standard'}
-          disabled={!settings}
-          onChange={(e) => onSetHumanVoice(e.target.value as AppSettings['human_voice_level'])}
-        >
-          <option value="standard">标准(推荐):去套话、拔高与客服腔</option>
-          <option value="light">轻档:只去套话与拔高,保留原有结构</option>
-          <option value="off">关闭:完全按智能体原提示输出</option>
-        </select>
-      </div>
-      <div className="mcp-time-hint" style={{ marginTop: 'var(--space-1)' }}>
-        仅对写作 / 问答 / 邮件 / 周报 / 报告等生成型智能体生效;
-        代码、翻译、JSON、合规等场景自动跳过。事实、数据、引用与术语不受影响。
-      </div>
 
       <div className="mcp-cap-list">
         <div className="mcp-cap-row">
           <span className="mcp-cap-name">文件</span>
-          <b className="mcp-cap-val">全盘增删改查</b>
+          <b className="mcp-cap-val">
+            {!cfg.builtin_tools ? '关闭' : cfg.tools_enabled ? '全盘增删改查' : '只读'}
+          </b>
           <span className="mcp-cap-desc">
-            无沙箱、无需授权目录:绝对路径直达本机任意位置,相对路径按文件工作区解析;
-            覆盖 / 删除前自动备份,不设文件名黑名单
+            {!cfg.builtin_tools
+              ? '内置工具总开关已关闭,不向模型下发文件工具'
+              : cfg.tools_enabled
+                ? '无沙箱、无需授权目录:绝对路径直达本机任意位置,相对路径按文件工作区解析;覆盖 / 删除前自动备份,不设文件名黑名单'
+                : '仅只读:列目录 / 读文件 / 检索 / 提取正文;写入与删除需开启上方「写入 / 执行工具」'}
           </span>
         </div>
         <div className="mcp-cap-row">
           <span className="mcp-cap-name">系统命令</span>
-          <b className="mcp-cap-val">{fullTrust ? '任意命令' : '只读白名单'}</b>
+          <b className="mcp-cap-val">
+            {!cfg.builtin_tools || !cfg.tools_enabled
+              ? '关闭'
+              : fullTrust
+                ? '任意命令'
+                : '只读白名单'}
+          </b>
           <span className="mcp-cap-desc">
-            {fullTrust
-              ? '完全信任:shell 可执行任意命令,含环境变量 / 服务 / 注册表等系统环境操作'
-              : '受限模式:仅只读命令白名单(路径不限目录),解释器与写操作被拒绝;需要系统级操作请切换到「完全信任」'}
+            {!cfg.builtin_tools || !cfg.tools_enabled
+              ? '需同时开启「内置工具」与「写入 / 执行工具」'
+              : fullTrust
+                ? '完全信任:shell 可执行任意命令,含环境变量 / 服务 / 注册表等系统环境操作'
+                : '受限模式:仅只读命令白名单(路径不限目录),解释器与写操作被拒绝;需要系统级操作请切换到「完全信任」'}
           </span>
         </div>
         <div className="mcp-cap-row">
@@ -110,10 +90,6 @@ export function ToolCapabilityCard({
         </div>
       </div>
 
-      <div className="mcp-time-hint">
-        当前底层提示词:{settings?.bare_mode ? '物理契约(身份锚已关闭)' : '身份锚 + 物理契约'}。
-        正文由应用统一维护,此处不再重复展示。
-      </div>
       <div className="mcp-time-hint">
         工具总开关只控制是否随请求下发工具;审批档位(逐次审批 / 工作区 / 完全信任)独立控制执行前是否询问,两者互不影响。
       </div>

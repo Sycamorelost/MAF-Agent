@@ -192,7 +192,11 @@ mod tests {
         assert_eq!(hits[0].name, "report.pdf");
         assert_eq!(hits[0].session_title, "季度复盘");
         assert_eq!(hits[0].branch_id, "main");
-        assert!(hits[0].snippet.contains("营收"), "片段: {}", hits[0].snippet);
+        assert!(
+            hits[0].snippet.contains("营收"),
+            "片段: {}",
+            hits[0].snippet
+        );
     }
 
     #[test]

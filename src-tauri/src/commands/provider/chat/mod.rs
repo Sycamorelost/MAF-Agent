@@ -8,7 +8,7 @@
 
 // 命令子模块需对外可见:命令注册表使用子模块原始路径(Tauri 宏要求真实模块路径)。
 pub(crate) mod command;
-mod context;
+pub(crate) mod context;
 mod failover;
 mod reasoning;
 

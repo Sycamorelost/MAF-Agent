@@ -22,8 +22,50 @@ pub struct FileEntry {
 pub struct WriteResult {
     pub rel: String,
     pub bytes: u64,
+    /// 写入内容的行数(供模型核对是否写全;二进制/结构化导出为 0)
+    pub lines: u64,
     /// 覆盖已有文件时生成的备份 id(新建文件为 null)
     pub backup_id: Option<String>,
+}
+
+/// 统计文本行数(`"a\n"` 计 1 行,空串计 0 行)。
+pub(crate) fn count_lines(s: &str) -> u64 {
+    s.lines().count() as u64
+}
+
+/// 同目录临时文件路径(保证 rename 不跨卷)。
+pub(crate) fn temp_path(path: &Path) -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "out".into());
+    path.with_file_name(format!(
+        ".{name}.tmp-{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ))
+}
+
+/// 把已写好的临时文件 rename 到目标;失败时清理临时文件。
+pub(crate) fn commit_temp(tmp: &Path, path: &Path) -> Result<(), String> {
+    if let Err(e) = std::fs::rename(tmp, path) {
+        let _ = std::fs::remove_file(tmp);
+        return Err(format!("落盘失败: {e}"));
+    }
+    Ok(())
+}
+
+/// 原子写:先写同目录临时文件,再 rename 覆盖目标;失败时清理临时文件。
+/// 避免进程崩溃/断电在目标路径留下半截文件。
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let tmp = temp_path(path);
+    if let Err(e) = std::fs::write(&tmp, bytes) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("写入临时文件失败: {e}"));
+    }
+    commit_temp(&tmp, path)
 }
 
 #[derive(Debug, Clone, Deserialize)]

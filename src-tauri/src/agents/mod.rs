@@ -23,7 +23,10 @@ pub use builtin::builtin_templates;
 #[allow(unused_imports)]
 pub use storage::{export_agent, import_agent, load_decoupled, remove_decoupled, save_decoupled};
 #[allow(unused_imports)]
-pub use store::{find, list_all, load_custom, remove_custom, upsert_custom};
+pub use store::{
+    find, list_all, load_custom, remove_custom, remove_template, restore_deleted_builtins,
+    upsert_custom, DEFAULT_ASSISTANT_ID,
+};
 #[allow(unused_imports)]
 pub use template::{AgentTemplate, CATEGORIES, render_prompt};
 // 测试与兄弟子模块使用的默认值构造器(不扩大为 pub)。

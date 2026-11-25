@@ -259,12 +259,6 @@ export function useGeneralSettings() {
     void persistSettings({ ...settings, default_workbench: mode });
   };
 
-  /** 设置全局默认运行时预设(D19),即时保存;新建会话钉住该档,已有会话不变。 */
-  const setDefaultPreset = (presetId: string) => {
-    if (!settings) return;
-    void persistSettings({ ...settings, default_preset: presetId });
-  };
-
   /** 拖拽排序:把 fromKey 移动到 toKey 所在的位置(前后两个方向都支持)。 */
   const reorderNavItem = (fromKey: string, toKey: string) => {
     if (!settings) return;
@@ -307,6 +301,5 @@ export function useGeneralSettings() {
     reorderNavItem,
     toggleMinimizeToTray,
     setDefaultWorkbench,
-    setDefaultPreset,
   };
 }

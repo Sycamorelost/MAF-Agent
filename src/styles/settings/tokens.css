@@ -444,26 +444,6 @@
 .set-note svg { color: var(--brand); margin-top: 0; flex: none; }
 .set-note b { color: var(--text-2); font-weight: 600; }
 
-/* ---------- 运行时预设(PresetsView):四档卡 + 能力对照 ---------- */
-.preset-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
-.preset-card {
-  text-align: left; display: flex; flex-direction: column; gap: var(--space-1);
-  padding: var(--space-3); border-radius: var(--radius-m);
-  border: 1px solid var(--border); background: var(--bg-surface); cursor: pointer;
-}
-.preset-card:hover { border-color: var(--border-strong); }
-.preset-card.on { border-color: var(--brand-line); background: var(--brand-soft); }
-.preset-card-h {
-  display: flex; align-items: center; gap: var(--space-2);
-  font-size: var(--font-caption); font-weight: 600; color: var(--text-1);
-}
-.preset-card-h .sp { flex: 1; }
-.preset-card-d { font-size: var(--font-caption); color: var(--text-3); line-height: 1.65; }
-.preset-card-m {
-  display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2);
-  font-size: var(--font-mini); color: var(--text-4);
-}
-
 /* ---------- 记忆管理:原生记忆内嵌 memory.md 面板 ---------- */
 /* 原生记忆卡默认折叠:卡片头整体作为按钮,箭头指示展开状态 */
 .set-card-toggle {

@@ -45,6 +45,10 @@ pub struct ChatMessage {
     /// 仅在对应 Provider 方言下由序列化层下发(见 openai/body.rs)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
+    /// 对应 DB messages.id(P0 跨轮压缩水位线用)。0 = 非历史消息(本轮新消息 / 工具回合)。
+    /// 绝不序列化给 Provider —— 只做后端内部标记。
+    #[serde(default, skip_serializing)]
+    pub id: i64,
 }
 
 impl Default for ChatMessage {
@@ -56,6 +60,7 @@ impl Default for ChatMessage {
             tool_calls: None,
             tool_call_id: None,
             reasoning_content: None,
+            id: 0,
         }
     }
 }

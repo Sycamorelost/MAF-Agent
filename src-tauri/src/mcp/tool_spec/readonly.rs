@@ -201,5 +201,6 @@ pub fn readonly_tool_defs() -> Vec<ToolDef> {
         ),
     ];
     defs.extend(super::media::readonly_media_tool_defs());
+    defs.push(super::meta::tool_load_def());
     defs
 }

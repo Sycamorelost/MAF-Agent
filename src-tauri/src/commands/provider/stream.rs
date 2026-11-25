@@ -86,10 +86,14 @@ impl StreamCancelState {
 pub fn cancel_stream(state: tauri::State<'_, StreamCancelState>, cancel_id: String) {
     let fired = {
         let guard = state.map.lock();
-        guard.ok().and_then(|m| m.get(&cancel_id).cloned()).and_then(|t| {
-            t.fire();
-            Some(())
-        }).is_some()
+        guard
+            .ok()
+            .and_then(|m| m.get(&cancel_id).cloned())
+            .and_then(|t| {
+                t.fire();
+                Some(())
+            })
+            .is_some()
     };
     if !fired {
         // P0-2d:还没注册,先存 pending,register 成功时 auto-fire

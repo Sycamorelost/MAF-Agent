@@ -1,0 +1,55 @@
+/* 托盘右键菜单窗口:透明无边框,卡片沿用全局主题变量。 */
+html,
+body.tray-menu-window {
+  background: transparent;
+}
+
+body.tray-menu-window {
+  margin: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+.tray-menu {
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg-surface) 98%, transparent);
+  /* 不用 box-shadow:自绘窗口本身就是浮层,再加阴影会在 Windows 上显得脏 */
+}
+
+.tray-menu button {
+  height: 34px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: var(--font-sub);
+  text-align: left;
+  cursor: default;
+}
+
+.tray-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.tray-menu button.danger {
+  color: var(--err);
+}
+
+.tray-menu button.danger:hover {
+  background: var(--err-soft);
+}
+
+.tray-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}

@@ -70,7 +70,8 @@ pub struct McpRuntime {
 pub(crate) struct McpHandle {
     /// 用 Arc 共享:RPC 时只克隆指针、立刻释放 `handles` 锁,
     /// 避免持锁跨 await(一个 server 无响应会拖死整层 MCP)。
-    pub(crate) runtime: Arc<rmcp::service::RunningService<rmcp::RoleClient, rmcp::model::ClientConfig>>,
+    pub(crate) runtime:
+        Arc<rmcp::service::RunningService<rmcp::RoleClient, rmcp::model::ClientConfig>>,
     pub(crate) started_at: chrono::DateTime<chrono::Local>,
 }
 
@@ -136,20 +137,39 @@ impl McpRuntime {
     /// 按工具名反查所属 server —— ChatStream 只拿到工具名,需要路由到已启动的 server。
     /// 先收集名字列表再并行查询,避免持锁 await,也避免逐个串行把超时累加。
     pub async fn find_server_for_tool(&self, tool: &str) -> Option<String> {
-        let names: Vec<String> = {
+        self.resolve_tool(tool).await.map(|(server, _)| server)
+    }
+
+    /// 解析模型调用的工具名 → (server, 原始工具名)。
+    ///
+    /// 同时接受两种写法:命名空间名 `mcp__{server}__{tool}`(新,首选)与裸名
+    /// (旧对话/兼容)。候选 server 按名称排序,结果确定;不再依赖 HashMap 迭代顺序。
+    pub async fn resolve_tool(&self, called: &str) -> Option<(String, String)> {
+        let mut names: Vec<String> = {
             let lock = self.handles.lock().await;
             lock.keys().cloned().collect()
         };
         if names.is_empty() {
             return None;
         }
+        names.sort();
         let lists =
             futures::future::join_all(names.iter().map(|n| self.list_tools_cached(n))).await;
+        // 1) 原始名精确匹配(兼容旧调用),2) 命名空间下发展名匹配
+        for (name, res) in names.iter().zip(&lists) {
+            if let Ok(tools) = res
+                && let Some(t) = tools.iter().find(|t| t.name == called)
+            {
+                return Some((name.clone(), t.name.clone()));
+            }
+        }
         for (name, res) in names.iter().zip(lists) {
             if let Ok(tools) = res
-                && tools.iter().any(|t| t.name == tool)
+                && let Some(t) = tools
+                    .iter()
+                    .find(|t| crate::mcp::namespace::qualify(name, &t.name) == called)
             {
-                return Some(name.clone());
+                return Some((name.clone(), t.name.clone()));
             }
         }
         None
@@ -194,7 +214,7 @@ impl McpRuntime {
         );
 
         match result {
-            Ok(Ok(resp)) => handle_response(resp),
+            Ok(Ok(resp)) => handle_response(resp, &data_dir),
             Ok(Err(e)) => McpToolResult {
                 ok: false,
                 content: String::new(),

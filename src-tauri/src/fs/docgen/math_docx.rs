@@ -6,9 +6,9 @@
 
 use std::io::{Cursor, Read, Write};
 
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 
-use super::math::{omml, TOKEN};
+use super::math::{TOKEN, omml};
 
 const NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
 
@@ -53,8 +53,7 @@ pub fn inject_docx_math(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
             std::io::copy(&mut f, &mut zw).map_err(|e| format!("复制条目失败: {e}"))?;
         }
     }
-    zw.finish()
-        .map_err(|e| format!("打包 docx 失败: {e}"))?;
+    zw.finish().map_err(|e| format!("打包 docx 失败: {e}"))?;
     Ok(out.into_inner())
 }
 

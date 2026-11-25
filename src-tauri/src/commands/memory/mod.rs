@@ -11,6 +11,7 @@
 pub(crate) mod crud;
 pub(crate) mod diff;
 pub(crate) mod longterm;
+pub(crate) mod summarize;
 
 use serde::Serialize;
 
@@ -46,10 +47,11 @@ pub use crud::{
     update_message, update_session_settings,
 };
 pub use diff::{
-    SummarizeMemoryInput, append_memory, list_memory_versions, memory_budget_status,
-    needs_summarize, read_memory, read_memory_version, rollback_memory, snapshot_memory,
-    summarize_memory, unwatch_memory, watch_memory, write_memory,
+    append_memory, list_memory_versions, memory_budget_status, needs_summarize, read_memory,
+    read_memory_version, rollback_memory, snapshot_memory, unwatch_memory, watch_memory,
+    write_memory,
 };
+pub use summarize::{SummarizeMemoryInput, summarize_memory};
 pub use longterm::{
     MemoryEntityInfo, MemoryGraphInfo, MemoryRelationInfo, mcp_clear_memory, mcp_memory_graph,
 };

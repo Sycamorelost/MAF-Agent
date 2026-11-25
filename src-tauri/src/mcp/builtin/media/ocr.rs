@@ -7,11 +7,11 @@
 use std::path::Path;
 
 use serde_json::Value;
-use windows::core::HSTRING;
 use windows::Globalization::Language;
 use windows::Graphics::Imaging::{BitmapDecoder, BitmapPixelFormat, SoftwareBitmap};
 use windows::Media::Ocr::OcrEngine;
 use windows::Storage::Streams::{DataWriter, InMemoryRandomAccessStream};
+use windows::core::HSTRING;
 
 const MAX_OUTPUT_CHARS: usize = 12000;
 
@@ -56,8 +56,7 @@ pub(crate) async fn exec(args: &Value, session_id: Option<&str>) -> (String, boo
     }
 
     let lang_for_ocr = lang.clone();
-    let handle =
-        tokio::task::spawn_blocking(move || recognize_blocking(&file, &lang_for_ocr));
+    let handle = tokio::task::spawn_blocking(move || recognize_blocking(&file, &lang_for_ocr));
     match handle.await {
         Ok(Ok(lines)) => (format_output(path, &lines, max_lines, &lang), true),
         Ok(Err(e)) => (format!("图片识别失败:{e}"), false),
@@ -88,8 +87,10 @@ fn engine_for(lang: &str) -> Result<OcrEngine, String> {
             return Ok(engine);
         }
     }
-    OcrEngine::TryCreateFromUserProfileLanguages()
-        .map_err(|_| "系统未安装可用的 OCR 语言包(设置 → 时间和语言 → 语言 → 可选功能中安装「光学字符识别」)".to_string())
+    OcrEngine::TryCreateFromUserProfileLanguages().map_err(|_| {
+        "系统未安装可用的 OCR 语言包(设置 → 时间和语言 → 语言 → 可选功能中安装「光学字符识别」)"
+            .to_string()
+    })
 }
 
 fn recognize_blocking(path: &Path, lang: &str) -> Result<Vec<Line>, String> {
@@ -97,14 +98,8 @@ fn recognize_blocking(path: &Path, lang: &str) -> Result<Vec<Line>, String> {
     let stream = InMemoryRandomAccessStream::new().map_err(werr)?;
     let writer = DataWriter::CreateDataWriter(&stream).map_err(werr)?;
     writer.WriteBytes(&bytes).map_err(werr)?;
-    writer
-        .StoreAsync()
-        .and_then(|op| op.join())
-        .map_err(werr)?;
-    writer
-        .FlushAsync()
-        .and_then(|op| op.join())
-        .map_err(werr)?;
+    writer.StoreAsync().and_then(|op| op.join()).map_err(werr)?;
+    writer.FlushAsync().and_then(|op| op.join()).map_err(werr)?;
     writer.DetachStream().map_err(werr)?;
     stream.Seek(0).map_err(werr)?;
 
@@ -116,8 +111,7 @@ fn recognize_blocking(path: &Path, lang: &str) -> Result<Vec<Line>, String> {
         .and_then(|op| op.join())
         .map_err(werr)?;
     // OCR 引擎要求 BGRA8;Convert 会自动处理 alpha
-    let bitmap =
-        SoftwareBitmap::Convert(&bitmap, BitmapPixelFormat::Bgra8).map_err(werr)?;
+    let bitmap = SoftwareBitmap::Convert(&bitmap, BitmapPixelFormat::Bgra8).map_err(werr)?;
 
     let engine = engine_for(lang)?;
     let result = engine

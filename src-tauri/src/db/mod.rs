@@ -15,10 +15,12 @@ use std::{
 use rusqlite::Connection;
 
 pub mod branches;
+pub mod compaction;
 pub mod events;
 pub mod messages;
 pub mod projects;
 pub mod schema;
+pub mod session_tools;
 pub mod sessions;
 pub mod todos;
 pub mod tool_log;
@@ -26,6 +28,13 @@ pub mod usage;
 
 /// 全局连接句柄(Mutex 串行化写;读多写少场景够用)。
 static DB: OnceLock<Mutex<Connection>> = OnceLock::new();
+
+/// V39/V40 建表:按需工具加载状态 + 跨轮压缩摘要(合并成一次调用,避免迁移段膨胀)。
+pub fn migrate_tool_and_compaction(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(session_tools::DDL)?;
+    conn.execute_batch(compaction::DDL)?;
+    Ok(())
+}
 
 /// 数据目录路径(运行时解析,见 `crate::paths`)。
 pub fn data_dir() -> PathBuf {

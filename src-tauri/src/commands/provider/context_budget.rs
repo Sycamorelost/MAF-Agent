@@ -25,9 +25,8 @@ const MAX_TOKENS: usize = 120_000;
 const MIN_TOKENS: usize = 2_000;
 /// Layer 2 校准取最近 N 轮。
 const CALIBRATION_RECENT_ROWS: i64 = 10;
-/// Layer 3 缓存命中率:DeepSeek segmented cache 实测约 0.85。
+/// Layer 3 缓存命中率:DeepSeek 实测约 0.85,豆包约 0.90(其余按 0 保守处理)。
 const CACHE_HIT_RATE_DEEPSEEK: f64 = 0.85;
-/// 豆包/中转站缓存命中率(略激进,因为它们缓存效果好)。
 const CACHE_HIT_RATE_DEFAULT: f64 = 0.90;
 
 // ============ Layer 1:官方 BPE tokenizer ============
@@ -200,7 +199,9 @@ pub fn estimate_cache_saving(
 
     let hit_rate = match model {
         Some(m) if m.contains("deepseek") => CACHE_HIT_RATE_DEEPSEEK,
-        _ => CACHE_HIT_RATE_DEFAULT,
+        Some(m) if m.contains("doubao") => CACHE_HIT_RATE_DEFAULT,
+        // P2:未知模型/中转站无法确认缓存能力,按 0 计(保守),避免系统性低估成本
+        _ => 0.0,
     };
 
     Some((common_tokens as f64 * hit_rate).round() as usize)
@@ -231,9 +232,7 @@ fn longest_common_prefix(a: &str, b: &str) -> String {
 
 // ============ 统一入口:三层校准后的总估算 ============
 
-/// 完整三层校准后的总估算(L1 × L2 - L3)。
-///
-/// 这是给 event_log::record_request 调用的主入口。
+/// 完整三层校准后的总估算(L1 × L2 - L3),给 event_log::record_request 用。
 /// - messages:本轮 messages 数组
 /// - tools:本轮 tools 定义(可空)
 /// - model:模型名(用于选 BPE + cache hit rate)

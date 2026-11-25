@@ -1,8 +1,12 @@
 //! 上下文自动压缩(harness):超预算时用 LLM 摘要替代最早轮次,保住早期需求与结论。
-//! 非破坏性:只改本次请求的内存消息,不动 DB 历史;LLM 失败返回 Err,由调用方回落硬裁剪(prune_context)。
+//! LLM 失败返回 Err,由调用方回落硬裁剪(prune_context)。
+//!
+//! P0:摘要不再只作用于本次请求 —— 返回值带上「被覆盖的最大消息 id」,
+//! 调用方把它与摘要正文落库(session_compactions),下一轮请求直接带摘要、丢掉旧历史。
 
 use crate::provider::{ChatMessage, SubLlm};
 
+use super::chat::context::is_summary_message;
 use super::context_budget::ContextBudget;
 
 /// 压缩后尾部保留的预算占整体预算的比例(≈最近 10k tokens / 26k 字符)。
@@ -41,13 +45,66 @@ pub fn split_groups(messages: &[ChatMessage]) -> Vec<Vec<ChatMessage>> {
     groups
 }
 
-/// 压缩入口。返回被摘要替代的早期消息条数;仅做了「旧工具结果截断」时返回 Ok(0)
-/// (消息已就地变短,调用方无需提示)。无压缩素材返回 Ok(0)。
+/// 压缩结果(供调用方落库:下一轮据此丢弃旧历史,只带摘要)。
+#[derive(Debug, Clone, Default)]
+pub struct CompressionOutcome {
+    /// 被摘要替代的消息条数(0 = 未做 LLM 摘要)
+    pub replaced_messages: usize,
+    /// 被摘要覆盖的最大历史消息 id(0 = 本次没有 DB 历史可覆盖)
+    pub through_msg_id: i64,
+    /// 摘要正文(写入 session_compactions)
+    pub summary: String,
+}
+
+/// P0:超预算时压缩,并把摘要 + 水位线落库(下一轮直接带摘要、丢弃旧历史)。
+///
+/// 失败不影响主流程(只记日志,调用方回落到 `prune_context` 硬裁剪);
+/// 返回被摘要替代的消息条数,未发生 LLM 摘要时为 `None`。
+pub(crate) async fn compress_and_persist(
+    app: &tauri::AppHandle,
+    session_id: Option<&str>,
+    messages: &mut Vec<ChatMessage>,
+    llm: &SubLlm,
+    budget: &ContextBudget,
+) -> Option<usize> {
+    let before = messages.len();
+    let out = compress_context(messages, llm, budget).await.ok()?;
+    if out.replaced_messages == 0 {
+        return None;
+    }
+    // D7:记录压缩前后的条数与预算口径,便于事后核对「为什么被压缩」
+    super::event_log::record_compress(
+        session_id,
+        out.replaced_messages,
+        before,
+        messages.len(),
+        budget,
+    );
+    if let Some(sid) = session_id {
+        if out.through_msg_id > 0
+            && let Err(e) = crate::db::compaction::save(sid, out.through_msg_id, &out.summary)
+        {
+            log::warn!("跨轮压缩摘要落库失败: {e}");
+        }
+        crate::diagnostics::safe_emit(
+            app,
+            &format!("chat-notice-{sid}"),
+            format!(
+                "上下文过长,已自动把早期 {} 条对话压缩为摘要",
+                out.replaced_messages
+            ),
+        );
+    }
+    Some(out.replaced_messages)
+}
+
+/// 压缩入口。返回压缩结果;仅做了「旧工具结果截断」或无可压缩素材时 `replaced_messages=0`
+/// (消息已就地变短,调用方无需提示)。
 pub async fn compress_context(
     messages: &mut Vec<ChatMessage>,
     llm: &SubLlm,
     budget: &ContextBudget,
-) -> Result<usize, String> {
+) -> Result<CompressionOutcome, String> {
     let groups = split_groups(messages);
 
     // 从尾部往前累积,直到装满保留预算(按当前预算单位计权)
@@ -69,7 +126,7 @@ pub async fn compress_context(
     let head_len: usize = groups[..keep_from].iter().map(|g| g.len()).sum();
     shrink_tool_results(&mut messages[..head_len]);
     if !budget.over(messages) {
-        return Ok(0);
+        return Ok(CompressionOutcome::default());
     }
 
     let head = &groups[..keep_from];
@@ -79,8 +136,10 @@ pub async fn compress_context(
         .flatten()
         .any(|m| m.role == "user" || m.role == "assistant");
     if head_msgs == 0 || !head_has_dialog {
-        return Ok(0); // 没有可压缩的对话内容(可能整条尾巴就已超预算,交给硬裁剪)
+        return Ok(CompressionOutcome::default()); // 没有可压缩的对话内容(可能整条尾巴就已超预算,交给硬裁剪)
     }
+    // 被摘要覆盖的最大历史消息 id:水位线只推进到这里,后面的消息下轮仍可见
+    let through_msg_id = head.iter().flatten().map(|m| m.id).max().unwrap_or(0);
 
     // 摘要素材:逐条截断后拼接 role + 内容
     let mut material = String::new();
@@ -115,10 +174,10 @@ pub async fn compress_context(
         return Err("压缩摘要为空".into());
     }
 
-    // 重组:system 全部置顶(与 prune_context 语义一致)→ 摘要 → 保留尾部(滤掉 system 防重复)
+    // 重组:system 置顶(旧「前情摘要」由新摘要取代,避免多份摘要叠加)→ 新摘要 → 保留尾部
     let mut rebuilt: Vec<ChatMessage> = messages
         .iter()
-        .filter(|m| m.role == "system")
+        .filter(|m| m.role == "system" && !is_summary_message(m))
         .cloned()
         .collect();
     rebuilt.push(ChatMessage {
@@ -132,7 +191,11 @@ pub async fn compress_context(
         rebuilt.extend(g.iter().filter(|m| m.role != "system").cloned());
     }
     *messages = rebuilt;
-    Ok(head_msgs)
+    Ok(CompressionOutcome {
+        replaced_messages: head_msgs,
+        through_msg_id,
+        summary: summary.to_string(),
+    })
 }
 
 /// 截断早期工具结果(保留开头,足以看出这次调用做了什么),返回被截断的条数。

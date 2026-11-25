@@ -105,6 +105,9 @@ export const saveAgentTemplate = (agent: AgentTemplate) =>
 export const deleteAgentTemplate = (agentId: string) =>
   invoke<void>('delete_agent_template', { agentId });
 
+/** 恢复所有被用户删除的内置智能体(默认助手除外的内置)。 */
+export const restoreBuiltinAgents = () => invoke<void>('restore_builtin_agents');
+
 export const exportAgentTemplate = (agentId: string) =>
   invoke<string>('export_agent_template', { agentId });
 

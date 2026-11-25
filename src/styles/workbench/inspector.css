@@ -1,5 +1,5 @@
-/* 设置页(工作台模式 / 运行时预设)的卡片与说明样式见 settings.css:
-   .choice-* / .matrix / .set-note / .preset-grid / .preset-card
+/* 设置页(工作台模式)的卡片与说明样式见 settings.css:
+   .choice-* / .matrix / .set-note
    对齐 ui-design board 08/09 的「设置页对齐 settings.css」约束。 */
 
 /* ---------- P6:右栏检查器(产物 / 变更 / 上下文 / 流水) ---------- */

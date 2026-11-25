@@ -1,10 +1,15 @@
 //! 题注与专用标签识别:图/表题注、摘要、关键词、参考文献标题、图片行。
 
-use super::Block;
+use super::{Block, CaptionKind};
 
 pub(super) fn is_caption(t: &str) -> bool {
+    caption_kind(t).is_some()
+}
+
+/// 题注类型识别(图/表),供块解析与引用扫描共用,避免两套判定。
+pub(crate) fn caption_kind(t: &str) -> Option<CaptionKind> {
     let probe = t.trim_start_matches(['*', '_', ' ']).trim_start();
-    for prefix in ["表", "图"] {
+    for (prefix, kind) in [("表", CaptionKind::Table), ("图", CaptionKind::Figure)] {
         if let Some(rest) = probe.strip_prefix(prefix)
             && rest
                 .trim_start()
@@ -12,18 +17,22 @@ pub(super) fn is_caption(t: &str) -> bool {
                 .next()
                 .is_some_and(|c| c.is_ascii_digit())
         {
-            return true;
+            return Some(kind);
         }
     }
-    for prefix in ["Table", "Figure", "Fig."] {
+    for (prefix, kind) in [
+        ("Table", CaptionKind::Table),
+        ("Figure", CaptionKind::Figure),
+        ("Fig.", CaptionKind::Figure),
+    ] {
         if let Some(rest) = probe.strip_prefix(prefix) {
             let rest = rest.trim_start();
             if rest.chars().next().is_some_and(|c| c.is_ascii_digit()) {
-                return true;
+                return Some(kind);
             }
         }
     }
-    false
+    None
 }
 
 /// 「摘要：…」/「**关键词**：…」识别为专用段落(仅认冒号形式,避免误吞普通句子)。

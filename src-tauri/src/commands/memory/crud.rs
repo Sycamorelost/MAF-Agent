@@ -36,14 +36,6 @@ pub async fn create_session(
         sessions::set_agent(&id, Some(aid))?;
         sessions::set_memory_strategy(&id, &t.memory_strategy)?;
     }
-    // P5 / D19:创建时钉住生效预设(Agent 模板默认 > 全局默认)与当前清单版本,
-    // 老会话不随内置预设升级漂移;id 无效(如设置被手工改坏)则不钉,运行时回落 standard。
-    let pin = tpl
-        .and_then(|t| t.preset)
-        .unwrap_or_else(|| crate::settings::load().default_preset);
-    if crate::presets::get(&crate::paths::data_dir(), &pin).is_some() {
-        sessions::set_preset(&id, Some((&pin, crate::presets::PRESETS_VERSION)))?;
-    }
     Ok(SessionInfo {
         id,
         memory_path: path.to_string_lossy().to_string(),
@@ -172,6 +164,8 @@ pub async fn delete_session(id: String, state: State<'_, WatcherState>) -> Resul
     // N-1:先解除 memory watcher 再删目录,避免孤儿 watcher/去抖线程残留(及 Windows 句柄占用)
     let _ = state.registry.unwatch(&id);
     sessions::delete(&id)?;
+    // 会话删除:跨轮压缩摘要一并清理(无外键,需显式删)
+    let _ = crate::db::compaction::clear(&id);
     let dir = memory::session_dir(&id);
     if dir.exists() {
         std::fs::remove_dir_all(&dir)
@@ -306,7 +300,9 @@ pub async fn list_messages_page(
 #[tauri::command]
 pub async fn clear_messages(session_id: String) -> Result<(), String> {
     let branch = sessions::active_branch(&session_id)?;
-    messages::clear(&session_id, &branch)
+    messages::clear(&session_id, &branch)?;
+    // 历史被清空:旧摘要水位线失效,清除避免注入无关摘要
+    crate::db::compaction::clear(&session_id)
 }
 
 /// 删除单条消息(链上子消息自动重挂到其父消息)。
@@ -319,7 +315,10 @@ pub async fn delete_message(id: i64) -> Result<(), String> {
 #[tauri::command]
 pub async fn delete_messages_from(session_id: String, from_id: i64) -> Result<u64, String> {
     let branch = sessions::active_branch(&session_id)?;
-    messages::delete_from(&session_id, &branch, from_id)
+    let n = messages::delete_from(&session_id, &branch, from_id)?;
+    // 历史被截断:水位线可能指向已删除消息,清除摘要
+    crate::db::compaction::clear(&session_id)?;
+    Ok(n)
 }
 
 // ---------- 会话分支树(B6 / F4) ----------

@@ -1,11 +1,7 @@
 //! 数据目录迁移:复制 → 校验 → 重写附件路径 → 删除旧目录(幂等,可重试)。
 
 use super::{config_path, resolve};
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::Path,
-};
+use std::{collections::BTreeMap, fs, path::Path};
 
 /// 递归复制目录(跳过符号链接)。
 fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {

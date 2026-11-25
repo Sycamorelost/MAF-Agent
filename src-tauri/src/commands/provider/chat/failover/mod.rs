@@ -1,4 +1,4 @@
-﻿//! 带多 Key 轮换与故障转移的流式对话主循环。
+//! 带多 Key 轮换与故障转移的流式对话主循环。
 
 mod guards;
 mod runner;
@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 
 use crate::db::usage as db_usage;
+use crate::mcp::on_demand;
 use crate::provider::{
     ChatMessage, ChatRequest, StreamChunk, ToolCall, keychain,
     rotation::{self, KeyCandidate, RotationConfig, RotationState},
@@ -32,8 +33,7 @@ use usage::{record_failure, record_success};
 pub(crate) use types::Attribution;
 
 /// 带轮换的流式对话:按候选 Key 逐个尝试,遇限流/5xx/网络错误则冷却并换下一把。
-/// 候选池可能包含同 base_url 编组内其他 Provider 的 Key(Phase 3)。
-/// 全部候选耗尽时**只推一次** Error。
+/// 候选池可能包含同 base_url 编组内其他 Provider 的 Key(Phase 3);全部耗尽时只推一次 Error。
 // 参数为流式链路必需的独立上下文(请求/通道/取消/轮换/运行时等),收敛为结构体只会改名不换药
 #[allow(clippy::too_many_arguments)]
 pub(super) fn spawn_chat_with_failover(
@@ -49,7 +49,6 @@ pub(super) fn spawn_chat_with_failover(
     app: tauri::AppHandle,
     mcp_runtime: crate::mcp::McpRuntime,
     approval_store: crate::mcp::ApprovalStore,
-    capability_store: crate::mcp::CapabilityStore,
 ) {
     // panic 兜底用的 channel 副本(必须在使用 work 之前克隆)
     let panic_channel = channel.clone();
@@ -93,27 +92,15 @@ pub(super) fn spawn_chat_with_failover(
             if context_over_budget(&req.messages, &budget)
                 && let Some(llm) = sub_llm.as_ref()
             {
-                let before = req.messages.len();
-                if let Ok(n) =
-                    super::super::compress::compress_context(&mut req.messages, llm, &budget).await
-                    && n > 0
-                {
-                    // D7:记录压缩前后的条数与预算口径,便于事后核对「为什么被压缩」
-                    super::super::event_log::record_compress(
-                        attr.session_id.as_deref(),
-                        n,
-                        before,
-                        req.messages.len(),
-                        &budget,
-                    );
-                    if let Some(sid) = attr.session_id.as_deref() {
-                        crate::diagnostics::safe_emit(
-                            &app,
-                            &format!("chat-notice-{sid}"),
-                            format!("上下文过长,已自动把早期 {n} 条对话压缩为摘要"),
-                        );
-                    }
-                }
+                // P0:压缩 + 摘要/水位线落库(下一轮直接带摘要,不再重复计费)
+                let _ = super::super::compress::compress_and_persist(
+                    &app,
+                    attr.session_id.as_deref(),
+                    &mut req.messages,
+                    llm,
+                    &budget,
+                )
+                .await;
             }
             prune_context(&mut req.messages, &budget);
             let mut cands = key_candidates(&spec.provider_id, &spec.base_url, &spec.model, &cfg);
@@ -283,7 +270,6 @@ pub(super) fn spawn_chat_with_failover(
                                 std::mem::take(&mut assistant_text),
                                 &mcp_runtime,
                                 &approval_store,
-                                &capability_store,
                                 data_dir.clone(),
                                 &channel,
                                 attr.session_id.as_deref(),
@@ -291,6 +277,8 @@ pub(super) fn spawn_chat_with_failover(
                             )
                             .await;
                             req.messages.extend(outcome.new_messages);
+                            // tool_load 新加载的工具本轮立即补充进请求
+                            on_demand::sync_tools(&mut req.tools, attr.session_id.as_deref());
                             // 回填本轮思考内容(DeepSeek 思考模式 + 工具调用要求原样回传)
                             if !reasoning_text.is_empty() {
                                 if let Some(first) = req.messages.iter_mut().rev().find(|m| {
@@ -322,8 +310,7 @@ pub(super) fn spawn_chat_with_failover(
                             }
                             continue 'rounds;
                         }
-                        // 兜底:本轮从未收到过 done(个别中转站在流末尾不发)时补发一个,
-                        // 否则前端永远等不到收流信号,流式光标会一直闪。
+                        // 兜底:本轮从未收到过 done(个别中转站流末尾不发)时补发一个,否则前端等不到收流。
                         if !saw_done && stream_err.is_none() {
                             let _ = channel.send(StreamChunk::Done {
                                 finish_reason: Some("stop".into()),

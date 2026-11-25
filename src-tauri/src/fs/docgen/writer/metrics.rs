@@ -9,17 +9,17 @@ use super::super::style::DocStyle;
 
 pub(super) fn body_fonts(s: &DocStyle) -> RunFonts {
     RunFonts::new()
-        .ascii(s.latin)
-        .hi_ansi(s.latin)
-        .east_asia(s.east_asia)
+        .ascii(s.latin.as_str())
+        .hi_ansi(s.latin.as_str())
+        .east_asia(s.east_asia.as_str())
         .hint("eastAsia")
 }
 
 pub(super) fn heading_fonts(s: &DocStyle) -> RunFonts {
     RunFonts::new()
-        .ascii(s.latin)
-        .hi_ansi(s.latin)
-        .east_asia(s.heading_east_asia)
+        .ascii(s.latin.as_str())
+        .hi_ansi(s.latin.as_str())
+        .east_asia(s.heading_east_asia.as_str())
         .hint("eastAsia")
 }
 
@@ -27,7 +27,7 @@ pub(super) fn mono_fonts(s: &DocStyle) -> RunFonts {
     RunFonts::new()
         .ascii("Consolas")
         .hi_ansi("Consolas")
-        .east_asia(s.east_asia)
+        .east_asia(s.east_asia.as_str())
 }
 
 /// 正文行距:固定行距优先(公文),否则按倍数。

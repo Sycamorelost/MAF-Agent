@@ -23,8 +23,6 @@
 }
 @media (max-width: 560px) {
   .task-grid { grid-template-columns: minmax(0, 1fr); }
-  /* 极窄窗:中栏头部预设 chip 让位(模型/Token 等状态信息在头部 ··· 菜单兜底,P2-2) */
-  .chat-head .preset-chip { display: none; }
 }
 
 /* ---------- 工具流水按任务分组(§5.4) ---------- */

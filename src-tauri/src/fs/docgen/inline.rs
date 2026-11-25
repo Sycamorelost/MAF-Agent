@@ -204,10 +204,8 @@ fn flush(out: &mut Vec<Segment>, buf: &mut String, bold: bool, italic: bool, str
 /// 相邻片段之间补空格(避免粗体边界吞掉中英间距)。
 fn fix_boundaries(mut segs: Vec<Segment>) -> Vec<Segment> {
     for i in 1..segs.len() {
-        if matches!(
-            segs[i].emphasis,
-            Emphasis::Code | Emphasis::Math
-        ) || matches!(segs[i - 1].emphasis, Emphasis::Code | Emphasis::Math)
+        if matches!(segs[i].emphasis, Emphasis::Code | Emphasis::Math)
+            || matches!(segs[i - 1].emphasis, Emphasis::Code | Emphasis::Math)
         {
             continue;
         }

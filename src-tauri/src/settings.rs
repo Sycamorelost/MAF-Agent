@@ -28,16 +28,9 @@ pub struct AppSettings {
     /// 导航菜单的显示顺序(存功能项 key;未列出的项按内置顺序补在末尾)
     #[serde(default)]
     pub nav_order: Vec<String>,
-    /// 全裸模式(R3 A1):true = system 不追加身份锚,仅保留 Base 物理契约;
-    /// 人格全交智能体提示或用户自带人设的中转模型
-    #[serde(default)]
-    pub bare_mode: bool,
     /// 首次启动引导是否已完成(R3 首次安装向导)
     #[serde(default)]
     pub first_run_completed: bool,
-    /// 用户自定义底层 Prompt(空 = 使用内置默认 BASE_PHYSICAL_CONTRACT)
-    #[serde(default)]
-    pub custom_base_prompt: Option<String>,
     /// 用户自定义应用名称(空 = 使用 "myAgent",仅影响窗口标题/托盘/快捷方式)
     #[serde(default)]
     pub custom_app_name: Option<String>,
@@ -55,10 +48,6 @@ pub struct AppSettings {
     /// 决定首页落点与新建会话的界面形态;单个会话可用 sessions.workbench_mode 覆盖。
     #[serde(default = "default_workbench")]
     pub default_workbench: String,
-    /// 全局默认运行时预设(P5 / D19):economy / standard / deep / code。
-    /// 会话创建时钉住;已有会话可用 sessions.preset_id 覆盖。
-    #[serde(default = "default_preset")]
-    pub default_preset: String,
     /// 拖入文件夹时单文件夹最多加入的附件数(1..=50;默认 10)
     #[serde(default = "default_attachment_folder_limit")]
     pub attachment_folder_limit: u32,
@@ -76,10 +65,6 @@ pub struct AppSettings {
     /// 默认 10 分钟;大工程可调大(上限 24 小时),到点后收口并保留已生成内容。
     #[serde(default = "default_chat_timeout_minutes")]
     pub chat_timeout_minutes: u32,
-    /// 文字质感(去 AI 味)档位:off / light / standard(默认 standard)。
-    /// 仅对白名单内的生成型智能体生效,代码/翻译/JSON 等场景始终不注入。
-    #[serde(default = "default_human_voice")]
-    pub human_voice_level: String,
 }
 
 /// 生成时长下限(分钟):低于 1 分钟无法完成一次正常请求。
@@ -149,14 +134,6 @@ fn default_workbench() -> String {
     "chat".into()
 }
 
-fn default_preset() -> String {
-    crate::presets::DEFAULT_PRESET.into()
-}
-
-fn default_human_voice() -> String {
-    "standard".into()
-}
-
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -167,21 +144,17 @@ impl Default for AppSettings {
             minimize_to_tray: false,
             hidden_nav_items: Vec::new(),
             nav_order: Vec::new(),
-            bare_mode: false,
             first_run_completed: false,
-            custom_base_prompt: None,
             custom_app_name: None,
             custom_app_icon: None,
             home_prompt: None,
             workspace_root: None,
             default_workbench: default_workbench(),
-            default_preset: default_preset(),
             attachment_folder_limit: default_attachment_folder_limit(),
             attachment_blocked_ext: Vec::new(),
             attachment_session_max_files: default_attachment_session_max_files(),
             attachment_session_max_mb: default_attachment_session_max_mb(),
             chat_timeout_minutes: default_chat_timeout_minutes(),
-            human_voice_level: default_human_voice(),
         }
     }
 }
@@ -254,8 +227,6 @@ mod tests {
             back.attachment_session_max_mb,
             DEFAULT_ATTACHMENT_SESSION_MAX_MB
         );
-        // 文字质感未配置时默认 standard(轻档/关闭需用户显式设置)
-        assert_eq!(back.human_voice_level, "standard");
     }
 
     #[test]

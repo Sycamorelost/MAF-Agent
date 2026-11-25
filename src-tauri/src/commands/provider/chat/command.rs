@@ -27,11 +27,18 @@ pub async fn chat_stream(
     cancel_state: tauri::State<'_, StreamCancelState>,
     mcp_runtime: tauri::State<'_, crate::mcp::McpRuntime>,
     approval_store: tauri::State<'_, crate::mcp::ApprovalStore>,
-    capability_store: tauri::State<'_, crate::mcp::CapabilityStore>,
     app: tauri::AppHandle,
-    input: ChatStreamInput,
+    mut input: ChatStreamInput,
     channel: Channel<StreamChunk>,
 ) -> Result<(), String> {
+    // P1-8:项目级模型覆盖作为「未显式指定模型」时的回退(格式 provider_id::model_id)
+    if input.model.trim().is_empty()
+        && let Some(sid) = input.session_id.as_deref()
+        && let Ok(Some((pid, model))) = crate::db::projects::model_override_for_session(sid)
+    {
+        input.provider_id = pid;
+        input.model = model;
+    }
     // 1. 组装 Provider 规格(base_url / display_name 优先显式入参,回退模板)
     let spec = resolve_spec(
         &input.provider_id,
@@ -71,6 +78,44 @@ pub async fn chat_stream(
             &rules.source,
             rules.content.chars().count(),
         );
+    }
+    // P1-8:项目共享上下文按请求实时构建 —— 先剥掉绑定时写入的旧快照,再拼当前项目 guard,
+    // 这样编辑项目 shared_context 后,已绑定会话下一轮立即生效。
+    if let Some(sid) = input.session_id.as_deref() {
+        for m in messages.iter_mut().filter(|m| m.role == "system") {
+            if m.content.contains(crate::db::projects::GUARD_MARKER) {
+                m.content = crate::db::projects::strip_guard(&m.content);
+            }
+        }
+        if let Some(guard) = crate::db::projects::guard_for_session(sid) {
+            match messages.iter_mut().find(|m| m.role == "system") {
+                Some(sys) => sys.content.push_str(&guard),
+                None => messages.insert(
+                    0,
+                    crate::provider::ChatMessage {
+                        role: "system".into(),
+                        content: guard.trim_start().to_string(),
+                        ..Default::default()
+                    },
+                ),
+            }
+        }
+    }
+    // P0:跨轮上下文治理(后端接管历史窗):
+    //   1) 应用已落库的「前情摘要」,丢弃水位线之前的历史(不再每轮重复计费/重复摘要);
+    //   2) 会话显式设置了 max_context_messages>0 时按最近 N 条裁剪;0 = 全部,仅按预算裁。
+    if let Some(sid) = input.session_id.as_deref() {
+        if let Ok(Some(c)) = crate::db::compaction::get(sid) {
+            super::context::apply_stored_compaction(&mut messages, c.through_msg_id, &c.summary);
+        }
+        let max_msgs = crate::db::sessions::get(sid)
+            .ok()
+            .flatten()
+            .map(|s| s.max_context_messages)
+            .unwrap_or(0);
+        if max_msgs > 0 {
+            super::context::apply_session_window(&mut messages, max_msgs as usize);
+        }
     }
     let req = ChatRequest {
         model: input.model.clone(),
@@ -126,7 +171,6 @@ pub async fn chat_stream(
         app,
         mcp_runtime.inner().clone(),
         approval_store.inner().clone(),
-        capability_store.inner().clone(),
     );
     Ok(())
 }

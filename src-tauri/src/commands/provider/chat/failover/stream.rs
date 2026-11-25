@@ -4,8 +4,8 @@ use crate::provider::{StreamChunk, ToolCall};
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 
-use super::guards::{awaiting_user_decision, remaining_budget, todos_sync_needed};
 use super::Attribution;
+use super::guards::{awaiting_user_decision, remaining_budget, todos_sync_needed};
 
 /// 一轮流式消费的结果(供主循环判定下一步)。
 pub(super) struct StreamOutcome {
@@ -57,16 +57,17 @@ where
 
     // P2:每个 chunk 只受「剩余总预算」约束(不按空闲时长打断长思考)
     loop {
-        let chunk = match tokio::time::timeout(remaining_budget(started, total_timeout), stream.next())
-            .await
-        {
-            Ok(Some(c)) => c,
-            Ok(None) => break,
-            Err(_) => {
-                out.timed_out = true;
-                break;
-            }
-        };
+        let chunk =
+            match tokio::time::timeout(remaining_budget(started, total_timeout), stream.next())
+                .await
+            {
+                Ok(Some(c)) => c,
+                Ok(None) => break,
+                Err(_) => {
+                    out.timed_out = true;
+                    break;
+                }
+            };
         match &chunk {
             StreamChunk::Usage {
                 input_tokens,

@@ -4,155 +4,25 @@
 //! [`Deck`] 产出 `.pptx`,便于单独调整视觉而不碰解析逻辑。
 
 use serde_json::json;
+use std::path::{Path, PathBuf};
 
-use super::slides::{
-    clip, file_name, Deck, Kpi, Layout, SlideChart, SlideTable, MAX_KPIS,
-};
+use super::slides::{Deck, Layout, SlideChart, file_name};
+use super::slides_chrome::{cards_shapes, chrome, kpi_shapes, table_of, theme_of};
+use super::slides_theme as token;
 
-/// 主题名 → 预设配色/字体;未知名回退商务蓝灰。
-fn theme_of(name: &str) -> ppt_rs::generator::PresentationTheme {
-    use ppt_rs::generator::PresentationTheme as T;
-    match name {
-        "modern" => T::modern(),
-        "tech" => T::tech(),
-        "vibrant" => T::vibrant(),
-        "nature" => T::nature(),
-        "dark" => T::dark(),
-        // 答辩/组会:黑灰学术风(深色标题、灰色系强调,无大面积色块)
-        "academic" => T::from_palette(
-            "Academic",
-            "1F2937",
-            "4B5563",
-            "6B7280",
-            "FFFFFF",
-            "111827",
-            "F3F4F6",
-            "E5E7EB",
-        ),
-        _ => T::corporate(),
-    }
-}
-
-/// 表格页:等宽列,首行表头;位置落在标题下方。
-fn table_of(t: &SlideTable) -> ppt_rs::generator::Table {
-    let cols = t.header.len().max(1);
-    let width = 10_600_000 / cols as u32;
-    let mut builder = ppt_rs::generator::TableBuilder::new(vec![width; cols]);
-    if !t.header.is_empty() {
-        builder = builder.add_simple_row(t.header.iter().map(String::as_str).collect());
-    }
-    for row in &t.rows {
-        let mut cells: Vec<&str> = row.iter().map(String::as_str).collect();
-        cells.resize(cols, "");
-        builder = builder.add_simple_row(cells);
-    }
-    builder.position(700_000, 1_900_000).build()
-}
-
-/// 主题强调色(用于顶部色条、指标卡与图表)
-fn accent_of(theme: &str) -> &'static str {
-    match theme {
-        "modern" => "2563EB",
-        "tech" => "0EA5E9",
-        "vibrant" => "EA580C",
-        "nature" => "15803D",
-        "dark" => "F59E0B",
-        "academic" => "374151",
-        _ => "2F5597",
-    }
-}
-
-/// 每页统一装饰:顶部色条 + 底部分隔线 + 页脚标题/页码。
-fn chrome(deck: &Deck, page: Option<usize>) -> Vec<ppt_rs::generator::Shape> {
-    use ppt_rs::generator::{Shape, ShapeFill, ShapeType};
-    use ppt_rs::prelude::inches;
-
-    let mut shapes = vec![
-        Shape::new(ShapeType::Rectangle, 0, 0, 12_192_000, inches(0.075))
-            .with_fill(ShapeFill::new(accent_of(&deck.theme))),
-    ];
-    if let Some(n) = page {
-        shapes.push(
-            Shape::new(
-                ShapeType::Rectangle,
-                inches(0.6),
-                inches(6.55),
-                inches(12.1),
-                inches(0.012),
-            )
-            .with_fill(ShapeFill::new("D9D9D9")),
-        );
-        shapes.push(
-            Shape::new(
-                ShapeType::Rectangle,
-                inches(0.6),
-                inches(6.63),
-                inches(9.0),
-                inches(0.26),
-            )
-            .with_text(&clip(&deck.title, 40)),
-        );
-        shapes.push(
-            Shape::new(
-                ShapeType::Rectangle,
-                inches(11.95),
-                inches(6.63),
-                inches(0.75),
-                inches(0.26),
-            )
-            .with_text(&n.to_string()),
-        );
-    }
-    shapes
-}
-
-/// 指标卡:浅色圆角卡片 + 大数字 + 说明。
-fn kpi_shapes(kpis: &[Kpi], accent: &str) -> Vec<ppt_rs::generator::Shape> {
-    use ppt_rs::generator::{Shape, ShapeFill, ShapeType};
-    use ppt_rs::prelude::inches;
-
-    let n = kpis.len().clamp(1, MAX_KPIS);
-    let gap = 0.25;
-    let total_w = 12.1;
-    let card_w = (total_w - gap * (n as f64 - 1.0)) / n as f64;
-    let mut shapes = Vec::new();
-    for (i, k) in kpis.iter().take(n).enumerate() {
-        let x = 0.6 + i as f64 * (card_w + gap);
-        let y = 2.15;
-        shapes.push(
-            Shape::new(
-                ShapeType::RoundedRectangle,
-                inches(x),
-                inches(y),
-                inches(card_w),
-                inches(2.3),
-            )
-            .with_fill(ShapeFill::new(accent).with_transparency(88)),
-        );
-        shapes.push(
-            Shape::new(
-                ShapeType::Rectangle,
-                inches(x + 0.2),
-                inches(y + 0.35),
-                inches(card_w - 0.4),
-                inches(1.15),
-            )
-            .with_text(&k.value),
-        );
-        if !k.label.is_empty() {
-            shapes.push(
-                Shape::new(
-                    ShapeType::Rectangle,
-                    inches(x + 0.2),
-                    inches(y + 1.55),
-                    inches(card_w - 0.4),
-                    inches(0.55),
-                )
-                .with_text(&k.label),
-            );
-        }
-    }
-    shapes
+/// 光栅图(chart raster / diagram)先落临时文件再交给 ppt-rs 按路径引用;
+/// build 完成后统一清理。返回临时文件路径并登记到 `bag`。
+fn write_temp_png(deck: &Deck, bag: &mut Vec<PathBuf>, bytes: &[u8]) -> Result<PathBuf, String> {
+    let dir = deck.target.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(dir).map_err(|e| format!("创建图片目录失败: {e}"))?;
+    let p = dir.join(format!(
+        ".slides-img-{}-{}.png",
+        std::process::id(),
+        bag.len()
+    ));
+    std::fs::write(&p, bytes).map_err(|e| format!("写入临时图片失败: {e}"))?;
+    bag.push(p.clone());
+    Ok(p)
 }
 
 fn chart_of(c: &SlideChart, fallback_title: &str) -> Result<ppt_rs::generator::Chart, String> {
@@ -175,8 +45,8 @@ fn chart_of(c: &SlideChart, fallback_title: &str) -> Result<ppt_rs::generator::C
         &c.title
     };
     let mut builder = ChartBuilder::new(title, kind)
-        .position(inches(0.7), inches(1.55))
-        .size(inches(11.9), inches(4.7))
+        .position(inches(token::CHART_X_IN), inches(token::CHART_Y_IN))
+        .size(inches(token::CHART_W_IN), inches(token::CHART_H_IN))
         .categories(cats);
     for (name, values) in &c.series {
         builder = builder.add_series(ChartSeries::new(name, values.clone()));
@@ -191,62 +61,141 @@ pub(super) fn build_and_write(deck: &Deck, session_id: Option<&str>) -> Result<S
     // 封面:居中大标题 + 可选副标题 + 顶部色条
     let mut cover = ppt_rs::SlideContent::new(&deck.title)
         .layout(SlideLayout::CenteredTitle)
-        .title_size(40)
-        .content_size(18)
+        .title_size(token::COVER_TITLE_PT)
+        .content_size(token::COVER_SUB_PT)
         .with_shapes(chrome(deck, None));
     if let Some(sub) = &deck.subtitle {
         cover = cover.add_bullet(sub);
     }
+    let colors = token::colors(&deck.theme);
+    cover = cover
+        .title_color(&colors.title)
+        .content_color(&colors.text);
     pres = pres.add_slide(cover);
 
-    let accent = accent_of(&deck.theme);
+    let accent = token::accent(&deck.theme);
+    // 光栅图临时文件:build 读取后统一删除
+    let mut temp_imgs: Vec<PathBuf> = Vec::new();
     for (i, s) in deck.slides.iter().enumerate() {
         let page = i + 2;
         let mut sc = match s.layout {
             Layout::Section => ppt_rs::SlideContent::new(&s.title)
                 .layout(SlideLayout::SectionHeader)
-                .title_size(36),
+                .title_size(token::SECTION_TITLE_PT),
             Layout::Closing => ppt_rs::SlideContent::new(if s.title.trim().is_empty() {
                 "谢谢"
             } else {
                 s.title.as_str()
             })
             .layout(SlideLayout::CenteredTitle)
-            .title_size(36),
+            .title_size(token::CLOSING_TITLE_PT),
             Layout::TwoCol => ppt_rs::SlideContent::new(&s.title)
                 .layout(SlideLayout::TwoColumn)
-                .title_size(28)
+                .title_size(token::TITLE_PT)
                 .content_size(16),
             Layout::Kpi => ppt_rs::SlideContent::new(&s.title)
                 .layout(SlideLayout::TitleOnly)
-                .title_size(28),
+                .title_size(token::TITLE_PT),
             Layout::Chart => ppt_rs::SlideContent::new(&s.title)
                 .layout(SlideLayout::TitleOnly)
-                .title_size(28),
+                .title_size(token::TITLE_PT),
             Layout::Table => ppt_rs::SlideContent::new(&s.title)
                 .layout(SlideLayout::TitleAndContent)
-                .title_size(28)
+                .title_size(token::TITLE_PT)
                 .content_size(14),
             Layout::ImageRight => ppt_rs::SlideContent::new(&s.title)
                 .layout(SlideLayout::TitleAndContent)
-                .title_size(28)
+                .title_size(token::TITLE_PT)
+                .content_size(17),
+            // 结构图页:与图文页同版心,图示 PNG 在后续插图阶段写入
+            Layout::Diagram => ppt_rs::SlideContent::new(&s.title)
+                .layout(SlideLayout::TitleAndContent)
+                .title_size(token::TITLE_PT)
                 .content_size(17),
             Layout::Bullets => ppt_rs::SlideContent::new(&s.title)
                 .layout(SlideLayout::TitleAndContent)
-                .title_size(28)
+                .title_size(token::TITLE_PT)
                 .content_size(18),
+            // 卡片页:标题栏 + 2×N 卡片网格
+            Layout::Cards => ppt_rs::SlideContent::new(&s.title)
+                .layout(SlideLayout::TitleOnly)
+                .title_size(token::TITLE_PT),
+            // 引用页:引文即主标题,出处作副行
+            Layout::Quote => {
+                let text = s
+                    .quote
+                    .as_ref()
+                    .map(|q| q.text.as_str())
+                    .unwrap_or(s.title.as_str());
+                ppt_rs::SlideContent::new(text)
+                    .layout(SlideLayout::CenteredTitle)
+                    .title_size(token::CLOSING_TITLE_PT)
+                    .content_size(16)
+            }
         };
+        let colors = token::colors(&deck.theme);
+        sc = sc
+            .title_color(&colors.title)
+            .content_color(&colors.text)
+            .content_size(s.body_pt);
         // 指标卡 / 图表页:把要点降为讲稿,避免文字压图
         let mut extra_notes = String::new();
-        if matches!(s.layout, Layout::Kpi | Layout::Chart) {
+        if matches!(
+            s.layout,
+            Layout::Kpi | Layout::Chart | Layout::Cards | Layout::Quote
+        ) {
             if !s.bullets.is_empty() {
                 extra_notes = s.bullets.join("\n");
             }
+            if s.layout == Layout::Quote {
+                if !s.title.trim().is_empty() {
+                    extra_notes = format!("{}\n{}", s.title, extra_notes).trim().to_string();
+                }
+                if let Some(q) = &s.quote
+                    && !q.source.is_empty()
+                {
+                    sc = sc.add_bullet(&q.source);
+                }
+            }
+            if s.layout == Layout::Cards && !s.cards.is_empty() {
+                sc = sc.with_shapes(cards_shapes(&s.cards, &accent));
+            }
             if !s.kpis.is_empty() {
-                sc = sc.with_shapes(kpi_shapes(&s.kpis, accent));
+                sc = sc.with_shapes(kpi_shapes(&s.kpis, &accent));
             }
             if let Some(c) = &s.chart {
-                sc = sc.add_chart(chart_of(c, &s.title)?);
+                let footnote = if s.chart_style == super::chart::ChartStyle::Raster {
+                    s.raster_chart.as_ref().and_then(|spec| spec.footnote())
+                } else {
+                    super::chart::footnote(&c.unit, &c.source)
+                };
+                // raster:用 charts-rs 出 PNG 插图;native:ppt-rs 原生图表(默认,兼容旧输出)
+                if s.chart_style == super::chart::ChartStyle::Raster {
+                    let spec = s
+                        .raster_chart
+                        .as_ref()
+                        .ok_or("chart_style=raster 但缺少有效图表数据")?;
+                    let png = spec.render_png()?;
+                    let p = write_temp_png(deck, &mut temp_imgs, &png)?;
+                    sc = sc.add_image(ppt_rs::Image::from_path(&p)?);
+                } else {
+                    sc = sc.add_chart(chart_of(c, &s.title)?);
+                }
+                if let Some(text) = footnote {
+                    use ppt_rs::generator::{Shape, ShapeFill, ShapeType};
+                    use ppt_rs::prelude::inches;
+                    sc = sc.add_shape(
+                        Shape::new(
+                            ShapeType::Rectangle,
+                            inches(token::MARGIN_X_IN),
+                            inches(token::FOOTNOTE_Y_IN),
+                            inches(token::CONTENT_W_IN),
+                            inches(token::FOOTER_ROW_H_IN),
+                        )
+                        .with_fill(ShapeFill::new(&colors.muted).with_transparency(92))
+                        .with_text(&text),
+                    );
+                }
             }
         } else {
             for b in &s.bullets {
@@ -271,11 +220,31 @@ pub(super) fn build_and_write(deck: &Deck, session_id: Option<&str>) -> Result<S
         } else if s.table.is_some() {
             sc.layout_stacked_content();
         }
-        let notes = match (&s.notes, extra_notes.is_empty()) {
-            (Some(n), true) => Some(n.clone()),
-            (Some(n), false) => Some(format!("{n}\n{extra_notes}")),
-            (None, false) => Some(extra_notes),
-            (None, true) => None,
+        // 结构图(Mermaid 子集):charts-rs 渲染 PNG 插入,非法语法在解析/渲染阶段已报错
+        if let Some(spec) = &s.diagram {
+            let png = spec.render_png()?;
+            let p = write_temp_png(deck, &mut temp_imgs, &png)?;
+            let mut image = ppt_rs::Image::from_path(&p)?;
+            let ratio = image.width as f64 / image.height.max(1) as f64;
+            image.height = ppt_rs::prelude::inches(token::DIAGRAM_H_IN);
+            image.width = (image.height as f64 * ratio).round() as u32;
+            sc = sc.add_image(image);
+            sc.layout_stacked_content();
+        }
+        let mut note_parts = Vec::new();
+        if let Some(n) = &s.notes {
+            note_parts.push(n.as_str());
+        }
+        if !extra_notes.is_empty() {
+            note_parts.push(extra_notes.as_str());
+        }
+        if let Some(n) = &s.formula_note {
+            note_parts.push(n.as_str());
+        }
+        let notes = if note_parts.is_empty() {
+            None
+        } else {
+            Some(note_parts.join("\n"))
         };
         if let Some(n) = notes {
             sc = sc.notes(&n);
@@ -284,6 +253,12 @@ pub(super) fn build_and_write(deck: &Deck, session_id: Option<&str>) -> Result<S
         pres = pres.add_slide(sc);
     }
     let bytes = pres.build().map_err(|e| format!("生成 pptx 失败:{e}"))?;
+    // 包级校验:解包检查关系/引用;失败不阻断交付,但写入回执便于排查
+    let validation = super::slides_validate::validate_pptx(&bytes);
+    // build 已把图片字节读入包内,临时文件可清理
+    for p in &temp_imgs {
+        let _ = std::fs::remove_file(p);
+    }
     std::fs::write(&deck.target, &bytes).map_err(|e| format!("写入 pptx 失败: {e}"))?;
 
     let rel = crate::fs::paths::rel_of(&deck.root, &deck.target)
@@ -295,10 +270,14 @@ pub(super) fn build_and_write(deck: &Deck, session_id: Option<&str>) -> Result<S
     if !ok {
         log::warn!("登记演示文稿产物失败: {note}");
     }
-    Ok(format!(
+    let mut msg = format!(
         "已生成演示文稿:{rel}(共 {} 页含封面,{} KB){}",
         deck.slides.len() + 1,
         bytes.len() / 1024,
         if ok { ",已登记产物" } else { "" }
-    ))
+    );
+    if let Err(errs) = validation {
+        msg.push_str(&format!(";包校验 {} 处问题:{}", errs.len(), errs.join(";")));
+    }
+    Ok(msg)
 }

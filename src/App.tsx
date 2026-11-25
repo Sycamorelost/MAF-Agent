@@ -10,6 +10,7 @@ import OnboardingDialog from './components/OnboardingDialog';
 import * as ipc from './lib/ipc';
 import McpApprovalDialog from './components/McpApprovalDialog';
 import { ConfirmHost } from './components/confirmService';
+import TrayMenu from './components/TrayMenu';
 import { getBootstrapState } from './lib/ipc/mcp';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useSessionsStore } from './stores/sessions';
@@ -26,7 +27,6 @@ import './styles/memory.css';
 import './styles/settings.css';
 import './styles/popout.css';
 import './styles/workbench.css';
-import './styles/preset.css';
 import 'katex/dist/katex.min.css';
 
 // PERF-4:页面按路由懒加载,首屏只加载布局与当前页,避免 8 MB+ 单包一次性解析。
@@ -90,7 +90,7 @@ function PopoutApp() {
     let disposed = false;
     (async () => {
       try {
-        // 先定位再加载内容（避免白屏闪到中心）
+        // 窗口创建时已在 Rust 端锚定右下角;这里再调一次作为防御(幂等,不产生跳位)
         await invoke('dock_popout').catch(() => {});
         const { id } = await ipc.createSession('', '');
         if (disposed) return;
@@ -118,16 +118,18 @@ function PopoutApp() {
         >×</button>
       </div>
       {/* 内容区:复用 ChatPage,但通过 CSS 隐藏 Sidebar/Titlebar/Inspector */}
-      {err ? (
-        <div style={{ padding: 24, color: '#999', fontSize: 13 }}>{err}</div>
-      ) : (
-        <Suspense fallback={<div style={{ padding: 24, color: '#999', fontSize: 13 }}>加载中…</div>}>
-          <Routes>
-            <Route path="/chat/:id" element={<PopoutSessionGate />} />
-            <Route path="*" element={<div style={{ padding: 24, color: '#999', fontSize: 13 }}>正在新建会话…</div>} />
-          </Routes>
-        </Suspense>
-      )}
+      <div className="popout-body">
+        {err ? (
+          <div className="popout-center">{err}</div>
+        ) : (
+          <Suspense fallback={<div className="popout-center">加载中…</div>}>
+            <Routes>
+              <Route path="/chat/:id" element={<PopoutSessionGate />} />
+              <Route path="*" element={<div className="popout-center">正在新建会话…</div>} />
+            </Routes>
+          </Suspense>
+        )}
+      </div>
     </div>
   );
 }
@@ -261,6 +263,8 @@ export default function App() {
   const label = getCurrentWindow().label;
 
   useEffect(() => {
+    // 托盘菜单窗口只需要主题与样式,不做会话/Provider 初始化
+    if (label === 'tray-menu') return;
     // 每个窗口独立 document.title:避免任务栏/Alt-Tab 显示 dev server 地址(localhost:1420)
     // 读取用户自定义应用名称(空 = "myAgent")
     ipc.getSettings()
@@ -301,6 +305,15 @@ export default function App() {
       unlisten?.();
     };
   }, [refreshSessions, loadProviders, label]);
+
+  // 托盘右键菜单是独立的透明小窗:不进入主界面/引导门
+  if (label === 'tray-menu') {
+    return (
+      <ErrorBoundary>
+        <TrayMenu />
+      </ErrorBoundary>
+    );
+  }
 
   return (
     <HashRouter>

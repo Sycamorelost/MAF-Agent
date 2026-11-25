@@ -10,7 +10,6 @@ import * as ipc from '../../lib/ipc';
 import { composeSystemPrompt, compressMemoryIfOverBudget } from './memoryContext';
 import { CHAT_CANCEL_EVENT } from '../../lib/chatCancel';
 import { DEFAULT_SYSTEM_PROMPT, withBase } from '../../lib/systemPrompt';
-import { resolveHumanVoice } from '../../lib/humanVoice';
 import { buildUserContent, buildSendHistory, rebuildSendHistory, formatDocManifest } from './attachments';
 import { useChatSettings } from './useChatSettings';
 import { useChatStream } from './useChatStream';
@@ -21,9 +20,6 @@ import { quoteSourceLabel, type QuoteRef } from '../../lib/quote';
 
 /** P2-8:准备阶段(预检索/联网/落库)用户点「停止」的哨兵错误 —— 静默收尾,不当失败提示 */
 class PrepCancelled extends Error {}
-/** 上下文条数兜底:会话未单独设置、且预设尚未解析完成/解析失败时使用(24 条 ≈ 12 轮),
- *  避免首轮把全部历史原样重发。正常情况下一律以运行时预设的 context.max_messages 为准。 */
-const FALLBACK_CTX_MESSAGES = 24;
 export interface ChatSendParams {
   sessionId: string | undefined;
   session: SessionRow | undefined;
@@ -80,29 +76,8 @@ export function useChatSend({
   const [retryTarget, setRetryTarget] = useState<BubbleMessage | null>(null);
   /** F8:钉入记忆后的轻提示(多行文件导入清单常驻,可手动关闭) */
   const { toast, showToast, hideToast } = useToast();
-  // 模型能力 / 全裸模式 / 物理契约 / 文字质感等设置
-  const { bareMode, customContract, humanVoiceLevel, thinkCap } =
-    useChatSettings(current);
-  /** P5 / D19:会话生效预设的上下文条数上限(会话未单独设置时生效;0 = 未解析/解析失败,回落兜底值)。 */
-  const [presetCtxMax, setPresetCtxMax] = useState(0);
-  useEffect(() => {
-    if (!sessionId) {
-      setPresetCtxMax(0);
-      return;
-    }
-    let alive = true;
-    ipc
-      .resolveSessionPreset(sessionId)
-      .then((info) => {
-        if (alive) setPresetCtxMax(info.preset.context.max_messages);
-      })
-      .catch(() => {
-        if (alive) setPresetCtxMax(0);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [sessionId, session?.preset_id, session?.preset_version, agent?.agent_id]);
+  // 模型能力设置
+  const { thinkCap } = useChatSettings(current);
   /** 拉取会话级文档清单:消息新增或待发附件变化时刷新(上传后即落库,清单随之更新)。 */
   useEffect(() => {
     if (!sessionId) {
@@ -133,23 +108,12 @@ export function useChatSend({
         session?.system_prompt?.trim() ||
         agent?.system_prompt ||
         DEFAULT_SYSTEM_PROMPT;
-      // Base 分层(R3 A1):人格来自会话/智能体提示,系统层只追加 [身份锚(全裸模式可关)] + 物理契约
-      // 文字质感(去 AI 味):仅白名单内的生成型智能体注入,代码/翻译/JSON 等场景自动 off
-      const sys = composeSystemPrompt(
-        withBase(core, {
-          identity: !bareMode,
-          customContract,
-          humanVoice: resolveHumanVoice(humanVoiceLevel, agent?.agent_id ?? null),
-        }),
-        memBody,
-        strategy,
-      );
+      // Base 分层:人格来自会话/智能体提示,系统层追加身份锚 + 物理契约
+      const sys = composeSystemPrompt(withBase(core), memBody, strategy);
       // 文档清单常驻:不放进滑窗消息,避免被 context.max_messages 裁掉
       return docManifest ? `${sys}\n\n${docManifest}` : sys;
     },
-    [
-      session?.system_prompt, agent, bareMode, customContract, humanVoiceLevel, docManifest,
-    ],
+    [session?.system_prompt, agent, docManifest],
   );
   const buildSystem = useCallback(
     (): string => buildSystemWith(memoryBody, session?.memory_injection_strategy ?? 'hybrid'),
@@ -159,13 +123,13 @@ export function useChatSend({
   const runStream = useChatStream({
     sessionId, current, agent, thinkCap, thinkingSel, setSending, setError, cancelRef,
   });
-  /** 用新分支的最新历史组装 system + 滑窗 + 附件注入(F4 重新生成 / F5 换模型重试共用)。 */
+  /** 用新分支的最新历史组装 system + 附件注入(F4 重新生成 / F5 换模型重试共用)。
+   *  P0:完整历史交给后端,条数窗口与跨轮压缩由后端按会话设置/预算统一处理。 */
   const rebuildHistory = (): { role: string; content: string }[] => {
     if (!sessionId) return [];
     const latest = useMessagesStore.getState().bySession[sessionId] ?? [];
     return rebuildSendHistory(
       latest,
-      session?.max_context_messages || presetCtxMax || FALLBACK_CTX_MESSAGES,
       buildSystem(),
       // C2:doc_pipeline=resident 的智能体一律注入文档卡,细节交给 doc_search/doc_read
       { resident: agent?.doc_pipeline === 'resident' },
@@ -189,12 +153,10 @@ export function useChatSend({
     const notice = await compressMemoryIfOverBudget(sessionId, current, loadMemory);
     if (notice) setCompressNotice(notice);
   };
-  /** 构建带滑窗与附件注入的历史(系统提示算 1 条;历史消息条数 = maxMsg,0=全部)。
-   *  条数优先级(D19):会话单独设置 > 会话生效预设(未解析时回落 FALLBACK_CTX_MESSAGES)。 */
+  /** 构建带附件注入的历史。P0:不在前端按条数滑窗,窗口由后端按会话设置/预算治理。 */
   const buildHistory = (extraUser: { content: string; images?: string[] } | null) =>
     buildSendHistory(
       messages,
-      session?.max_context_messages || presetCtxMax || FALLBACK_CTX_MESSAGES,
       buildSystem(),
       extraUser,
       { resident: agent?.doc_pipeline === 'resident' },

@@ -15,6 +15,7 @@ mod table;
 mod tests;
 
 use super::inline;
+pub(crate) use caption::caption_kind;
 use caption::{image_line, is_caption, is_reference_heading, labeled_block};
 use list::{list_marker, parse_list};
 use table::{is_table_line, parse_table};
@@ -24,6 +25,13 @@ pub enum Align {
     Left,
     Center,
     Right,
+}
+
+/// 题注类型(与引用扫描共用 `caption::caption_kind`)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptionKind {
+    Figure,
+    Table,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

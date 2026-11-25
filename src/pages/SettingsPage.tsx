@@ -15,7 +15,6 @@ import { StorageView } from './settings/StorageView';
 import { AboutView } from './settings/AboutView';
 import { NavMenuView } from './settings/NavMenuView';
 import { AppearanceView } from './settings/AppearanceView';
-import { PresetsView } from './settings/PresetsView';
 import { McpView } from './settings/McpView';
 import { AgentsView } from './settings/AgentsView';
 
@@ -101,7 +100,6 @@ export default function SettingsPage() {
     toggleNavItem,
     reorderNavItem,
     toggleMinimizeToTray,
-    setDefaultPreset,
   } = useGeneralSettings();
 
   const providersView = (
@@ -214,14 +212,6 @@ export default function SettingsPage() {
     media: mediaView,
     appearance: <AppearanceView />,
     navmenu: navmenuView,
-    presets: (
-      <PresetsView
-        current={settings?.default_preset ?? null}
-        onSelect={setDefaultPreset}
-        settings={settings}
-        onSave={saveSettingsPatch}
-      />
-    ),
     usage: usageView,
     storage: storageView,
     mcp: <McpView />,

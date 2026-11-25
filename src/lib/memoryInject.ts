@@ -50,8 +50,19 @@ export function injectByStrategy(body: string, strategy: MemoryStrategy): string
   return picked || body;
 }
 
-/** 注入前预算护栏:超限则硬截断并追加标记(自动压缩失败时的兜底)。 */
+/** 截断提示标记:预留其长度,保证截断后总长不超过预算。 */
+const TRUNC_MARK = '\n\n…(记忆过长,已截断)';
+
+/**
+ * 注入前预算护栏:超限则硬截断并追加标记(自动压缩失败时的兜底)。
+ * 截断后总长(含标记)不超过 MEMORY_BUDGET_TOKENS * 2 字符,
+ * 且不会把代理对(emoji 等)切成孤立的高位字符。
+ */
 export function enforceBudget(injected: string): string {
-  if (estimateTokens(injected) <= MEMORY_BUDGET_TOKENS) return injected;
-  return `${injected.slice(0, MEMORY_BUDGET_TOKENS * 2)}\n\n…(记忆过长,已截断)`;
+  const limit = MEMORY_BUDGET_TOKENS * 2;
+  if (injected.length <= limit) return injected;
+  let keep = Math.max(0, limit - TRUNC_MARK.length);
+  const last = keep > 0 ? injected.charCodeAt(keep - 1) : 0;
+  if (last >= 0xd800 && last <= 0xdbff) keep -= 1;
+  return `${injected.slice(0, keep)}${TRUNC_MARK}`;
 }

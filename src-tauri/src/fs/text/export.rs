@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::fs::{backup, docgen};
 
-use super::common::{SheetInput, WriteResult, audit, write_target};
+use super::common::{SheetInput, WriteResult, audit, write_atomic, write_target};
 use super::io::root_for_session;
 
 /// 完整文档导出:用途模板、目录、封面元信息均可指定。
@@ -58,11 +58,12 @@ fn export_docx_req_in(
         req.base_dir = root.to_path_buf();
     }
     let bytes = docgen::render(&req)?;
-    std::fs::write(&path, &bytes).map_err(|e| format!("写入失败: {e}"))?;
+    write_atomic(&path, &bytes)?;
     audit("fs_export_docx", rel, bytes.len());
     Ok(WriteResult {
         rel: rel.to_string(),
         bytes: bytes.len() as u64,
+        lines: 0,
         backup_id,
     })
 }
@@ -103,12 +104,16 @@ pub(crate) fn export_xlsx_in(
             }
         }
     }
-    wb.save(&path).map_err(|e| format!("保存 xlsx 失败: {e}"))?;
+    let tmp = super::common::temp_path(&path);
+    wb.save(&tmp)
+        .map_err(|e| format!("保存 xlsx 失败: {e}"))?;
+    super::common::commit_temp(&tmp, &path)?;
     let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
     audit("fs_export_xlsx", rel, bytes as usize);
     Ok(WriteResult {
         rel: rel.to_string(),
         bytes,
+        lines: 0,
         backup_id,
     })
 }

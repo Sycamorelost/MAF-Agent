@@ -17,11 +17,14 @@ use super::approval::ApprovalRisk;
 use super::capability::Scope;
 
 mod delegate;
+mod doc_generate;
+#[cfg(test)]
+mod doc_generate_tests;
 mod docs;
 mod fs_tools;
-mod media;
 #[cfg(test)]
 mod matrix_tests;
+mod media;
 #[cfg(test)]
 mod roundtrip_tests;
 mod shell;
@@ -125,6 +128,9 @@ pub(crate) async fn execute_builtin(
         };
     }
 
+    if name == "doc_generate" {
+        return doc_generate::exec(args, session_id, sub_llm).await;
+    }
     if fs_tools::handles(name) {
         return fs_tools::exec(name, args, session_id);
     }
@@ -151,6 +157,7 @@ pub(crate) async fn execute_builtin(
         }
         "delegate" => delegate::exec(args, sub_llm).await,
         "present" => crate::deliverables::present(session_id, args),
+        "tool_load" => crate::mcp::on_demand::exec_load(args, session_id),
         "shell_exec" => shell::exec(args, trust_shell, session_id).await,
         _ => ("未知内置工具".into(), false),
     }

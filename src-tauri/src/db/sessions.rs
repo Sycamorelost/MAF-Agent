@@ -32,10 +32,6 @@ pub struct SessionRow {
     pub workbench_mode: String,
     /// 会话级权限档覆盖(V25 / D11):inherit = 跟随全局审批策略;ask / workspace / full = 强制
     pub permission_mode: String,
-    /// 会话级运行时预设钉住(V26 / D19):None = 继承(Agent 模板默认 → 全局默认)
-    pub preset_id: Option<String>,
-    /// 钉住时的内置预设清单版本;未钉住为 None
-    pub preset_version: Option<i64>,
     /// 所属文件夹(V28 / P8):None = 未分类
     pub project_id: Option<String>,
 }
@@ -56,13 +52,11 @@ fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRow> {
         active_branch: r.get(11)?,
         workbench_mode: r.get(12)?,
         permission_mode: r.get(13)?,
-        preset_id: r.get(14)?,
-        preset_version: r.get(15)?,
-        project_id: r.get(16)?,
+        project_id: r.get(14)?,
     })
 }
 
-const SELECT_COLS: &str = "id, title, created, updated, model_id, memory_version, system_prompt, max_context_messages, web_search_enabled, memory_injection_strategy, agent_id, active_branch, workbench_mode, permission_mode, preset_id, preset_version, project_id";
+const SELECT_COLS: &str = "id, title, created, updated, model_id, memory_version, system_prompt, max_context_messages, web_search_enabled, memory_injection_strategy, agent_id, active_branch, workbench_mode, permission_mode, project_id";
 
 pub fn get(id: &str) -> Result<Option<SessionRow>, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
@@ -244,22 +238,6 @@ pub fn permission_mode_override(id: &str) -> Option<String> {
         )
         .ok()?;
     (mode != "inherit").then_some(mode)
-}
-
-/// 钉住/解除会话级运行时预设(V26 / D19)。
-/// Some(id, version) = 钉住;None = 恢复继承(版本一并清空)。
-pub fn set_preset(id: &str, preset: Option<(&str, i64)>) -> Result<(), String> {
-    let (pid, ver): (Option<&str>, Option<i64>) = match preset {
-        Some((p, v)) => (Some(p), Some(v)),
-        None => (None, None),
-    };
-    let conn = db::conn().lock().map_err(|e| e.to_string())?;
-    conn.execute(
-        "UPDATE sessions SET preset_id=?1, preset_version=?2 WHERE id=?3",
-        rusqlite::params![pid, ver, id],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 /// 把会话归入指定项目(V29 / P8.1)。None / 空串 = 移出项目(归入未分类)。

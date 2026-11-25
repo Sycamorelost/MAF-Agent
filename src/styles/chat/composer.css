@@ -255,12 +255,11 @@
 .composer .stop-btn svg { display: block; width: 14px; height: 14px; }
 .composer .stop-btn:hover { background: #d13c41; }
 
-/* 输入条控件统一度量:附件圆钮 / 联网 / 思考 / 权限 / 预设 / 模型选择器
+/* 输入条控件统一度量:附件圆钮 / 联网 / 思考 / 权限 / 模型选择器
    28px 固定高 + line-height:1 + nowrap + 不压缩;超长名称在文字 span 内省略。
    ★ 这样中文字盒不会顶破固定高,也不会被 flex 压成两行后上下截断。 */
 .composer-bar .tool-chip,
 .perm-chip,
-.preset-chip,
 .composer-model {
   height: var(--ctl-h);
   padding: 0 var(--ctl-pad);

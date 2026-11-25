@@ -3,7 +3,6 @@ import { AddServerDialog } from './AddServerDialog';
 import { ApprovalPolicyCard } from './ApprovalPolicyCard';
 import { McpServerCard } from './McpServerCard';
 import { ToolCapabilityCard } from './ToolCapabilityCard';
-import { RoleSettingsCard } from './RoleSettingsCard';
 import { MirrorCard } from './McpUtilityCards';
 import { WorkspaceSettingsCard } from './WorkspaceSettingsCard';
 import { useMcpSettings } from './useMcpSettings';
@@ -23,12 +22,8 @@ export function McpView() {
     startingAll,
     wsRoot,
     backupCount,
-    settings,
     onToggleMirror,
     onToggleTools,
-    onToggleBareMode,
-    onSetHumanVoice,
-    onSetCustomBasePrompt,
     onToggleBuiltin,
     onPickMode,
     onSaveAllowList,
@@ -53,8 +48,9 @@ export function McpView() {
     <div className="mcp-view">
       <h2>MCP 工具</h2>
       <p className="set-desc">
-        内置文件工具默认具备本机全盘增删改查(无沙箱、无文件名黑名单,覆盖 / 删除前自动备份);
-        系统命令按下方审批模式放行。通过 MCP 接入的外部 server 需手动启用,默认关闭。
+        开启「写入 / 执行工具」后,内置文件工具具备本机全盘增删改查(无沙箱、无文件名黑名单,
+        覆盖 / 删除前自动备份);关闭时只下发只读内置工具。系统命令按下方审批模式放行。
+        通过 MCP 接入的外部 server 需手动启用,默认关闭。
       </p>
       {msg && (
         <div className={`mcp-msg${msg.startsWith("错误") || msg.includes("失败") ? " err" : ""}`}>
@@ -64,15 +60,10 @@ export function McpView() {
 
       <ToolCapabilityCard
         cfg={cfg}
-        settings={settings}
         mode={policy.mode}
         onToggleTools={onToggleTools}
         onToggleBuiltin={onToggleBuiltin}
-        onToggleBareMode={onToggleBareMode}
-        onSetHumanVoice={onSetHumanVoice}
       />
-
-      <RoleSettingsCard settings={settings} onSetCustomBasePrompt={onSetCustomBasePrompt} />
 
       <WorkspaceSettingsCard
         wsRoot={wsRoot}

@@ -234,7 +234,15 @@ pub fn get(id: &str) -> Result<Option<ProjectRow>, String> {
 
 /// 构建项目工作区守卫提示词(追加到 system_prompt 末尾)。
 pub fn build_project_guard_prompt(project: &ProjectRow) -> String {
-    let ctx = project.shared_context.as_deref().unwrap_or("");
+    build_guard(
+        &project.name,
+        &project.path,
+        project.shared_context.as_deref(),
+    )
+}
+
+fn build_guard(name: &str, path: &str, shared_context: Option<&str>) -> String {
+    let ctx = shared_context.unwrap_or("");
     let ctx_display = if ctx.trim().is_empty() {
         "(无)"
     } else {
@@ -248,10 +256,66 @@ pub fn build_project_guard_prompt(project: &ProjectRow) -> String {
          你是一个专业的代码助手,所有文件读写、命令执行、搜索操作都以该工作区根目录为基准路径。\n\
          使用 MCP 工具时,path 参数直接写工作区内的相对路径,不要写绝对路径。\n\
          如果任务涉及工作区外的文件,先征得用户确认。",
-        name = project.name,
-        path = project.path,
+        name = name,
+        path = path,
         ctx = ctx_display,
     )
+}
+
+/// 请求时实时构建项目 guard(P1-8):直接读项目当前值,编辑项目后已绑定会话立即生效,
+/// 不再依赖「绑定时」写进 sessions.system_prompt 的快照。
+pub fn guard_for_session(session_id: &str) -> Option<String> {
+    use rusqlite::OptionalExtension;
+    let conn = crate::db::conn().lock().ok()?;
+    let (name, path, ctx) = conn
+        .query_row(
+            "SELECT p.name, p.path, p.shared_context FROM sessions s \
+             JOIN projects p ON p.id = s.project_id WHERE s.id=?1",
+            [session_id],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .ok()??;
+    Some(build_guard(&name, &path, ctx.as_deref()))
+}
+
+/// 剥掉 system 文本里绑定时写入的旧 guard 快照(请求时由 `guard_for_session` 重建)。
+pub fn strip_guard(text: &str) -> String {
+    match text.find(GUARD_MARKER) {
+        Some(idx) => text[..idx].trim_end().to_string(),
+        None => text.to_string(),
+    }
+}
+
+/// 项目级模型覆盖,格式 `provider_id::model_id`(P1-8:会话未显式选模型时的回退)。
+pub fn model_override_for_session(
+    session_id: &str,
+) -> Result<Option<(String, String)>, String> {
+    use rusqlite::OptionalExtension;
+    let conn = db::conn().lock().map_err(|e| e.to_string())?;
+    let raw: Option<Option<String>> = conn
+        .query_row(
+            "SELECT p.model_override FROM sessions s JOIN projects p ON p.id = s.project_id \
+             WHERE s.id=?1",
+            [session_id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    Ok(raw.flatten().as_deref().and_then(parse_model_override))
+}
+
+/// 解析 `provider_id::model_id`;格式不合法返回 None(宁可不覆盖也不要选错模型)。
+pub fn parse_model_override(raw: &str) -> Option<(String, String)> {
+    let (p, m) = raw.trim().split_once("::")?;
+    let (p, m) = (p.trim(), m.trim());
+    (!p.is_empty() && !m.is_empty()).then(|| (p.to_string(), m.to_string()))
 }
 
 /// 「当前项目工作区」守卫标记 —— system_prompt 中以此为锚点定位 guard 片段。
@@ -295,4 +359,31 @@ pub fn remove_project_guard(session_id: &str) -> Result<(), String> {
     };
     crate::db::sessions::set_system_prompt(session_id, new_sp)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GUARD_MARKER, parse_model_override, strip_guard};
+
+    #[test]
+    fn parse_model_override_needs_both_parts() {
+        assert_eq!(
+            parse_model_override("deepseek::deepseek-chat"),
+            Some(("deepseek".into(), "deepseek-chat".into()))
+        );
+        assert_eq!(parse_model_override(" deepseek :: v4 "), Some((
+            "deepseek".into(),
+            "v4".into()
+        )));
+        assert_eq!(parse_model_override("deepseek-chat"), None);
+        assert_eq!(parse_model_override("::x"), None);
+        assert_eq!(parse_model_override("x::"), None);
+    }
+
+    #[test]
+    fn strip_guard_keeps_user_prompt_only() {
+        let text = format!("我的自定义提示\n\n{GUARD_MARKER}\n- 项目名: x");
+        assert_eq!(strip_guard(&text), "我的自定义提示");
+        assert_eq!(strip_guard("无项目"), "无项目");
+    }
 }

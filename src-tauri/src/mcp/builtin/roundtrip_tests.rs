@@ -110,3 +110,57 @@ async fn fs_tools_edit_and_chunked_write_roundtrip() {
     assert_eq!(joined, expected, "分批写入的内容必须能完整读回");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// 宽松匹配:行尾空白、弯引号与破折号差异仍能编辑;失败时给出最近行号;
+/// 写入/编辑结果回传行数。
+#[tokio::test]
+async fn fs_edit_fuzzy_fallback_and_line_count() {
+    let dir = std::env::temp_dir().join(format!("maf-fuzzy-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("fuzzy.md").to_str().unwrap().to_string();
+
+    let (content, ok) = execute_builtin(
+        "fs_write",
+        &json!({ "path": path, "content": "第一行  \n他说“你好”—结束\n第三行" }),
+        false,
+        None,
+        None,
+    )
+    .await;
+    assert!(ok, "写入失败:{content}");
+    let w: serde_json::Value = serde_json::from_str(&content).unwrap();
+    assert_eq!(w["lines"], 3, "应回传写入行数:{content}");
+
+    // old 用直引号与普通连字符,原文是弯引号与破折号 → 宽松匹配
+    let (content, ok) = execute_builtin(
+        "fs_edit",
+        &json!({ "path": path, "old": "他说\"你好\"-结束", "new": "改写句子" }),
+        false,
+        None,
+        None,
+    )
+    .await;
+    assert!(ok, "宽松匹配应成功:{content}");
+    let e: serde_json::Value = serde_json::from_str(&content).unwrap();
+    assert_eq!(e["replaced"], 1);
+    assert_eq!(e["lines"], 3);
+
+    let (content, ok) =
+        execute_builtin("fs_read", &json!({ "path": path }), false, None, None).await;
+    assert!(ok, "读取失败:{content}");
+    assert_eq!(content, "第一行  \n改写句子\n第三行");
+
+    // 完全找不到时,错误信息应包含最近行号,便于模型校正
+    let (content, ok) = execute_builtin(
+        "fs_edit",
+        &json!({ "path": path, "old": "完全不存在的内容", "new": "x" }),
+        false,
+        None,
+        None,
+    )
+    .await;
+    assert!(!ok, "不应成功:{content}");
+    assert!(content.contains("第 "), "应给出最近行号:{content}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}

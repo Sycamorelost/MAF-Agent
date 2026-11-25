@@ -212,15 +212,7 @@ pub fn copy_document(
                (session_id, doc_id, doc_name, kind, page, section, ord, content, created)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
-                to_session,
-                doc_id,
-                doc_name,
-                kind,
-                page,
-                section,
-                ord,
-                content,
-                created
+                to_session, doc_id, doc_name, kind, page, section, ord, content, created
             ],
         )
         .map_err(|e| e.to_string())?;

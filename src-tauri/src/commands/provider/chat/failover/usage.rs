@@ -1,4 +1,4 @@
-﻿//! 用量落库:成功流的成本归因,以及失败/限流尝试的记录。
+//! 用量落库:成功流的成本归因,以及失败/限流尝试的记录。
 
 use super::super::super::keys::ChatSpec;
 use super::super::super::pricing::cost_nano_of;

@@ -33,7 +33,7 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
         builtin: true,
         ..v2_defaults()
     };
-    let mut list = vec![
+    let list = vec![
         // 一、Chat 类（3 个核心）
         t(
             "product-assistant",
@@ -328,11 +328,5 @@ pub fn builtin_templates() -> Vec<AgentTemplate> {
             )
         },
     ];
-    // P5 / D19:代码类模板默认「代码」预设;会话创建时钉住,之后可会话级覆盖。
-    for tpl in list.iter_mut() {
-        if tpl.category == "dev" {
-            tpl.preset = Some("code".into());
-        }
-    }
     list
 }

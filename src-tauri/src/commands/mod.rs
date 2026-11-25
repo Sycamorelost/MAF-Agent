@@ -18,16 +18,15 @@ pub mod mcp_diagnosis;
 pub mod memory;
 pub mod notes;
 pub mod popout;
-pub mod presets;
 pub mod projects;
 pub mod provider;
 pub mod search;
 pub mod search_attachments;
 pub mod settings;
 pub mod tasks;
+pub mod tray;
 pub mod tutorial;
 pub mod websearch;
-
 /// 汇总所有 command handler,供 Builder.invoke_handler 注册。
 ///
 /// 用法:`tauri::Builder::default().invoke_handler(commands::all())`
@@ -76,7 +75,7 @@ macro_rules! all_commands {
             crate::commands::memory::diff::watch_memory,
             crate::commands::memory::diff::unwatch_memory,
             crate::commands::memory::diff::needs_summarize,
-            crate::commands::memory::diff::summarize_memory,
+            crate::commands::memory::summarize::summarize_memory,
             // 迭代 D3
             crate::commands::memory::crud::set_session_memory_strategy,
             crate::commands::memory::diff::read_memory_version,
@@ -150,10 +149,6 @@ macro_rules! all_commands {
             crate::commands::projects::project_delete,
             crate::commands::projects::project_update_sort,
             crate::commands::projects::session_set_project,
-            // 运行时预设(P5 / D18 / D19)
-            crate::commands::presets::list_presets,
-            crate::commands::presets::resolve_session_preset,
-            crate::commands::presets::set_session_preset,
             // 诊断:静默失败计数(P2,只读)
             crate::commands::diagnostics::diagnostics_failure_counts,
             // 联网搜索(P0 自 research 迁出,IPC 名不变)
@@ -175,6 +170,8 @@ macro_rules! all_commands {
             crate::commands::popout::toggle_popout,
             crate::commands::popout::move_popout,
             crate::commands::popout::dock_popout,
+            // 托盘自定义菜单动作(显示主窗 / 小窗 / 收起 / 退出)
+            crate::commands::tray::tray_menu_action,
             // 知识库 / 笔记库(迭代 D8)
             crate::commands::notes::notes_list,
             crate::commands::notes::notes_get,
@@ -185,6 +182,7 @@ macro_rules! all_commands {
             crate::commands::agents::list_agent_templates,
             crate::commands::agents::save_agent_template,
             crate::commands::agents::delete_agent_template,
+            crate::commands::agents::restore_builtin_agents,
             crate::commands::agents::export_agent_template,
             crate::commands::agents::export_agent_to_file,
             crate::commands::agents::pick_agent_file,

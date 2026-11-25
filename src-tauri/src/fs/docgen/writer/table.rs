@@ -5,7 +5,7 @@ use docx_rs::*;
 use super::super::inline;
 use super::super::markdown::Align;
 use super::super::style::DocStyle;
-use super::document::add_text_runs_with;
+use super::body::add_text_runs_with;
 
 pub(super) fn table_block(
     header: &[String],

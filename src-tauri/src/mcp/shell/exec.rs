@@ -137,9 +137,14 @@ async fn execute(
     if let Some(dir) = cwd {
         command.current_dir(dir);
     }
+    // 禁止弹出黑色控制台窗口:本应用是 GUI 进程,控制台子进程默认会新建窗口。
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
     command
         .kill_on_drop(true)
-        .stdin(std::process::Stdio::null());
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
 
     let cwd_display = cwd
         .map(display_path)
@@ -147,9 +152,9 @@ async fn execute(
         .unwrap_or_else(|| "?".into());
     let dir = crate::paths::data_dir();
     let started = std::time::Instant::now();
-    let output = match tokio::time::timeout(exec_timeout, command.output()).await {
-        Ok(Ok(o)) => o,
-        Ok(Err(e)) => {
+    let mut child = match command.spawn() {
+        Ok(c) => c,
+        Err(e) => {
             crate::mcp::audit(
                 &dir,
                 "shell_exec",
@@ -166,8 +171,32 @@ async fn execute(
                  需要管道/重定向/内建命令(del/copy/mkdir/set…)时,请在「完全信任」模式下把整行命令写入 command 且 args 留空"
             ));
         }
+    };
+    // 先接管管道再等待:命令退出后若仍有子进程占用 stdout/stderr,读取阶段限时收尾,
+    // 避免 `output()` 一直等 EOF 造成工具挂死。
+    let pid = child.id().unwrap_or(0);
+    let err_task = pipe_reader(child.stderr.take());
+    let out_task = pipe_reader(child.stdout.take());
+    let status = match tokio::time::timeout(exec_timeout, child.wait()).await {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => {
+            crate::mcp::audit(
+                &dir,
+                "shell_exec",
+                "whitelist-shell",
+                cmd,
+                &format!(
+                    "ok=false stage=wait exit=- ms={} line={line} cwd={cwd_display} err={e}",
+                    started.elapsed().as_millis()
+                ),
+            );
+            return Err(format!("等待命令结束失败: {e}\n[cwd] {cwd_display}\n[cmd] {line}"));
+        }
         Err(_) => {
             let ms = started.elapsed().as_millis();
+            // 先杀进程树(cmd/npm/node 等),再回收句柄;只杀直接子进程会留下后台孤儿。
+            kill_tree(pid);
+            let _ = child.kill().await;
             crate::mcp::audit(
                 &dir,
                 "shell_exec",
@@ -176,16 +205,19 @@ async fn execute(
                 &format!("ok=false stage=timeout exit=- ms={ms} line={line} cwd={cwd_display}"),
             );
             return Err(format!(
-                "命令执行超时({}s),已终止\n[cmd] {line}\n\
-                 [提示] 该命令可能在等待交互输入(如 more、确认框),请改用非交互参数;长任务请拆成更短的命令",
+                "命令执行超时({}s),已终止进程树\n[cmd] {line}\n\
+                 [提示] 该命令可能在等待交互输入(如 more、确认框)或属于常驻进程(dev server / watch);\
+                 请改用非交互参数,长任务请拆成更短的命令",
                 exec_timeout.as_secs()
             ));
         }
     };
+    let stdout = collect_pipe(out_task).await;
+    let stderr = collect_pipe(err_task).await;
 
     let duration_ms = started.elapsed().as_millis();
-    let stdout = decode_output(&output.stdout);
-    let stderr = decode_output(&output.stderr);
+    let stdout = decode_output(&stdout);
+    let stderr = decode_output(&stderr);
     let full = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
         (true, true) => "(无输出)".to_string(),
         (false, true) => stdout,
@@ -209,7 +241,7 @@ async fn execute(
     } else {
         full
     };
-    let exit = output.status.code();
+    let exit = status.code();
     let exit_label = exit.map(|c| c.to_string()).unwrap_or_else(|| "?".into());
     let mut text =
         format!("[exit={exit_label} · {duration_ms}ms · cwd={cwd_display}] {line}\n{body}");
@@ -273,6 +305,56 @@ fn cleanup_cmd_logs(sub: &Path) {
             let _ = std::fs::remove_file(&path);
         }
     }
+}
+
+/// 在独立任务里读完一个管道:避免命令退出后子进程仍占用 stdout/stderr 时阻塞主流程。
+fn pipe_reader<R>(pipe: Option<R>) -> tokio::task::JoinHandle<Vec<u8>>
+where
+    R: tokio::io::AsyncRead + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        let mut buf = Vec::new();
+        if let Some(mut r) = pipe {
+            let _ = tokio::io::AsyncReadExt::read_to_end(&mut r, &mut buf).await;
+        }
+        buf
+    })
+}
+
+/// 限时收尾已退出的命令管道:最多再等 2 秒,超时直接丢弃(不阻塞工具返回)。
+async fn collect_pipe(mut task: tokio::task::JoinHandle<Vec<u8>>) -> Vec<u8> {
+    match tokio::time::timeout(Duration::from_secs(2), &mut task).await {
+        Ok(Ok(buf)) => buf,
+        _ => {
+            task.abort();
+            Vec::new()
+        }
+    }
+}
+
+/// 杀掉整个进程树:仅 `child.kill()` 会留下 npm/node 等后代进程,继续占用管道或端口。
+#[cfg(windows)]
+fn kill_tree(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("taskkill")
+        .args(["/T", "/F", "/PID", &pid.to_string()])
+        .creation_flags(0x0800_0000)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
+#[cfg(not(windows))]
+fn kill_tree(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    let _ = std::process::Command::new("kill")
+        .args(["-9", &pid.to_string()])
+        .status();
 }
 
 /// 整行命令交给系统 shell:Windows 用 `cmd /c`(raw_arg 避免 Rust 引号与 cmd 解析冲突),

@@ -8,6 +8,7 @@ import {
   memoryBudgetStatus,
   readMemory,
   type BudgetStatus,
+  type DeliverableDto,
   type FsBackup,
   type MemoryDto,
   type MessageRow,
@@ -23,8 +24,25 @@ import {
   type Trace,
 } from '../../lib/toolTrace';
 import { useMessagesStore } from '../../stores/messages';
+import { useDeliverablesStore } from '../../stores/deliverables';
 
 const EMPTY_MESSAGES: MessageRow[] = [];
+const EMPTY_DELIVERABLES: DeliverableDto[] = [];
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+
+/** 后端登记的产物是唯一真源;工具轨迹派生只用于补「已写但未登记」的路径。 */
+function artifactsFromDeliverables(list: DeliverableDto[]): Artifact[] {
+  return list.map((d) => ({
+    kind: 'file',
+    name: d.name || d.path.split(/[\\/]/).pop() || d.path,
+    path: d.path,
+    size: d.size,
+    messageId: d.message_id ?? -1,
+    created: d.created,
+    isImage: d.kind === 'image' || IMAGE_EXT.test(d.path),
+    step: null,
+  }));
+}
 
 export interface WorkbenchData {
   /** 当前会话 id:相对路径读取/回滚都要按该会话工作区解析 */
@@ -44,6 +62,11 @@ export interface WorkbenchData {
 export function useWorkbenchData(sessionId: string): WorkbenchData {
   const messages = useMessagesStore((s) => s.bySession[sessionId] ?? EMPTY_MESSAGES);
   const streaming = useMessagesStore((s) => s.streaming[sessionId] ?? '');
+  const deliverables = useDeliverablesStore((s) => s.bySession[sessionId] ?? EMPTY_DELIVERABLES);
+  const deliverableArtifacts = useMemo(
+    () => artifactsFromDeliverables(deliverables),
+    [deliverables],
+  );
 
   // 历史消息的工具痕迹:只在消息变化时解析一次
   const messageTraces = useMemo(() => collectSessionTraces(messages), [messages]);
@@ -78,15 +101,15 @@ export function useWorkbenchData(sessionId: string): WorkbenchData {
     [messageTraces, streamTraces],
   );
 
-  // 产物:历史消息解析一次;流式部分复用已解析 trace,不再按原文重扫
+  // 产物:产物表(唯一真源)+ 工具轨迹派生(补「已写未登记」);流式部分复用已解析 trace
   const artifacts = useMemo<Artifact[]>(() => {
-    const base = extractArtifacts(messages);
+    const base = mergeArtifactLists(extractArtifacts(messages), deliverableArtifacts);
     if (streamTraces.length === 0) return base;
     const stepOffset = base.length > 0
       ? Math.max(...base.map((a) => a.step ?? 0)) + 1
       : 1;
     return mergeArtifactLists(base, artifactsFromTraces(streamTraces, stepOffset));
-  }, [messages, streamTraces]);
+  }, [messages, streamTraces, deliverableArtifacts]);
 
   const [backups, setBackups] = useState<FsBackup[]>([]);
   const [budget, setBudget] = useState<BudgetStatus | null>(null);

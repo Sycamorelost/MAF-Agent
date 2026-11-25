@@ -89,9 +89,12 @@ fn builtin_approval_matrix_is_conservative() {
         "fs_write_finish",
         "fs_delete",
         "fs_restore",
+        "doc_generate",
         "fs_export_docx",
         "fs_export_xlsx",
         "zip_extract",
+        "image_compose",
+        "diagram_export",
     ] {
         assert!(builtin_needs_approval(name), "`{name}` 必须审批");
     }

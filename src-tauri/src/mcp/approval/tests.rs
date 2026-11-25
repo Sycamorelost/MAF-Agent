@@ -109,12 +109,7 @@ fn policy_modes_gate_approval() {
         ApprovalRisk::Low,
         &json!({})
     ));
-    assert!(!ws_allow.requires_approval(
-        "长期记忆",
-        "search_nodes",
-        ApprovalRisk::Low,
-        &json!({})
-    ));
+    assert!(!ws_allow.requires_approval("长期记忆", "search_nodes", ApprovalRisk::Low, &json!({})));
     assert!(ws_allow.requires_approval(
         "长期记忆",
         "create_entities",
@@ -227,8 +222,7 @@ fn approval_mode_is_permanent_and_global() {
 
 #[test]
 fn policy_json_roundtrip_and_legacy_alias() {
-    let p: ApprovalPolicy =
-        serde_json::from_str(r#"{"mode":"full","allow":["a::b"]}"#).unwrap();
+    let p: ApprovalPolicy = serde_json::from_str(r#"{"mode":"full","allow":["a::b"]}"#).unwrap();
     assert_eq!(p.mode, ApprovalMode::Full);
     assert_eq!(p.allow, vec!["a::b".to_string()]);
     // 旧值别名迁移:manual→ask,auto/custom→workspace;full 保持 full(绝不降级)

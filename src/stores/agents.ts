@@ -8,6 +8,7 @@ interface AgentsState {
   load: () => Promise<void>;
   save: (agent: ipc.AgentTemplate) => Promise<void>;
   remove: (agentId: string) => Promise<void>;
+  restoreBuiltins: () => Promise<void>;
 }
 
 export const useAgentsStore = create<AgentsState>((set, get) => ({
@@ -33,6 +34,11 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   remove: async (agentId) => {
     await ipc.deleteAgentTemplate(agentId);
+    await get().load();
+  },
+
+  restoreBuiltins: async () => {
+    await ipc.restoreBuiltinAgents();
     await get().load();
   },
 }));

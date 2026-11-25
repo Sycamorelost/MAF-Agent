@@ -118,12 +118,7 @@ pub(super) fn styles_for(s: &DocStyle) -> Styles {
                         .line_rule(LineSpacingType::Auto)
                         .line(300),
                 )
-                .indent(
-                    Some(480),
-                    Some(SpecialIndentType::Hanging(480)),
-                    None,
-                    None,
-                ),
+                .indent(Some(480), Some(SpecialIndentType::Hanging(480)), None, None),
         )
         .add_style(
             Style::new("MathBlock", StyleType::Paragraph)

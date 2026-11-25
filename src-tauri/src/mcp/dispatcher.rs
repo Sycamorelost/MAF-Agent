@@ -18,7 +18,6 @@ use tauri::ipc::Channel;
 use crate::provider::{ChatMessage, StreamChunk, ToolCall};
 
 use super::approval::{APPROVAL_TIMEOUT_SECS, ApprovalResult, ApprovalStore};
-use super::capability::CapabilityStore;
 use super::mcp_call::McpToolCall;
 use super::runtime::McpRuntime;
 
@@ -42,7 +41,6 @@ pub async fn dispatch_tool_calls(
     assistant_content: String,
     runtime: &McpRuntime,
     approval: &ApprovalStore,
-    capability: &CapabilityStore,
     data_dir: PathBuf,
     channel: &Channel<StreamChunk>,
     session_id: Option<&str>,
@@ -101,7 +99,6 @@ pub async fn dispatch_tool_calls(
                 match ask_approval(
                     app,
                     approval,
-                    capability,
                     &data_dir,
                     "builtin",
                     &tool_name,
@@ -163,30 +160,29 @@ pub async fn dispatch_tool_calls(
             continue;
         }
 
-        // 1. 反查 server
-        let server = match runtime.find_server_for_tool(&tool_name).await {
-            Some(s) => s,
-            None => {
-                all_ok = false;
-                let msg = format!("未找到提供工具 `{tool_name}` 的已启用 MCP server,调用已跳过。");
-                let _ = channel.send(StreamChunk::ToolCallResult {
-                    tool_call_id: tc.id.clone(),
-                    tool_name: tool_name.clone(),
-                    server_name: "(unknown)".into(),
-                    content: msg.clone(),
-                    ok: false,
-                    arguments: None,
-                    elapsed_ms: None,
-                    log_id: None,
-                });
-                tool_messages.push(tool_message(&tc.id, msg));
-                continue;
-            }
+        // 1. 解析调用名:命名空间 `mcp__{server}__{tool}` → (server, 原始工具名);
+        //    同时兼容旧对话里的裸工具名。候选 server 排序后匹配,结果确定不串台。
+        let called_name = tool_name;
+        let Some((server, tool_name)) = runtime.resolve_tool(&called_name).await else {
+            all_ok = false;
+            let msg = format!("未找到提供工具 `{called_name}` 的已启用 MCP server,调用已跳过。如需使用外部工具,先用 tool_load 加载对应 server 或工具。");
+            let _ = channel.send(StreamChunk::ToolCallResult {
+                tool_call_id: tc.id.clone(),
+                tool_name: called_name.clone(),
+                server_name: "(unknown)".into(),
+                content: msg.clone(),
+                ok: false,
+                arguments: None,
+                elapsed_ms: None,
+                log_id: None,
+            });
+            tool_messages.push(tool_message(&tc.id, msg));
+            continue;
         };
 
         // 2. 审批(会话内已放行的工具直接跳过弹窗);AllowEdited 用用户改后的参数
         let exec_args = match ask_approval(
-            app, approval, capability, &data_dir, &server, &tool_name, args, false, session_id,
+            app, approval, &data_dir, &server, &tool_name, args, false, session_id,
         )
         .await
         {
@@ -200,7 +196,7 @@ pub async fn dispatch_tool_calls(
                 );
                 let _ = channel.send(StreamChunk::ToolCallResult {
                     tool_call_id: tc.id.clone(),
-                    tool_name: tool_name.clone(),
+                    tool_name: called_name.clone(),
                     server_name: server.clone(),
                     content: msg.clone(),
                     ok: false,
@@ -266,10 +262,10 @@ pub async fn dispatch_tool_calls(
         }
 
         // 5. 结果推前端(UI 展示工具卡片);P4:外部工具同样记录全文并回传 log id
-        let log_id = record_tool_log(session_id, &tool_name, &exec_args, &content);
+        let log_id = record_tool_log(session_id, &called_name, &exec_args, &content);
         let _ = channel.send(StreamChunk::ToolCallResult {
             tool_call_id: tc.id.clone(),
-            tool_name: tool_name.clone(),
+            tool_name: called_name.clone(),
             server_name: server,
             content: content.clone(),
             ok: result.ok,
@@ -322,7 +318,6 @@ fn tool_message(tool_call_id: &str, content: String) -> ChatMessage {
 async fn ask_approval(
     app: &tauri::AppHandle,
     approval: &ApprovalStore,
-    _capability: &CapabilityStore,
     data_dir: &std::path::Path,
     server: &str,
     tool: &str,
@@ -341,8 +336,7 @@ async fn ask_approval(
     // 所有会话、所有环境共用一个档位,不存在会话级覆盖。
     let policy = super::approval::load_policy(data_dir);
     // 完全信任:绝不弹窗 —— forced(工作区外读取 / 高危 shell)同样直接放行,仅留审计记录。
-    // 能力令牌不再有此出口:full 档下任何调用都直接放行,令牌无消费必要;
-    // 切回逐次/工作区档后残留令牌也不再生效(由 mcp_call_tool_with_approval 各自判定)。
+    // 能力令牌已移除:full 档直接放行、无需令牌出口;其余档按白名单/工作区规则判定。
     if policy.mode == super::approval::ApprovalMode::Full {
         crate::mcp::audit(
             data_dir,

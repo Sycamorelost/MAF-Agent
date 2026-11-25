@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use crate::fs::{backup, paths};
 
 use super::common::{
-    FileEntry, MAX_LIST_ENTRIES, MAX_READ_CHARS, WriteResult, audit, display_path, write_target,
+    FileEntry, MAX_LIST_ENTRIES, MAX_READ_CHARS, WriteResult, audit, count_lines, display_path,
+    write_atomic, write_target,
 };
 
 // ---------------- 对外接口(支持项目工作区绑定) ----------------
@@ -296,11 +297,12 @@ pub(crate) fn write_text_in(
 ) -> Result<WriteResult, String> {
     let path = write_target(root, rel)?;
     let backup_id = backup::snapshot_in(backup_base, root, &path, None, None)?;
-    std::fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))?;
+    write_atomic(&path, content.as_bytes())?;
     audit("fs_write", rel, content.len());
     Ok(WriteResult {
         rel: rel.to_string(),
         bytes: content.len() as u64,
+        lines: count_lines(content),
         backup_id,
     })
 }
@@ -317,6 +319,7 @@ pub(crate) fn delete_in(root: &Path, rel: &str, backup_base: &Path) -> Result<Wr
     Ok(WriteResult {
         rel: rel.to_string(),
         bytes: 0,
+        lines: 0,
         backup_id,
     })
 }

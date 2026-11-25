@@ -72,7 +72,10 @@ pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (Strin
                 return ("缺少 path 参数".into(), false);
             }
             match crate::fs::text::write_text(path, content, session_id) {
-                Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
+                Ok(r) => {
+                    crate::deliverables::auto_register(session_id, path);
+                    (serde_json::to_string(&r).unwrap_or_default(), true)
+                }
                 Err(e) => (format!("写入失败:{e}"), false),
             }
         }
@@ -93,7 +96,10 @@ pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (Strin
                 return ("缺少 old 参数:请给出待替换的原文片段".into(), false);
             }
             match crate::fs::text::edit_text(path, old, new, replace_all, session_id) {
-                Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
+                Ok(r) => {
+                    crate::deliverables::auto_register(session_id, path);
+                    (serde_json::to_string(&r).unwrap_or_default(), true)
+                }
                 Err(e) => (format!("编辑失败:{e}"), false),
             }
         }
@@ -126,7 +132,10 @@ pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (Strin
                 return ("缺少 write_id 参数".into(), false);
             }
             match crate::fs::text::write_chunk_finish(id) {
-                Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
+                Ok(r) => {
+                    crate::deliverables::auto_register(session_id, &r.rel);
+                    (serde_json::to_string(&r).unwrap_or_default(), true)
+                }
                 Err(e) => (format!("收尾写入失败:{e}"), false),
             }
         }
@@ -153,7 +162,8 @@ pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (Strin
                 .get("meta")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .unwrap_or_default();
-            let mut req = crate::fs::docgen::DocRequest::from_parts(title, body, profile, toc, meta);
+            let mut req =
+                crate::fs::docgen::DocRequest::from_parts(title, body, profile, toc, meta);
             req.template = args
                 .get("template")
                 .and_then(|v| v.as_str())
@@ -166,9 +176,28 @@ pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (Strin
                 .unwrap_or("")
                 .trim()
                 .to_string();
+            req.formula_mode = match crate::fs::docgen::FormulaMode::parse(
+                args.get("formula_mode").and_then(|v| v.as_str()),
+            ) {
+                Ok(m) => m,
+                Err(e) => return (e, false),
+            };
+            req.style_pack = args
+                .get("style_pack")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
+            req.brand = args
+                .get("brand")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
             let template = req.effective_template();
             match crate::fs::text::export_docx_ext(path, &req, session_id) {
                 Ok(r) => {
+                    crate::deliverables::auto_register(session_id, path);
                     let mut v = serde_json::to_value(&r).unwrap_or_default();
                     if let Some(obj) = v.as_object_mut() {
                         obj.insert("template".into(), serde_json::json!(template.name));
@@ -209,7 +238,10 @@ pub(super) fn exec(name: &str, args: &Value, session_id: Option<&str>) -> (Strin
                 None => Vec::new(),
             };
             match crate::fs::text::export_xlsx(path, &sheets, session_id) {
-                Ok(r) => (serde_json::to_string(&r).unwrap_or_default(), true),
+                Ok(r) => {
+                    crate::deliverables::auto_register(session_id, path);
+                    (serde_json::to_string(&r).unwrap_or_default(), true)
+                }
                 Err(e) => (format!("导出 xlsx 失败:{e}"), false),
             }
         }

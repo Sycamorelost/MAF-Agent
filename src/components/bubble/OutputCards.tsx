@@ -194,12 +194,15 @@ export function OutputCards({
       seen.add(c.key);
       out.push(c);
     }
-    // 兜底:正文里明确写了路径、但后端没登记的旧会话
-    for (const f of extractOutputFiles(content)) {
-      const key = f.path.replace(/\\/g, '/').toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ key, path: f.path, name: f.name, isImage: f.isImage });
+    // 兜底:仅用于后端没有登记产物的旧会话;已有登记时正文里的路径往往
+    // 包含模型尝试过的错误路径,再解析会生成重复卡片。
+    if (out.length === 0) {
+      for (const f of extractOutputFiles(content)) {
+        const key = f.path.replace(/\\/g, '/').toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ key, path: f.path, name: f.name, isImage: f.isImage });
+      }
     }
     return out;
   }, [all, messageId, content]);

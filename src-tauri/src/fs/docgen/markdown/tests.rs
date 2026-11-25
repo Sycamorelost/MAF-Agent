@@ -125,7 +125,9 @@ fn parses_display_math_blocks_single_line_pair() {
 
 #[test]
 fn references_after_heading_use_reference_block() {
-    let blocks = parse("## 参考文献\n\n[1] 张三. 组合优化[M]. 北京: 科学出版社, 2020.\n\n2. 李四. CSP 综述[J]. 2021.");
+    let blocks = parse(
+        "## 参考文献\n\n[1] 张三. 组合优化[M]. 北京: 科学出版社, 2020.\n\n2. 李四. CSP 综述[J]. 2021.",
+    );
     // 标题保留,其后每个条目一条 Reference
     assert!(matches!(blocks[0], Block::Heading { .. }));
     assert_eq!(blocks.len(), 3);
@@ -133,7 +135,10 @@ fn references_after_heading_use_reference_block() {
         blocks[1],
         Block::Reference("[1] 张三. 组合优化[M]. 北京: 科学出版社, 2020.".into())
     );
-    assert_eq!(blocks[2], Block::Reference("李四. CSP 综述[J]. 2021.".into()));
+    assert_eq!(
+        blocks[2],
+        Block::Reference("李四. CSP 综述[J]. 2021.".into())
+    );
 }
 
 #[test]

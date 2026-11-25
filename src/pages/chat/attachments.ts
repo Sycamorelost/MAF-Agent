@@ -89,40 +89,45 @@ export function injectAttachments(
   return parts.join('\n\n');
 }
 
-/** 构建带滑窗与附件注入的历史(系统提示算 1 条;历史消息条数 = maxMsg,0=全部)。 */
+/** 发往 LLM 的消息(id 仅用于后端跨轮压缩水位线,不会暴露给模型厂商之外)。 */
+export interface OutgoingMessage {
+  id?: number;
+  role: string;
+  content: string;
+  images?: string[];
+  reasoning_content?: string;
+}
+
+/** 构建带附件注入的历史。
+ *  P0:前端不再做条数滑窗 —— 历史窗口与跨轮压缩统一由后端按预算治理,
+ *  前端把完整历史(带 id)发过去,后端据此丢弃已被摘要覆盖的部分。 */
 export function buildSendHistory(
   messages: MessageRow[],
-  maxMsg: number,
   system: string,
   extraUser: { content: string; images?: string[] } | null,
   docOpts: DocPipelineOpts = {},
-): { role: string; content: string; images?: string[]; reasoning_content?: string }[] {
-  let base = messages.slice();
-  if (maxMsg > 0 && base.length > maxMsg) base = base.slice(-maxMsg);
-  // 附件注入:窗口内所有带附件消息均注入,但同一文档只注入一次
+): OutgoingMessage[] {
+  // 附件注入:所有带附件消息均注入,但同一文档只注入一次
   const seen = new Set<string>();
-  const history = base.map((m) => ({
+  const history: OutgoingMessage[] = messages.map((m) => ({
+    id: m.id,
     role: m.role,
     content: injectAttachments(m, docOpts, seen),
     // DeepSeek 思考模式要求回传 assistant 的思考内容,否则下一轮 400
     ...(m.role === 'assistant' && m.reasoning ? { reasoning_content: m.reasoning } : {}),
   }));
-  const out: { role: string; content: string; images?: string[]; reasoning_content?: string }[] = [
-    { role: 'system', content: system },
-    ...history,
-  ];
+  const out: OutgoingMessage[] = [{ role: 'system', content: system }, ...history];
   if (extraUser) out.push({ role: 'user', content: extraUser.content, images: extraUser.images });
   return out;
 }
 
-/** 用新分支的最新历史组装 system + 滑窗 + 附件注入(F4 重新生成 / F5 换模型重试共用)。 */
+/** 用新分支的最新历史组装 system + 附件注入(F4 重新生成 / F5 换模型重试共用)。 */
 export function rebuildSendHistory(
-  latest: MessageRow[], maxMsg: number, system: string, docOpts: DocPipelineOpts = {},
-): { role: string; content: string; reasoning_content?: string }[] {
-  let base = latest.slice();
-  if (maxMsg > 0 && base.length > maxMsg) base = base.slice(-maxMsg);
+  latest: MessageRow[], system: string, docOpts: DocPipelineOpts = {},
+): OutgoingMessage[] {
   const seen = new Set<string>();
-  const history = base.map((m) => ({
+  const history: OutgoingMessage[] = latest.map((m) => ({
+    id: m.id,
     role: m.role,
     content: injectAttachments(m, docOpts, seen),
     ...(m.role === 'assistant' && m.reasoning ? { reasoning_content: m.reasoning } : {}),

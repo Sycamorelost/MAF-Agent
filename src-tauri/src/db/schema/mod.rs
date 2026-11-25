@@ -1,7 +1,7 @@
 //! SQLite schema 定义与迁移。
 //!
 //! 对应 plan/01-phase1-mvp.md §3.1。
-//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION(36)。
+//! 通过 PRAGMA user_version 做版本迁移,当前版本 = SCHEMA_VERSION。
 //!
 //! 拆分(§10.2.1):`migrate_v1` 收敛 V1–V15 的迁移 SQL 与自愈式加列助手,
 //! `v16` 收敛 V16–V22 的迁移 SQL;版本执行顺序仍由本文件统一编排。
@@ -24,7 +24,7 @@ use v16::{
 };
 
 /// 当前 schema 版本。每次结构变更 +1 并追加迁移 SQL。
-pub const SCHEMA_VERSION: i32 = 38;
+pub const SCHEMA_VERSION: i32 = 40;
 
 // V29(P8.1 项目化升级):folders → projects,加字段对齐 Cursor Projects 设计。
 // - 重命名 folders → projects(SQLite ALTER TABLE RENAME)
@@ -107,6 +107,7 @@ fn is_schema_ready(conn: &Connection) -> rusqlite::Result<bool> {
         "tool_call_log",
         "session_events",
         "deliverables",
+        "session_compactions",
     ];
     let placeholders = vec!["?"; CORE.len()].join(",");
     let sql = format!("SELECT COUNT(*) FROM sqlite_master WHERE name IN ({placeholders})");
@@ -484,12 +485,9 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     // 旧三表(question_bank / study_papers / study_paper_items)由
     //   study::learn::export_legacy_tables 在 migrate 之前导出为文件并 DROP;
     // 此处不再建表,新装环境天然无此三表。
-    // V36(P1):断流/报错时保留已生成正文 —— messages.partial 标记该条回答被中断。
-    //   0 = 完整回答(默认),1 = 中断/报错时落库的部分内容,前端气泡显示「已中断」。
+    // V36(P1):断流/报错时保留已生成正文,partial=1 表示该条回答被中断。
     ensure_column(&tx, "messages", "partial", "INTEGER NOT NULL DEFAULT 0")?;
-    // V37(D7 可解释性):会话事件追加表。只追加、不改写既有消息表,用于回答
-    //   「模型当时看到了什么」:上下文压缩、项目约定注入、网页抓取、每轮请求指纹。
-    //   payload 为 JSON 文本(结构随 kind 而定,读方忽略未知字段);会话删除时随库清理。
+    // V37(D7 可解释性):会话事件追加表,回答「模型当时看到了什么」;payload 为 JSON。
     tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS session_events (
            id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -521,6 +519,8 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
          CREATE INDEX IF NOT EXISTS idx_deliverables_message ON deliverables(message_id);
          CREATE INDEX IF NOT EXISTS idx_deliverables_pending ON deliverables(session_id, message_id);",
     )?;
+    // V39/V40:按需工具加载状态 + 跨轮压缩摘要(摘要 + 已覆盖消息水位线)。
+    crate::db::migrate_tool_and_compaction(&tx)?;
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
     Ok(())

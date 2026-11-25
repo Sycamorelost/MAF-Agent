@@ -9,7 +9,6 @@ export * from './attachment';
 export * from './doc';
 export * from './projects';
 export * from './memory';
-export * from './presets';
 export * from './provider';
 export * from './websearch';
 export * from './export';

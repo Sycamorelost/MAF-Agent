@@ -37,6 +37,11 @@ struct ChunkWrite {
     target: PathBuf,
     temp: PathBuf,
     bytes: u64,
+    /// 已写入的换行数(用于收尾时回传行数)
+    newlines: u64,
+    /// 最后一段是否以换行结尾(决定总行数是否 +1)
+    ends_with_newline: bool,
+    has_content: bool,
     /// 所属聊天会话(用于并发上限;None = 无会话上下文)
     owner: Option<String>,
     /// 创建时刻(用于 2h TTL;用墙钟便于测试回拨时间)
@@ -129,6 +134,9 @@ pub(crate) fn write_chunk_begin_in(
             target,
             temp,
             bytes: 0,
+            newlines: 0,
+            ends_with_newline: true,
+            has_content: false,
             owner: owner.map(str::to_string),
             created: std::time::SystemTime::now(),
         },
@@ -174,6 +182,11 @@ pub fn write_chunk_append(write_id: &str, content: &str) -> Result<WriteChunkSta
     f.write_all(content.as_bytes())
         .map_err(|e| format!("写入临时文件失败: {e}"))?;
     w.bytes += content.len() as u64;
+    if !content.is_empty() {
+        w.has_content = true;
+        w.newlines += content.bytes().filter(|&b| b == b'\n').count() as u64;
+        w.ends_with_newline = content.ends_with('\n');
+    }
     Ok(WriteChunkState {
         write_id: write_id.to_string(),
         path: w.rel.clone(),
@@ -219,9 +232,15 @@ pub fn write_chunk_finish(write_id: &str) -> Result<WriteResult, String> {
         let _ = std::fs::remove_file(&w.temp);
     }
     audit("fs_write", &w.rel, w.bytes as usize);
+    let lines = if w.has_content {
+        w.newlines + u64::from(!w.ends_with_newline)
+    } else {
+        0
+    };
     Ok(WriteResult {
         rel: w.rel,
         bytes: w.bytes,
+        lines,
         backup_id,
     })
 }

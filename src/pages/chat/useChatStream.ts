@@ -11,7 +11,7 @@ import { createStreamChunks } from './chatStream';
 
 /** 一次流式发送的入参:历史 + 可选来源 + 可选仅本次生效的模型覆盖。 */
 export type RunChatStream = (
-  history: { role: string; content: string; images?: string[] }[],
+  history: { id?: number; role: string; content: string; images?: string[] }[],
   sources?: SourceItem[] | null,
   modelOverride?: { providerId: string; model: string },
 ) => Promise<void>;
@@ -39,7 +39,7 @@ export function useChatStream({
    *  新消息 model_id 记录为 override 模型。 */
   const runStream = useCallback(
     async (
-      history: { role: string; content: string; images?: string[] }[],
+      history: { id?: number; role: string; content: string; images?: string[] }[],
       sources?: ipc.SourceItem[] | null,
       modelOverride?: { providerId: string; model: string },
     ) => {

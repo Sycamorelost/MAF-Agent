@@ -19,10 +19,16 @@ pub async fn save_agent_template(agent: AgentTemplate) -> Result<(), String> {
     agents::upsert_custom(agent)
 }
 
-/// 删除自定义模板/变体;若为内置 id 则删除自定义覆盖、恢复内置。
+/// 删除模板:默认助手不可删;内置(非默认助手)记入删除清单并消失;自定义直接移除。
 #[tauri::command]
 pub async fn delete_agent_template(agent_id: String) -> Result<(), String> {
-    agents::remove_custom(&agent_id)
+    agents::remove_template(&agent_id)
+}
+
+/// 恢复所有被用户删除的内置智能体。
+#[tauri::command]
+pub async fn restore_builtin_agents() -> Result<(), String> {
+    agents::restore_deleted_builtins()
 }
 
 /// 导出单个智能体为 JSON 字符串(便于分享/备份)。

@@ -6,10 +6,11 @@ import { emptyEditor, toLines, CAT_LABEL, CAT_ORDER, type EditorState } from '..
 import { AgentGrid, type AgentGroup } from './AgentGrid';
 import { AgentEditorDialog } from './AgentEditorDialog';
 import { AgentVariantDialog, type VariantDraft } from './AgentVariantDialog';
+import { uiConfirm } from '../../components/confirmService';
 
 /** 设置页 → 智能体管理:列表 / 新建 / 编辑 / 删除 / 创建变体。 */
 export function AgentsView() {
-  const { templates, loaded, load, save, remove } = useAgentsStore();
+  const { templates, loaded, load, save, remove, restoreBuiltins } = useAgentsStore();
   const { templates: providers } = useProvidersStore();
 
   const [query, setQuery] = useState('');
@@ -69,8 +70,7 @@ export function AgentsView() {
       (t.thinking_level ?? '').length > 0 ||
       t.temperature != null ||
       (t.doc_pipeline ?? '').length > 0 ||
-      (t.triggers ?? []).length > 0 ||
-      t.preset != null;
+      (t.triggers ?? []).length > 0;
     setAdvanced(hasAdvanced);
     setEditor({
       mode: 'edit',
@@ -197,7 +197,7 @@ export function AgentsView() {
     <div className="set-block">
       <div className="set-head">智能体管理</div>
       <p className="set-desc">
-        管理全部智能体(内置 + 自定义)。内置智能体不可删除,可「创建变体」另存为自定义;
+        管理全部智能体(内置 + 自定义)。除「默认助手」外均可直接删除,删除的内置可通过「恢复内置」找回;
         新建可选简单模式(核心字段)或高级模式(完整配置)。
       </p>
 
@@ -234,6 +234,22 @@ export function AgentsView() {
           onClick={() => fileInputRef.current?.click()}
         >
           导入
+        </button>
+        <button
+          type="button"
+          className="btn ghost"
+          onClick={async () => {
+            if (
+              await uiConfirm({
+                title: '恢复内置',
+                message: '恢复所有被删除的内置智能体?自定义与变体不受影响。',
+                confirmText: '恢复',
+              })
+            )
+              await restoreBuiltins();
+          }}
+        >
+          恢复内置
         </button>
         <input
           ref={fileInputRef}

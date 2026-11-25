@@ -32,6 +32,20 @@ tmp_*
 # ===== npx / npm 运行时缓存（首次下载 mcp server 时生成） =====
 *.tsbuildinfo
 
+# ===== 实测产物 / 生成物（本地保留，不随仓库分发） =====
+实测用例/
+.trae/documents/
+.screenshots/
+.trae-html-share-packages/
+.trae-plans/
+coverage/
+test-results/
+playwright-report/
+.nyc_output/
+.eslintcache
+.stylelintcache
+.turbo/
+
 # ===== 编辑器 =====
 .vscode/*
 !.vscode/extensions.json

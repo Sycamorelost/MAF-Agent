@@ -102,9 +102,43 @@ pub fn recent_on(
     Ok(out)
 }
 
-/// 当前激活分支可见链的最近 N 条消息(全局连接包装)。
-pub fn recent(session_id: &str, limit: i64) -> Result<Vec<MessageRow>, String> {
+/// 分支可见链中 `id > after_id` 的最早 N 条消息(升序)。
+///
+/// 用于记忆提炼:必须从水位线之后**按时间正序**取连续批次,
+/// 否则「只取最近 N 条 + 水位线跳到最新」会永久跳过中间消息。
+pub fn after_id_on(
+    conn: &Connection,
+    session_id: &str,
+    branch_id: &str,
+    after_id: i64,
+    limit: i64,
+) -> Result<Vec<MessageRow>, String> {
+    let mut stmt = conn
+        .prepare(&format!(
+            "{} SELECT {} FROM messages WHERE id IN (SELECT id FROM chain) AND id > ?3 ORDER BY id ASC LIMIT ?4",
+            CHAIN_CTE, SELECT_COLS
+        ))
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(
+            rusqlite::params![session_id, branch_id, after_id, limit.max(1)],
+            row_to_message,
+        )
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(out)
+}
+
+/// 当前激活分支可见链中水位线之后的最早 N 条消息(全局连接包装)。
+pub fn after_id(
+    session_id: &str,
+    after_id: i64,
+    limit: i64,
+) -> Result<Vec<MessageRow>, String> {
     let conn = crate::db::conn().lock().map_err(|e| e.to_string())?;
     let branch = crate::db::sessions::active_branch_on(&conn, session_id)?;
-    recent_on(&conn, session_id, &branch, limit)
+    after_id_on(&conn, session_id, &branch, after_id, limit)
 }

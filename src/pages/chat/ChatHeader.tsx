@@ -227,7 +227,6 @@ export function ChatHeader({
           </span>
         </>
       )}
-      {/* 运行时预设选择器已移至设置页「运行时预设」统一管理,会话页不再提供入口 */}
       {/* F4:分支指示条(仅多分支或激活分支非 main 时显示) */}
       {(branches.length > 1 || activeBranch !== 'main') && (
         <div className="branch-chip-wrap">

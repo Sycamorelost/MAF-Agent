@@ -1,5 +1,6 @@
-use super::super::style::CONTENT_W;
 use super::table::column_widths;
+
+const CONTENT_W: usize = 8504;
 
 fn widths_of(cells: &[&str]) -> Vec<usize> {
     let header: Vec<String> = cells.iter().map(|s| s.to_string()).collect();

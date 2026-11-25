@@ -46,7 +46,6 @@ const LEGACY: Record<string, number> = {
   'src/stores/messages.ts': 440,
   'src-tauri/src/mcp/safety.rs': 435,
   'src-tauri/src/gui/uia.rs': 423,
-  'src-tauri/src/mcp/builtin/media/image.rs': 422,
   'src-tauri/src/db/sessions.rs': 412,
   'src/lib/toolTrace.ts': 407,
   'src/pages/NotesPage.tsx': 404,

@@ -22,7 +22,7 @@ function fmtTime(created: string): string {
 
 const WRITE_TOOLS = new Set([
   'fs_write_text', 'fs_write', 'fs_edit', 'fs_write_finish',
-  'fs_export_docx', 'fs_export_xlsx', 'write_file',
+  'fs_export_docx', 'fs_export_xlsx', 'doc_generate', 'write_file',
 ]);
 
 export function ToolStreamTab({ data }: { data: WorkbenchData }) {

@@ -81,12 +81,8 @@ export interface AppSettings {
   hidden_nav_items: string[];
   /** 导航菜单的显示顺序(存功能项 key;未列出的项按内置顺序补在末尾) */
   nav_order: string[];
-  /** 自由人格模式:true = system 不追加身份锚,仅保留 Base 物理契约(R3 A1) */
-  bare_mode: boolean;
   /** 首次启动引导是否已完成(R3 首次安装向导) */
   first_run_completed: boolean;
-  /** 用户自定义底层 Prompt(空 = 使用内置默认) */
-  custom_base_prompt: string | null;
   /** 用户自定义应用名称(空 = 使用 "myAgent",仅影响窗口标题/托盘/快捷方式) */
   custom_app_name: string | null;
   /** 用户自定义应用图标路径(空 = 使用内置图标,仅影响窗口/托盘/快捷方式) */
@@ -97,8 +93,6 @@ export interface AppSettings {
   workspace_root: string | null;
   /** 默认工作台模式(D16):chat = 普通会话首页;work = 专业 Agent 工作台首页 */
   default_workbench: 'chat' | 'work';
-  /** 全局默认运行时预设(D19):economy / standard / deep / code */
-  default_preset: string;
   /** 拖入文件夹时单文件夹最多加入的附件数(1..=50;默认 10) */
   attachment_folder_limit: number;
   /** 附件扩展名黑名单追加项(内置默认清单始终生效) */
@@ -109,8 +103,6 @@ export interface AppSettings {
   attachment_session_max_mb: number;
   /** 单次生成的总时长上限(分钟):1..=1440,默认 10 */
   chat_timeout_minutes: number;
-  /** 文字质感(去 AI 味)档位:off / light / standard(默认 standard) */
-  human_voice_level: 'off' | 'light' | 'standard';
 }
 
 export const getSettings = () => invoke<AppSettings>('get_settings');
@@ -161,6 +153,7 @@ export const openDataDir = () => invoke<void>('open_data_dir');
 
 /** 重启应用(目录切换与迁移需要新进程生效)。 */
 export const restartApp = () => invoke<void>('restart_app');
+
 
 
 

@@ -112,11 +112,21 @@ describe('enforceBudget', () => {
     expect(enforceBudget(text)).toBe(text);
   });
 
-  it('超预算硬截断到 2 倍 token 数并追加标记', () => {
-    const text = 'a'.repeat(MEMORY_BUDGET_TOKENS * 2 + 10);
+  it('超预算硬截断后含标记,且总长不超过预算', () => {
+    const limit = MEMORY_BUDGET_TOKENS * 2;
+    const text = 'a'.repeat(limit + 10);
     const out = enforceBudget(text);
-    expect(out.startsWith('a'.repeat(MEMORY_BUDGET_TOKENS * 2))).toBe(true);
     expect(out).toContain('…(记忆过长,已截断)');
-    expect(out.length).toBeLessThan(text.length + 20);
+    expect(out.length).toBeLessThanOrEqual(limit);
+    expect(out.length).toBeGreaterThan(limit - 30);
+  });
+
+  it('不会把代理对切成孤立字符', () => {
+    const limit = MEMORY_BUDGET_TOKENS * 2;
+    const out = enforceBudget('😀'.repeat(limit));
+    const body = out.replace('\n\n…(记忆过长,已截断)', '');
+    expect(out.length).toBeLessThanOrEqual(limit);
+    const last = body.charCodeAt(body.length - 1);
+    expect(last >= 0xd800 && last <= 0xdbff).toBe(false);
   });
 });

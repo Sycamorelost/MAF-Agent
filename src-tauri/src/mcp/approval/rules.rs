@@ -34,7 +34,12 @@ pub(super) fn workspace_write_auto_allowed_in(
     }
     if !matches!(
         tool,
-        "fs_write" | "fs_edit" | "fs_write_begin" | "fs_export_docx" | "fs_export_xlsx"
+        "fs_write"
+            | "fs_edit"
+            | "fs_write_begin"
+            | "doc_generate"
+            | "fs_export_docx"
+            | "fs_export_xlsx"
     ) {
         return false;
     }

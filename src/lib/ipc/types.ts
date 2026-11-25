@@ -29,10 +29,6 @@ export interface SessionRow {
   workbench_mode: WorkbenchMode;
   /** 会话级权限档覆盖(D11 / V25) */
   permission_mode: PermissionMode;
-  /** 会话级运行时预设钉住(V26 / D19;null = 继承 Agent/全局) */
-  preset_id: string | null;
-  /** 钉住时的预设清单版本(未钉住为 null) */
-  preset_version: number | null;
   /** 所属文件夹(V28 / P8):null = 未分类 */
   project_id: string | null;
 }
@@ -74,8 +70,6 @@ export interface AgentTemplate {
   doc_pipeline?: string;
   /** 触发词(Skill 层,Phase A 仅存储) */
   triggers?: string[];
-  /** 模板默认运行时预设(P5 / D19;空 = 跟随全局默认) */
-  preset?: string | null;
   /** 存储结构:coupled = 单文件;decoupled = 目录多文件(缺省 coupled) */
   storage?: 'coupled' | 'decoupled';
   /** 解耦存储下关联的外部 prompt 文件绝对路径(空 = 使用内部 prompt.md) */

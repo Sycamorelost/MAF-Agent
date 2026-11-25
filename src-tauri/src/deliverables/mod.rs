@@ -179,6 +179,25 @@ pub fn bind_pending_on(
     )
 }
 
+/// 写盘成功后自动登记产物(不依赖模型调用 `present`),与 `present` 共用去重/上限逻辑;
+/// 失败静默,不影响工具返回。`present` 仍可用于补充标题/类型/说明。
+pub fn auto_register(session_id: Option<&str>, path: &str) {
+    let Some(sid) = session_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return;
+    };
+    if path.trim().is_empty() || !crate::db::is_initialized() {
+        return;
+    }
+    let (Ok(root), Ok(conn)) = (
+        crate::fs::paths::resolve_workspace_root(Some(sid)),
+        crate::db::conn().lock(),
+    ) else {
+        return;
+    };
+    // 失败(超上限/文件不存在等)不打扰模型
+    let _ = register_pending_on(&conn, sid, &root, &serde_json::json!({ "path": path }));
+}
+
 /// 按会话列出全部产物(新→旧),前端按 message_id 归入各条消息。
 pub fn list_by_session_on(
     conn: &Connection,

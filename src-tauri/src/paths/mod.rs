@@ -61,10 +61,7 @@ static MIGRATION_ERROR: OnceLock<String> = OnceLock::new();
 
 /// 引导配置目录(init 之前按 exe 旁计算)。
 pub fn config_dir() -> PathBuf {
-    CONFIG_DIR
-        .get()
-        .cloned()
-        .unwrap_or_else(resolve::exe_dir)
+    CONFIG_DIR.get().cloned().unwrap_or_else(resolve::exe_dir)
 }
 
 pub fn config_path() -> PathBuf {

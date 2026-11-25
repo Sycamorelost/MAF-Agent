@@ -77,6 +77,11 @@ export function ChatComposerArea({
 }: ChatComposerAreaProps) {
   /** 从附件中心导入的选择器开关 */
   const [centerPickerOpen, setCenterPickerOpen] = useState(false);
+  /**
+   * 小窗紧凑态只保留「附件 + 模型」:联网、思考强度、智能体选择不渲染,
+   * 对应默认值即联网关闭、思考关闭、智能体为空。
+   */
+  const showFullTools = !compactTools;
 
   /** 附件中心导入完成:追加待发区;图片补读 data URL 供视觉模型使用 */
   const handleCenterImported = useCallback(async (metas: AttachmentMeta[]) => {
@@ -117,10 +122,10 @@ export function ChatComposerArea({
         quotes={quotes}
         onRemoveQuote={(qid) => setQuotes((prev) => prev.filter((q) => q.id !== qid))}
         onRecall={onRecall}
-        webSearch={session?.web_search_enabled ?? false}
-        onToggleWebSearch={onToggleWebSearch}
+        webSearch={showFullTools ? (session?.web_search_enabled ?? false) : undefined}
+        onToggleWebSearch={showFullTools ? onToggleWebSearch : undefined}
         thinking={
-          thinkCap?.enabled && current
+          showFullTools && thinkCap?.enabled && current
             ? {
                 capability: thinkCap,
                 providerId: current.providerId,
@@ -136,19 +141,21 @@ export function ChatComposerArea({
           onOpen: onOpenModelSwitch,
         }}
       >
-        {/* B2:当前 Agent 指示,点击切换/解绑 */}
-        <button
-          type="button"
-          className="tool-chip agent-chip-btn"
-          title={agent ? `当前智能体:${agent.name}(点击切换)` : '点击选择智能体'}
-          onClick={onOpenAgentPicker}
-        >
-          {(() => {
-            const Icon = agentIconComponent(agent?.icon ?? 'bot');
-            return <Icon size={13} />;
-          })()}
-          {!compactTools && <span className="agent-chip-text">{agent?.name ?? '智能体'}</span>}
-        </button>
+        {/* B2:当前 Agent 指示,点击切换/解绑;小窗紧凑态不展示 */}
+        {showFullTools && (
+          <button
+            type="button"
+            className="tool-chip agent-chip-btn"
+            title={agent ? `当前智能体:${agent.name}(点击切换)` : '点击选择智能体'}
+            onClick={onOpenAgentPicker}
+          >
+            {(() => {
+              const Icon = agentIconComponent(agent?.icon ?? 'bot');
+              return <Icon size={13} />;
+            })()}
+            {!compactTools && <span className="agent-chip-text">{agent?.name ?? '智能体'}</span>}
+          </button>
+        )}
       </Composer>
       {centerPickerOpen && (
         <AttachmentCenterPicker

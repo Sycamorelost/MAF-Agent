@@ -9,12 +9,15 @@
 //!
 //! 职责拆分:`lexer` 词法/语法、`symbols` 符号表、`omml` XML 生成。
 
+mod diagnostics;
 mod lexer;
 mod omml;
 mod symbols;
+pub mod vector_fallback;
 
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 
+pub use diagnostics::{MathDiagnostic, unknown_commands};
 use lexer::Parser;
 
 pub(crate) const TOKEN: &str = "@@MATH:";
@@ -29,16 +32,28 @@ pub fn token(latex: &str, display: bool) -> String {
 }
 
 /// 生成行内 / 独立公式 XML。
+///
+/// 兼容模式:未知命令仍按正体文字输出,同时通过 `log::warn!` 汇总诊断,不静默吞掉。
 pub fn omml(latex: &str, display: bool) -> String {
+    omml_with_diagnostics(latex, display).0
+}
+
+/// 生成公式 XML 并返回诊断列表(供上层展示/日志)。
+pub fn omml_with_diagnostics(latex: &str, display: bool) -> (String, Vec<MathDiagnostic>) {
+    let diags = unknown_commands(latex);
+    for d in &diags {
+        log::warn!("docgen 公式诊断: {}", d.message);
+    }
     let mut body = String::new();
     let mut p = Parser::new(latex);
     let elms = p.parse_seq(false, false);
     omml::emit(&elms, &mut body);
-    if display {
+    let xml = if display {
         format!("<m:oMathPara><m:oMath>{body}</m:oMath></m:oMathPara>")
     } else {
         format!("<m:oMath>{body}</m:oMath>")
-    }
+    };
+    (xml, diags)
 }
 
 #[cfg(test)]

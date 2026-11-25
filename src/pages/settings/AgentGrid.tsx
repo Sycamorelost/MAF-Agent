@@ -114,15 +114,18 @@ export function AgentGrid({ groups, onExport, onEdit, onCreateVariant, onRemove 
                             恢复内置
                           </button>
                         )}
-                        {!t.overrides_builtin && (
+                        {t.agent_id !== 'bare-assistant' && (
                           <button
                             type="button"
                             className="btn ghost micro"
                             onClick={async () => {
+                              const isBuiltin = !!t.builtin || !!t.overrides_builtin;
                               if (
                                 await uiConfirm({
                                   title: '删除智能体',
-                                  message: `删除自定义智能体「${t.name}」?`,
+                                  message: isBuiltin
+                                    ? `删除智能体「${t.name}」?删除后可通过「恢复内置」找回。`
+                                    : `删除自定义智能体「${t.name}」?`,
                                   danger: true,
                                   confirmText: '删除',
                                 })

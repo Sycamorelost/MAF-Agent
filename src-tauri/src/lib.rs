@@ -34,26 +34,8 @@ mod sys;
 mod tasks;
 mod websearch;
 
-use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
-use std::sync::atomic::{AtomicU64, Ordering};
-
-/// 当前毫秒时间戳(用于手势节流判断)。
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
-
-/// 托盘手势代次:每次有效单击/双击自增。延迟执行的单击先记住代次,
-/// 到点时若代次已变(期间发生了第二次单击或双击)则放弃执行 —— 严格保证
-/// 「双击只开小窗、单击只开主窗」,互不串台。
-static CLICK_GEN: AtomicU64 = AtomicU64::new(0);
-/// 双击后的抑制窗口(ms 时间戳):Windows 双击会附带额外的 Click 事件,
-/// 在其后短时间内直接忽略 Click,避免双击结束后又触发一次单击。
-static SUPPRESS_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
 
 /// 关闭主窗口时隐藏到托盘:先移除任务栏按钮,再 hide。
 fn hide_to_tray(window: &tauri::Window) {
@@ -62,7 +44,7 @@ fn hide_to_tray(window: &tauri::Window) {
 }
 
 /// 从托盘恢复主窗口:恢复任务栏按钮 → 还原最小化 → show → focus。
-fn show_main_window(app: &AppHandle) {
+pub(crate) fn show_main_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.set_skip_taskbar(false);
         let _ = w.unminimize();
@@ -72,69 +54,46 @@ fn show_main_window(app: &AppHandle) {
 }
 
 /// 创建系统托盘:
-/// - 左键双击 → 打开 popout 小窗(显示并聚焦)
-/// - 左键单击 → 打开主窗口(隐藏小窗后显示主窗)
-/// - 菜单「显示」→ 恢复主窗口
-/// - 菜单「退出」→ 结束应用
+/// - 左键双击 → 打开小窗(显示并聚焦)
+/// - 左键单击 → 不做任何动作
+/// - 右键 → 在托盘图标上方弹出同主题自定义菜单(显示主窗 / 小窗 / 退出)
 fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     // 读取用户自定义应用名称(空 = "myAgent")
     let app_name = crate::settings::load()
         .custom_app_name
         .unwrap_or_else(|| "myAgent".to_string());
-    let show_label = format!("显示 {}", app_name);
-    let popout_label = "小窗对话";
-    let quit = MenuItem::with_id(app, "tray_quit", "退出", true, None::<&str>)?;
-    let show = MenuItem::with_id(app, "tray_show", &show_label, true, None::<&str>)?;
-    let popout_item = MenuItem::with_id(app, "tray_popout", popout_label, true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &popout_item, &quit])?;
     let mut builder = TrayIconBuilder::new()
-        .menu(&menu)
         .tooltip(&app_name)
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            "tray_show" => show_main_window(app),
-            "tray_popout" => crate::commands::popout::toggle_popout_from_tray(app),
-            "tray_quit" => app.exit(0),
-            _ => {}
-        })
         .on_tray_icon_event(|tray, event| match event {
-            // 双击:只打开小窗,不作废延迟单击之外不做任何主窗动作
+            // 双击:打开小窗(唯一保留的单击类手势)
             TrayIconEvent::DoubleClick {
                 button: MouseButton::Left,
                 ..
             } => {
-                CLICK_GEN.fetch_add(1, Ordering::SeqCst);
-                SUPPRESS_UNTIL_MS.store(now_ms() + 500, Ordering::SeqCst);
                 crate::commands::popout::show_popout_from_tray(tray.app_handle());
             }
-            // 单击(仅在抬起时处理,避免按下/抬起各触发一次)
+            // 右键抬起:弹出同主题菜单(原生菜单无法跟随主题,改为自绘窗口)
             TrayIconEvent::Click {
-                button: MouseButton::Left,
+                button: MouseButton::Right,
                 button_state: MouseButtonState::Up,
+                position,
+                rect,
                 ..
             } => {
-                if now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::SeqCst) {
-                    return;
+                if let Err(e) = crate::commands::tray::show_menu(tray.app_handle(), position, rect)
+                {
+                    log::warn!("托盘菜单打开失败: {e}");
                 }
-                let click_gen = CLICK_GEN.fetch_add(1, Ordering::SeqCst) + 1;
-                let handle = tray.app_handle().clone();
-                // 等一个双击判定窗口:期间若有第二次点击或双击,代次变化 → 放弃单击动作
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(320));
-                    if CLICK_GEN.load(Ordering::SeqCst) != click_gen
-                        || now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::SeqCst)
-                    {
-                        return;
-                    }
-                    crate::commands::popout::hide_popout(&handle);
-                    show_main_window(&handle);
-                });
             }
+            // 左键单击:取消动作(避免与双击争抢)
             _ => {}
         });
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
     builder.build(app)?;
+    // 预建隐藏的菜单窗口:首次右键即时弹出
+    crate::commands::tray::preload(app);
     Ok(())
 }
 
@@ -180,36 +139,50 @@ pub fn run() {
                 log::warn!("McpState 未注册,聊天可能拿不到 MCP 工具");
             }
 
-            // 开箱即用:应用启动后自动拉起所有已启用的 MCP server(后台顺序启动,失败仅记日志,
-            // 用户仍可在设置页手动重启);首次启动 npx 需下载包,国内镜像已默认开启。
+            // 开箱即用但不过度预置(P1-6):仅当用户打开 MCP 工具总开关后才拉起已启用 server;
+            // 未打开时完全懒启动(首次 mcp_collect_tools 再拉起),避免首启 4 个 npx 串行下载。
             {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     let data = paths::data_dir();
-                    let servers: Vec<mcp::McpServerConfig> = mcp::load_or_init(&data)
-                        .servers
-                        .into_iter()
-                        .filter(|s| s.enabled)
-                        .collect();
+                    let cfg = mcp::load_or_init(&data);
+                    if !cfg.tools_enabled {
+                        return;
+                    }
+                    let servers: Vec<mcp::McpServerConfig> =
+                        cfg.servers.into_iter().filter(|s| s.enabled).collect();
                     if servers.is_empty() {
                         return;
                     }
-                    // 初始化开始:前端轮询到 running 后显示「正在初始化组件…」(首启 npx 拉包阶段的卡死感来源)
                     mcp::set_bootstrap_state(1);
                     let rt = handle.state::<mcp::McpRuntime>();
-                    for s in servers {
-                        let name = s.name.clone();
-                        if let Err(e) = rt.start_from_config(&s, &data, false).await {
-                            log::warn!("MCP server `{name}` 自动启动失败: {e}");
-                        } else {
-                            log::info!("MCP server `{name}` 已随应用启动");
-                            // P1-5:启动即预热工具列表缓存 —— 首轮对话的 mcp_collect_tools
-                            // 直接命中,不再为每个 server 付一次 list_tools RPC(最坏 10s×N)
-                            if let Err(e) = rt.list_tools_cached(&name).await {
-                                log::warn!("MCP server `{name}` 工具列表预热失败: {e}");
+                    // 并行拉起 + 总超时:串行时 4 个 npx 首启会逐个累加等待;
+                    // 单个 server 的启动超时仍由 start_from_config 内部控制。
+                    let started = tokio::time::timeout(
+                        std::time::Duration::from_secs(20),
+                        futures::future::join_all(
+                            servers
+                                .iter()
+                                .map(|s| rt.start_from_config(s, &data, false)),
+                        ),
+                    )
+                    .await;
+                    match started {
+                        Ok(results) => {
+                            for (s, r) in servers.iter().zip(results) {
+                                match r {
+                                    Ok(()) => log::info!("MCP server `{}` 已随应用启动", s.name),
+                                    Err(e) => {
+                                        log::warn!("MCP server `{}` 自动启动失败: {e}", s.name)
+                                    }
+                                }
                             }
                         }
+                        Err(_) => log::warn!(
+                            "MCP server 并行启动总超时(20s),其余保持未启动,首次调用时再懒启动"
+                        ),
                     }
+                    // 不再启动期预热工具列表:预热会让没用到外部工具的会话也付 list_tools RPC
                     mcp::set_bootstrap_state(2);
                     diagnostics::safe_emit(&handle, "bootstrap_done", ());
                 });

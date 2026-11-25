@@ -11,7 +11,6 @@ export interface AboutViewProps {
 }
 
 export function AboutView({ appVersion }: AboutViewProps) {
-  // P2:旁路操作失败计数(非 0 才提示,不给小白新增任何开关)
   const [failures, setFailures] = useState(0);
   useEffect(() => {
     getFailureCounts()
@@ -23,20 +22,18 @@ export function AboutView({ appVersion }: AboutViewProps) {
     <>
       <h2>关于</h2>
 
-      {/* 产品标识区:logo 原比例 + 名称 + 版本(读 tauri.conf.json)+ 定位语 */}
+      {/* 产品标识区 */}
       <div className="set-card set-product">
         <img className="set-product-logo" src={logoUrl} alt="myAgent" />
         <div className="set-product-info">
           <div className="set-product-name">myAgent</div>
           <div className="set-product-ver">
-            版本 {appVersion ? `${appVersion}` : '2.8.0'} · 桌面端 · Windows
+            版本 {appVersion ? `${appVersion}` : '2.10.0'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             MAF 团队旗下的 Agent 产品,一款专为学习、调研而创造的智能体框架软件。完全免费且无广告,开发者:梧桐吾桐及其团队。
           </div>
-          <div className="set-product-ver">
-            MAF 旗下软件交流 QQ 群:1729082
-          </div>
+          <div className="set-product-ver">MAF 旗下软件交流 QQ 群:1729082</div>
           <div className="set-product-ver">
             凭据存储:API Key 与 MCP 请求头以 DPAPI(Windows)/ AES-GCM 密文保存在本地数据目录的 secrets 下,目录权限已收紧为仅当前系统用户可读。
           </div>
@@ -48,68 +45,38 @@ export function AboutView({ appVersion }: AboutViewProps) {
         </div>
       </div>
 
-      {/* 版本更新摘要:按主题归并,精简表述 */}
+      {/* 更新内容:每段覆盖一个主题,避免按版本号重复相近内容 */}
       <div className="set-card">
-        <div className="set-card-h">更新内容 · v1.17.1 → v2.8.0</div>
+        <div className="set-card-h">更新内容 · v1.17.1 → v2.10.0</div>
         <div className="set-card-b">
           <p>
-            <b>文档模板(v2.8.0)：</b>`fs_export_docx` 新增 `template` 参数,内置公文、学术论文、实验报告、调研报告、工作总结、通知、会议纪要等模板;公文按 GB/T 9704 规范设置页边距与固定行距,标题支持「一、」「1.1」「1.1.1」三套自动编号(检测到用户手写编号时跳过),缺章时在文末给出回执提示。
+            <b>历史压缩与项目模型(v2.10)：</b>压缩快照首次落盘(<code>session_compactions</code> 表),水位线按 <code>id &gt; watermark</code> 单调推进,删除/回滚不再跳水位;会话可绑定项目目录,继承项目 <code>model_override</code> 与项目 <code>shared_context</code> 作为项目 guard 快照,旧预设壳只留占位不再影响运行。
           </p>
           <p>
-            <b>演示文稿模板(v2.8.0)：</b>`slides_export` 新增组会汇报、进度汇报、答辩、工作汇报、数据分析五套场景模板与 `academic` 主题;主题缺失时回退到最接近的配色,结构不完整时提示补齐页型,原有调用方式行为不变。
+            <b>MCP 按工具加载与结果不丢(v2.10)：</b>工具名加 <code>{'mcp__{server}__{tool}'}</code> 命名空间(FNV-1a 短哈希防超长),调度器按裸名→命名空间名两段反查 server,解决同工具名串台;非文本结果(长资源、图片/音频)自动落盘到 <code>mcp-results/</code> 并回传路径,不再静默丢弃;应用启动按需拉起启用的 server,20 秒总超时。
           </p>
           <p>
-            <b>工程解耦(v2.8.0)：</b>版式层与 docx-rs 解耦,Markdown 解析、公式、MCP 配置/运行时/审批、路径解析、Key 轮换等大文件按职责拆分为多个子模块,新增源文件统一控制在 400 行以内,降低回归风险。
+            <b>托盘同主题菜单与 Token 护栏(v2.10)：</b>原生菜单替换为无边框透明 WebviewWindow,右键托盘图标弹出同主题菜单(显示主窗 / 小窗 / 退出),样式复用主窗口 CSS 变量、随主题切换;左键单击取消,双击仍只开小窗;Segmented Cache 命中率改为厂商白名单,未知模型保守 0,避免系统性低估成本。
           </p>
           <p>
-            <b>媒体能力(v2.7.0)：</b>新增图片生成、演示文稿导出与图片文字识别三项内置工具。图片生成使用设置中配置的图像服务商,产物自动登记为图片卡;演示文稿按结构化大纲导出 16:9 的 `.pptx`,失败时回退为同名 Markdown 大纲;图片 OCR 调用 Windows 系统识别能力,支持中英混排。设置页新增「能力 → 媒体能力」。
+            <b>文档与演示文稿模板(v2.8–2.9)：</b><code>fs_export_docx</code> 内置公文、学术论文、实验报告、工作总结等模板,公文按 GB/T 9704 自动编号;<code>slides_export</code> 新增组会汇报、答辩、数据分析等场景模板与 <code>academic</code>/<code>ocean</code>/<code>sunset</code> 主题;新增 <code>image_compose</code>(海报/截图标注)与 <code>diagram_export</code>(Excalidraw/drawio 互转),本地处理不上传。
           </p>
           <p>
-            <b>检索与附件(v2.7.0)：</b>全局搜索扩展为多源结果,覆盖会话标题、消息全文、记忆、知识库与附件解析内容,按来源分组展示;从附件中心插入会话时可预览文件名、来源、解析状态与摘要,弹窗宽度随字号比例增加,窄窗口自动收起预览栏。同时修复了附件来源菜单被顶部任务条遮挡的问题(浮层改为视口定位,空间不足时向下翻转)。
+            <b>Token 估算三层校准与工具按需下发(v2.6)：</b>官方 BPE 词表 + 历史用量中位数校准 + 分段缓存预估,每条请求在 <code>session_events</code> 留档含 messages / tools / cache_saved 分项拆解;工具规格改为按需下发——只读全量,高频写常驻,低频写与会话历史里调用过的外部工具才注入,GUI 工具仅在「完全信任」档解锁。
           </p>
           <p>
-            <b>Token 预算与工具按需下发(v2.6.x)：</b>上下文预算估算改为「官方 BPE 分词 + 历史用量校准 + 分段缓存预估」三层校准,模型词表按服务商自动匹配(DeepSeek / 通义 / Kimi / GLM / OpenAI 等),请求摘要同步给出 messages / tools / 缓存命中的分项拆解;工具规格改为按需下发——只读工具全量、高频写工具常驻、低频写工具与会话历史里调用过的外部 MCP 工具才注入,GUI 工具仅在「完全信任」档下发,简单问答的单轮工具占用明显减少。
+            <b>对话阅读体验与入口收敛(v2.6)：</b>选中消息文字弹复制/追问浮条,追问与引用统一;引用卡片复用 Markdown / KaTeX,超过 5 行折叠;<code>latex</code>/<code>tex</code>/<code>math</code> 代码围栏自动归一化为块级公式;全局搜索改为弹出式面板(Ctrl+K 唤起,Esc 关闭),侧栏「新对话」改全宽胶囊、「设置」常驻贴底;小窗固定出现在任务栏上方右下角。
           </p>
           <p>
-            <b>对话阅读与引用(v2.6.x)：</b>选中消息文字即弹复制 / 追问浮条,追问与引用合并为同一能力;引用内容在提问气泡上方以卡片呈现并复用 Markdown / KaTeX 渲染,超过 5 行自动折叠可展开,公式不再退化为纯文本;数学公式渲染增强,以 latex / tex / math 标记的代码围栏自动归一化为 KaTeX 块级公式;产物卡片改为列表视图(文件名 / 目录 / 类型 / 大小 + 操作),超过 5 个自动折叠,正文里只报文件名也能识别补全。
+            <b>安全与权限(v2.5)：</b>文件操作默认工作区沙箱,相对路径拒 <code>..</code> 越界,绝对路径显式放行,路径组件级边界比较不误判 <code>D:\proj</code> 与 <code>D:\proj2</code>;MCP 工具权限三档可选(逐次审批 / 工作区 / 完全信任),完全信任档放权 GUI 自动化并全量放行高危 shell(仍留审计);数据库升级前自动快照保留 2 份,异常可手工回滚。
           </p>
           <p>
-            <b>入口与布局(v2.6.x)：</b>全局搜索改为弹出式面板(标题栏放大镜与 Ctrl+K 唤起,点击遮罩或 Esc 关闭);侧栏顶部搜索入口收敛,「新对话」改为全宽胶囊贴顶、「设置」常驻贴底;标题栏铅笔按钮移除,改为双击标题重命名;检查器入口图标改为调试图标;小窗按最窄尺寸出现在任务栏上方右下角。
-          </p>
-          <p>
-            <b>安全加固与权限放权(v2.5.x)：</b>文件操作默认沙箱——相对路径一律限制在工作区内,输入绝对路径可显式操作其他位置;路径前缀误判修复(组件级边界比较);MCP 工具权限三档可选(逐次审批 / 工作区 / 完全信任),「完全信任」档全量放权(高危命令、工作区外读写均不再弹审批,全程留审计日志);持续集成覆盖前端测试与类型检查、Windows 平台 Rust 测试与静态检查,以及 Linux 目标的交叉编译检查。
-          </p>
-          <p>
-            <b>任务进度与界面打磨(v2.5.x)：</b>任务清单完成自动同步(模型主动回写 + 后端收尾补充),手动刷新带旋转动效与结果反馈;「新对话」按钮改白底黑字,侧栏正文统一深色;项目内会话与项目名首字对齐并支持抽屉动画,侧栏宽度随字号缩放;Toast 改为全局浮层不再被面板裁剪。
-          </p>
-          <p>
-            <b>工作台与界面：</b>全新专业工作台——会话右侧工具流水检查器(宽度可拖拽)、目标级任务计划、会话按项目分组、四档运行时预设;消息布局焕新(用户气泡 + 助手通栏、连续工具调用折叠)、窄窗抽屉化、首启进度提示、渲染异常兜底。
-          </p>
-          <p>
-            <b>安全加固：</b>高危命令(格式化/删根/改注册表等)在逐次审批与工作区档下强制人工确认,模型不能自行跳过;完全信任档不再询问,但全程记审计;外部 MCP 工具默认按中等风险走确认;API Key 目录权限收紧为仅当前用户可读;数据库升级前自动留存快照(保留最近 2 份),失败可手工回滚。
-          </p>
-          <p>
-            <b>记忆与知识库：</b>侧栏分设「记忆库」「知识库」入口,页内按原生记忆/长期记忆/知识库分区切换;内置预置笔记「导入预置」一键找回且合并不覆盖。
-          </p>
-          <p>
-            <b>稳定性与体验：</b>修复设置页空白、输入框滞留、MCP 工具链死锁、新建会话白屏、工作区路径污染写文件失败等;全应用删除操作统一走应用内确认框(确认前不执行),旁路写入/事件失败记入本机日志并计数提示。
-          </p>
-          <p>
-            <b>智能体系统重构(v2.4.0)：</b>内置智能体提示词可编辑(自定义覆盖,删除即恢复内置);设置页新增「角色设置」编辑自定义 base prompt;智能体支持解耦存储(目录多文件 config.json / prompt.md / tools.json,可关联外部 prompt/tools 文件);智能体导入导出走原生「另存为」对话框,可选保存路径;聊天头预设选择器移除,全局默认预设集中到设置页管理。
-          </p>
-          <p>
-            <b>交互与样式统一(v2.4.1)：</b>会话任务清单全新悬浮抽屉(紧凑条 4/5 输入框宽居中,展开向上浮出带双层阴影,支持实时刷新 + 手动刷新按钮 + 悬停详情 tooltip,收起反向动画严格对称);知识库侧栏接入标题栏「面板」按钮开合(与设置页一致),侧栏列表改为行式 `.set-nav` 同款风格(左侧 2px 品牌色选中指示线);全局三点导航下拉修复硬编码 `#000000` 颜色(深色主题可见);统一侧栏 `bg-side` 背景 + `border` 分隔线 + 选中态 `bg-active` 指示线规范。
+            <b>工作台与界面(v2.4–2.5)：</b>会话右侧工具流水检查器(宽度可拖拽)、目标级任务清单、会话按项目分组;消息布局焕新(用户气泡 + 助手通栏、连续工具调用折叠);侧栏抽屉化、Toast 全局浮层、悬浮任务清单抽屉(实时刷新 + 悬停详情);内置智能体模板可编辑、支持解耦目录存储、可关联外部 prompt/tools 文件,设置页「角色设置」编辑全局 base prompt。
           </p>
         </div>
       </div>
 
-      {/*
-        开源引用与许可声明。
-        来源项目与许可(全文见仓库根目录 LICENSE / NOTICE):
-        - myAgent 本体 · Apache-2.0 · https://github.com/Sycamorelost/MAF-Agent
-        - Cherry Studio · AGPL-3.0 · 仅架构/交互理念参考,未复制源码
-        - MCP 官方参考服务器 · MIT、agent-search-mcp · Apache-2.0(随应用启动经 npx 拉起,不随包分发)
-      */}
+      {/* 开源引用与许可声明 */}
       <div className="set-card">
         <div className="set-card-h">开源引用与许可</div>
         <div className="set-card-b set-terms">
@@ -135,12 +102,10 @@ export function AboutView({ appVersion }: AboutViewProps) {
               </p>
               <p>版权所有:Copyright (c) CherryHQ and contributors。</p>
               <p>
-                引用范围:仅架构与交互理念参考(多服务商抽象、API Key 管理与桌面助手布局);
-                未复制源码、样式或资源,也未打包其依赖。
+                引用范围:仅架构与交互理念参考(多服务商抽象、API Key 管理与桌面助手布局);未复制源码、样式或资源,也未打包其依赖。
               </p>
               <p>
-                许可说明:该项目以 GNU Affero General Public License v3.0 发布;
-                本应用与其不存在源码级衍生关系。如后续引入其源代码,合并作品须按 AGPL-3.0 分发。
+                许可说明:该项目以 GNU Affero General Public License v3.0 发布;本应用与其不存在源码级衍生关系。如后续引入其源代码,合并作品须按 AGPL-3.0 分发。
               </p>
             </div>
           </section>
@@ -153,8 +118,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
               </p>
               <p>版权所有:Copyright (c) Anthropic, PBC and contributors。</p>
               <p>
-                引用范围:内置「项目文件」(server-filesystem)、「长期记忆」(server-memory)、
-                「顺序思考」(server-sequential-thinking)服务;随应用启动经 npx 拉起,不随安装包捆绑。
+                引用范围:内置「项目文件」(server-filesystem)、「长期记忆」(server-memory)、「顺序思考」(server-sequential-thinking)服务;随应用启动经 npx 拉起,不随安装包捆绑。
               </p>
             </div>
           </section>
@@ -167,8 +131,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
               </p>
               <p>版权所有:Copyright (c) lennney and contributors。</p>
               <p>
-                引用范围:内置「联网搜索」默认服务,零 API Key 多引擎聚合检索;
-                随应用启动经 npx 拉起,不随安装包捆绑。
+                引用范围:内置「联网搜索」默认服务,零 API Key 多引擎聚合检索;随应用启动经 npx 拉起,不随安装包捆绑。
               </p>
             </div>
           </section>
@@ -181,15 +144,13 @@ export function AboutView({ appVersion }: AboutViewProps) {
               </p>
               <p>版权所有:Copyright (c) ppt-rs contributors。</p>
               <p>
-                引用范围:内置 `slides_export` 工具用它生成 `.pptx` 文件;
-                该库随安装包一同编译分发,许可文本见仓库根目录 NOTICE。
+                引用范围:内置 <code>slides_export</code> 工具用它生成 <code>.pptx</code> 文件;该库随安装包一同编译分发,许可文本见仓库根目录 NOTICE。
               </p>
             </div>
           </section>
 
           <p className="set-term-foot">
-            图片文字识别(ocr_extract)调用 Windows 系统自带的 OCR 能力,不捆绑额外的识别模型;
-            该能力的可用语言取决于系统已安装的 OCR 语言包。
+            图片文字识别(ocr_extract)调用 Windows 系统自带的 OCR 能力,不捆绑额外的识别模型;该能力的可用语言取决于系统已安装的 OCR 语言包。
             本应用自身以 Apache License 2.0 开源发布,源码见
             <span className="mono">https://github.com/Sycamorelost/MAF-Agent</span>,
             许可证全文与第三方组件声明见仓库根目录 LICENSE / NOTICE 文件。
@@ -198,18 +159,17 @@ export function AboutView({ appVersion }: AboutViewProps) {
         </div>
       </div>
 
-      {/* 条款文档区:十四条,全部展开 */}
+      {/* 条款文档区 */}
       <div className="set-card">
         <div className="set-card-h">
           myAgent 使用条款
-          <span className="st date">最近更新日期:2026 年 11 月 19 日</span>
+          <span className="st date">最近更新日期:2026 年 11 月 25 日</span>
         </div>
         <div className="set-card-b set-terms">
           {TERMS.map((t) => (
             <section key={t.no} className="set-term">
               <h3 className="set-term-h">第{CN_NUM[t.no]}条 · {t.name}</h3>
               {t.items.map((it, i) => {
-                // 「1.1」这类编号独立成列,正文统一悬挂缩进,便于逐条对照
                 const m = /^(\d+\.\d+)\s+([\s\S]*)$/.exec(it.text);
                 return (
                   <div key={i} className="set-term-item">

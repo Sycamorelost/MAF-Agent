@@ -34,20 +34,20 @@ const ACTION: Record<string, string> = {
   fs_move: '移动文件',
   fs_backup_list: '查看备份',
   fs_backup_restore: '恢复备份',
-  fs_export_docx: '导出文档',
+  fs_export_docx: '导出文档', doc_generate: '生成并导出文档',
   fs_export_xlsx: '导出表格',
   // 内置:执行与系统
-  shell_exec: '执行命令',
-  sys_overview: '查看系统概况',
+  shell_exec: '执行命令', sys_overview: '查看系统概况',
   sys_processes: '查看进程',
   sys_disks: '查看磁盘',
   sys_networks: '查看网络',
   get_now: '查询当前时间',
   // 内置:GUI
-  ui_list_windows: '枚举窗口',
-  ui_find_elements: '查找界面元素',
-  ui_click: '点击界面元素',
-  ui_type: '输入文本',
+  ui_list_windows: '枚举窗口', ui_find_elements: '查找界面元素',
+  ui_click: '点击界面元素', ui_type: '输入文本',
+  // 内置:媒体
+  image_generate: '生成图片', image_compose: '合成图片', slides_export: '导出演示文稿',
+  diagram_export: '导出结构图', ocr_extract: '识别图片文字',
   // 内置:任务与委派
   todo_write: '更新任务清单',
   todo_read: '读取任务清单',
@@ -232,7 +232,7 @@ export interface Artifact {
 
 const WRITE_TOOLS = new Set([
   'fs_write_text', 'fs_write', 'fs_edit', 'fs_write_finish',
-  'fs_export_docx', 'fs_export_xlsx', 'write_file',
+  'fs_export_docx', 'fs_export_xlsx', 'doc_generate', 'write_file',
 ]);
 const IMAGE_EXTS = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 

@@ -52,9 +52,6 @@ pub struct AgentTemplate {
     /// 触发词(Skill 层,命中时提示切换智能体;Phase A 仅存储)
     #[serde(default)]
     pub triggers: Vec<String>,
-    /// 模板默认运行时预设(P5 / D19):None = 跟随全局默认;economy / standard / deep / code
-    #[serde(default)]
-    pub preset: Option<String>,
     /// 存储结构:None / "coupled" = 单文件 agents.json 数组项;"decoupled" = 目录多文件(prompt.md/config.json/tools.json)。
     /// 缺省为 coupled,旧数据自动兼容。
     #[serde(default)]
@@ -100,7 +97,6 @@ pub(crate) fn v2_defaults() -> AgentTemplate {
         temperature: None,
         doc_pipeline: String::new(),
         triggers: Vec::new(),
-        preset: None,
         storage: None,
         prompt_file: None,
         tools_file: None,

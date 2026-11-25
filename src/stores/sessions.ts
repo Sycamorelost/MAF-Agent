@@ -19,8 +19,6 @@ interface SessionsState {
   setWorkbenchMode: (id: string, mode: ipc.WorkbenchMode) => Promise<void>;
   /** 更新会话级权限档覆盖(D11) */
   setPermissionMode: (id: string, mode: ipc.PermissionMode) => Promise<void>;
-  /** 钉住/恢复会话级运行时预设(D19;null = 恢复继承) */
-  setPreset: (id: string, presetId: string | null) => Promise<void>;
   /** 绑定/解绑会话的 Agent(B2;null 解绑,会同步记忆注入策略) */
   setAgent: (id: string, agentId: string | null) => Promise<void>;
   /** 切换会话激活分支(F4),并同步本地 sessions 状态 */
@@ -103,17 +101,6 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     await ipc.setSessionPermissionMode(id, mode);
     set((s) => ({
       sessions: s.sessions.map((x) => (x.id === id ? { ...x, permission_mode: mode } : x)),
-    }));
-  },
-
-  setPreset: async (id, presetId) => {
-    const info = await ipc.setSessionPreset(id, presetId);
-    set((s) => ({
-      sessions: s.sessions.map((x) =>
-        x.id === id
-          ? { ...x, preset_id: info.pinned_id, preset_version: info.pinned_version }
-          : x,
-      ),
     }));
   },
 

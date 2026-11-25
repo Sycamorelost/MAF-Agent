@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿import { useEffect, useState } from 'react';
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { useEffect, useState } from 'react';
 import {
   mcpLoadConfig,
   mcpSaveConfig,
@@ -35,7 +35,7 @@ export function useMcpSettings() {
   /** 文件工作区根目录与备份数量(内置 fs 工具的输出位置) */
   const [wsRoot, setWsRoot] = useState("");
   const [backupCount, setBackupCount] = useState(0);
-  /** 应用设置(自由人格模式开关,读取+单字段保存) */
+  /** 应用设置(工作区根目录等,读取+单字段保存) */
   const [settings, setSettings] = useState<ipc.AppSettings | null>(null);
 
   useEffect(() => {
@@ -85,61 +85,27 @@ export function useMcpSettings() {
     }
   };
 
-  /** 切换工具下发总开关(关闭后不再下发任何工具定义)。 */
+  /** 切换写入 / 执行工具与 MCP Server 开关(关闭后只下发只读内置工具)。 */
   const onToggleTools = async (checked: boolean) => {
     const newCfg: McpConfig = { ...cfg, tools_enabled: checked };
     await mcpSaveConfig(newCfg);
     setCfg(newCfg);
     setMsg(
       checked
-        ? "工具调用已开启:模型可调用下方 server 与内置工具"
-        : "工具调用已关闭:每次请求不再下发工具定义,可显著降低 token 与首字延迟",
+        ? "写入 / 执行工具与 MCP Server 已开启:模型可写文件、执行命令并调用 server 工具"
+        : "写入 / 执行工具与 MCP Server 已关闭:仅保留只读内置工具",
     );
   };
 
-  /** 切换自由人格模式(单字段保存应用设置)。 */
-  const onToggleBareMode = async (checked: boolean) => {
-    if (!settings) return;
-    const next = { ...settings, bare_mode: checked };
-    await ipc.saveSettings(next);
-    setSettings(next);
-    setMsg(
-      checked
-        ? "自由人格模式已开启:system 仅保留工具物理契约,身份/人格完全交给智能体或中转模型"
-        : "身份锚已恢复:system 追加「你是 myAgent 助手」",
-    );
-  };
-
-  /** 切换文字质感(去 AI 味)档位(单字段保存应用设置)。 */
-  const onSetHumanVoice = async (level: ipc.AppSettings['human_voice_level']) => {
-    if (!settings) return;
-    const next = { ...settings, human_voice_level: level };
-    await ipc.saveSettings(next);
-    setSettings(next);
-    const label =
-      level === 'off' ? '已关闭(按智能体原提示输出)' : level === 'light' ? '已设为轻档' : '已设为标准档';
-    setMsg(`文字质感${label}${level === 'off' ? '' : ',下次发送生效'}`);
-  };
-
-  /** 设置自定义底层角色/物理契约(覆盖应用默认物理契约;空 = 恢复默认)。 */
-  const onSetCustomBasePrompt = async (text: string) => {
-    if (!settings) return;
-    const val = text.trim() || null;
-    const next = { ...settings, custom_base_prompt: val };
-    await ipc.saveSettings(next);
-    setSettings(next);
-    setMsg(val ? '自定义底层契约已保存,下次发送生效' : '已恢复应用默认底层契约');
-  };
-
-  /** 切换内置工具开关(取时间 / 白名单 shell)。 */
+  /** 切换内置工具总开关。 */
   const onToggleBuiltin = async (checked: boolean) => {
     const newCfg: McpConfig = { ...cfg, builtin_tools: checked };
     await mcpSaveConfig(newCfg);
     setCfg(newCfg);
     setMsg(
       checked
-        ? "内置工具已启用:模型可调用 取当前时间 / 白名单 shell(执行前需你确认)"
-        : "内置工具已关闭",
+        ? "内置工具已启用:模型可按需调用文件、系统、文档等工具"
+        : "内置工具已关闭:不再下发任何内置工具",
     );
   };
 
@@ -270,9 +236,6 @@ export function useMcpSettings() {
     settings,
     onToggleMirror,
     onToggleTools,
-    onToggleBareMode,
-    onSetHumanVoice,
-    onSetCustomBasePrompt,
     onToggleBuiltin,
     onPickMode,
     onSaveAllowList,

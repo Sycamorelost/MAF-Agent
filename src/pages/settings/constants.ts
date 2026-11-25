@@ -1,6 +1,6 @@
 import { type ComponentType } from 'react';
 import * as ipc from '../../lib/ipc';
-import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconChart, IconPlus, IconFileText, IconGauge, IconSparkles } from '../../components/icons';
+import { IconBot, IconBrain, IconChat, IconGlobe, IconArchive, IconLogo, IconChart, IconPlus, IconFileText, IconSparkles } from '../../components/icons';
 
 export const ENGINES = [
   { id: 'bocha', name: '博查 Bocha' },
@@ -34,7 +34,6 @@ export const NAV: NavGroup[] = [
     items: [
       { id: 'appearance', label: '外观与首页', icon: IconFileText },
       { id: 'navmenu', label: '导航菜单', icon: IconChat },
-      { id: 'presets', label: '运行时预设', icon: IconGauge },
     ],
   },
   {

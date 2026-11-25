@@ -100,8 +100,62 @@ pub fn write_tool_defs() -> Vec<ToolDef> {
             }),
         ),
         tool(
+            "doc_generate",
+            "根据写作需求与素材自动生成并导出 .docx:内部复用当前模型执行 Writer 初稿与 Reviewer 审校,再进行本地重复/占位审计和确定性排版。仅在尚无完整正文时使用;已有 Markdown 正文请改用 fs_export_docx。brief 写明用途、读者、篇幅、风格与必须覆盖的要点,sources 粘贴已查证的原始素材;不要用模型记忆替代事实来源。Reviewer 失败时会保留初稿并在 warnings 明确提示。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "目标 .docx 路径,支持绝对路径" },
+                    "title": { "type": "string", "description": "文档总标题,正文不会重复该标题" },
+                    "brief": { "type": "string", "description": "写作需求:用途、读者、篇幅、语言、风格与必写要点" },
+                    "sources": { "type": "string", "description": "已查证素材与来源标注;与 brief 合计最多 6 万字符,无素材可省略" },
+                    "subtitle": { "type": "string", "description": "副标题(封面用,可选)" },
+                    "template": {
+                        "type": "string",
+                        "enum": ["official", "paper", "thesis", "book", "lab", "practice", "summary", "notice", "minutes", "general", "whitepaper", "manual", "news"],
+                        "description": "文体模板;省略则按标题与需求自动识别;thesis 学位论文 / book 书稿(支持尾注与索引) / whitepaper 品牌白皮书 / manual 版本手册 / news 新闻稿"
+                    },
+                    "profile": {
+                        "type": "string",
+                        "enum": ["experiment", "paper", "practice", "general"],
+                        "description": "旧版用途参数,优先用 template"
+                    },
+                    "toc": { "type": "boolean", "description": "是否生成自动目录;省略时按文体默认" },
+                    "meta": {
+                        "type": "object",
+                        "description": "封面信息;任一项非空即生成封面",
+                        "properties": {
+                            "author": { "type": "string" },
+                            "org": { "type": "string" },
+                            "course": { "type": "string" },
+                            "date": { "type": "string" },
+                            "version": { "type": "string", "description": "文档版本,显示在封面并进入页眉" },
+                            "product": { "type": "string", "description": "产品名(白皮书/手册)" },
+                            "classification": { "type": "string", "description": "密级/公开范围" },
+                            "location": { "type": "string", "description": "成文地点" },
+                            "contact": { "type": "string", "description": "媒体或支持联系" }
+                        }
+                    },
+                    "style_pack": {
+                        "type": "string",
+                        "description": "样式参数包(可选):内置 generic-thesis / generic-brand、参数包 JSON 路径,或参考 .docx 路径(仅读取样式);未知字段明确报错"
+                    },
+                    "brand": {
+                        "type": "string",
+                        "description": "品牌令牌(可选):内联 JSON 或工作区内 JSON 路径,字段 primary/accent/text/muted/latin_font/east_asia_font"
+                    },
+                    "formula_mode": {
+                        "type": "string",
+                        "enum": ["omml", "svg"],
+                        "description": "公式落地方式:omml 为 Word 原生公式(默认);svg 把每式渲染为 SVG 并附 PNG 回退,适合需要固定版式的场景"
+                    }
+                },
+                "required": ["path", "title", "brief"]
+            }),
+        ),
+        tool(
             "fs_export_docx",
-            "导出 .docx,自动套用文体版式:Heading 大纲级别、正文首行缩进与行距、三线表/网格表、封面、目录、页眉页码、摘要/关键词、参考文献悬挂缩进、标题自动编号。正文用 Markdown:#/##/### 标题、- 或 1. 列表、| 表格 |、``` 代码块、**粗体**、`行内代码`、> 引用、![图注](图片路径);表题写在表格上一行(如「表 1 …」),图注写在图片下一行。数学公式直接写 LaTeX:$...$ 行内、$$...$$ 独立成行,会转成 Word 原生公式(OMML)。template 可选:official 公文(GB/T 9704,仿宋三号)、paper 论文、lab 实验报告、practice 实践调研、summary 工作总结、notice 通知、minutes 会议纪要、general 通用;省略则按标题/正文自动识别。论文传 template=paper 并填 meta,正文写「摘要：」「关键词：」,「## 参考文献」之后的条目按 [1] 悬挂缩进。path 支持绝对路径,自动建目录。",
+            "导出 .docx,自动套用文体版式:Heading 大纲级别、正文首行缩进与行距、三线表/网格表、封面、目录、页眉页码、摘要/关键词、参考文献悬挂缩进、标题自动编号。正文用 Markdown:#/##/### 标题、- 或 1. 列表、| 表格 |、``` 代码块、**粗体**、`行内代码`、> 引用、![图注](图片路径);表题写在表格上一行(如「表 1 …」),图注写在图片下一行。数学公式直接写 LaTeX:$...$ 行内、$$...$$ 独立成行,会转成 Word 原生公式(OMML)。template 可选:official 公文(GB/T 9704,仿宋三号)、paper 论文、thesis 学位论文、book 书稿(支持尾注与索引)、lab 实验报告、practice 实践调研、summary 工作总结、notice 通知、minutes 会议纪要、whitepaper 白皮书、manual 手册、news 新闻稿、general 通用;省略则按标题/正文自动识别。书稿尾注写 `[^标签]: 内容` 并在正文用 `[^标签]` 引用,索引条目写 `{{index:术语}}`。论文传 template=paper 并填 meta,正文写「摘要：」「关键词：」,「## 参考文献」之后的条目按 [1] 悬挂缩进。path 支持绝对路径,自动建目录。",
             json!({
                 "type": "object",
                 "properties": {
@@ -111,8 +165,8 @@ pub fn write_tool_defs() -> Vec<ToolDef> {
                     "body": { "type": "string", "description": "正文,按 Markdown 解析;表格用管道语法,表题紧邻表格上一行;公式用 $...$ / $$...$$ 写 LaTeX 原式" },
                     "template": {
                         "type": "string",
-                        "enum": ["official", "paper", "lab", "practice", "summary", "notice", "minutes", "general"],
-                        "description": "文体模板:official 公文 / paper 论文 / lab 实验报告 / practice 实践调研 / summary 工作总结 / notice 通知 / minutes 会议纪要 / general 通用;省略则自动识别"
+                        "enum": ["official", "paper", "thesis", "book", "lab", "practice", "summary", "notice", "minutes", "general", "whitepaper", "manual", "news"],
+                        "description": "文体模板:official 公文 / paper 论文 / thesis 学位论文 / book 书稿 / lab 实验报告 / practice 实践调研 / summary 工作总结 / notice 通知 / minutes 会议纪要 / whitepaper 品牌白皮书 / manual 版本手册 / news 新闻稿 / general 通用;省略则自动识别"
                     },
                     "profile": {
                         "type": "string",
@@ -127,8 +181,26 @@ pub fn write_tool_defs() -> Vec<ToolDef> {
                             "author": { "type": "string", "description": "作者/姓名" },
                             "org": { "type": "string", "description": "单位/学院" },
                             "course": { "type": "string", "description": "课程/项目名称" },
-                            "date": { "type": "string", "description": "日期" }
+                            "date": { "type": "string", "description": "日期" },
+                            "version": { "type": "string", "description": "文档版本,显示在封面并进入页眉" },
+                            "product": { "type": "string", "description": "产品名(白皮书/手册)" },
+                            "classification": { "type": "string", "description": "密级/公开范围" },
+                            "location": { "type": "string", "description": "成文地点" },
+                            "contact": { "type": "string", "description": "媒体或支持联系" }
                         }
+                    },
+                    "style_pack": {
+                        "type": "string",
+                        "description": "样式参数包(可选):内置 generic-thesis / generic-brand、参数包 JSON 路径,或参考 .docx 路径(仅读取样式);未知字段明确报错"
+                    },
+                    "brand": {
+                        "type": "string",
+                        "description": "品牌令牌(可选):内联 JSON 或工作区内 JSON 路径,字段 primary/accent/text/muted/latin_font/east_asia_font"
+                    },
+                    "formula_mode": {
+                        "type": "string",
+                        "enum": ["omml", "svg"],
+                        "description": "公式落地方式:omml 为 Word 原生公式(默认);svg 把每式渲染为 SVG 并附 PNG 回退,适合需要固定版式的场景"
                     }
                 },
                 "required": ["path", "body"]
