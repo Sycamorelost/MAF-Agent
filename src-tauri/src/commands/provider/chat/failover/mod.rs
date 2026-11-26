@@ -8,8 +8,6 @@ mod usage;
 
 use std::time::{Duration, Instant};
 
-use tauri::ipc::Channel;
-
 use crate::db::usage as db_usage;
 use crate::mcp::on_demand;
 use crate::provider::{
@@ -26,6 +24,7 @@ use super::super::failover::{
 use super::super::keys::{ChatSpec, build_openai, key_candidates, rotation_group, slot_label};
 use super::super::stream::StreamCancelState;
 use super::context::{context_over_budget, prune_context};
+use super::run::RunSink;
 use guards::{remaining_budget, todos_sync_needed};
 use stream::{StreamOutcome, consume_stream};
 use usage::{record_failure, record_success};
@@ -39,7 +38,7 @@ pub(crate) use types::Attribution;
 pub(super) fn spawn_chat_with_failover(
     spec: ChatSpec,
     mut req: ChatRequest,
-    channel: Channel<StreamChunk>,
+    sink: RunSink,
     state: RotationState,
     cfg: RotationConfig,
     attr: Attribution,
@@ -50,8 +49,8 @@ pub(super) fn spawn_chat_with_failover(
     mcp_runtime: crate::mcp::McpRuntime,
     approval_store: crate::mcp::ApprovalStore,
 ) {
-    // panic 兜底用的 channel 副本(必须在使用 work 之前克隆)
-    let panic_channel = channel.clone();
+    // panic 兜底用的 sink 副本(必须在使用 work 之前克隆)
+    let panic_sink = sink.clone();
     let work = async move {
         let group = rotation_group(&spec.provider_id, &spec.base_url);
         let request_id = next_request_id();
@@ -79,7 +78,7 @@ pub(super) fn spawn_chat_with_failover(
         'rounds: loop {
             // P2:总时长到点即收口(工具执行同样计入预算),避免单轮工具卡死绕过上限。
             if remaining_budget(&started, total_timeout).is_zero() {
-                let _ = channel.send(StreamChunk::Error {
+                let _ = sink.send(StreamChunk::Error {
                     message: format!(
                         "生成超时(总时长超过 {} 分钟),已中断;已生成内容会保留。",
                         total_minutes
@@ -105,7 +104,7 @@ pub(super) fn spawn_chat_with_failover(
             prune_context(&mut req.messages, &budget);
             let mut cands = key_candidates(&spec.provider_id, &spec.base_url, &spec.model, &cfg);
             if cands.is_empty() {
-                let _ = channel.send(StreamChunk::Error {
+                let _ = sink.send(StreamChunk::Error {
                     message: format!("provider {} 未配置 API Key", spec.provider_id),
                 });
                 return;
@@ -156,7 +155,7 @@ pub(super) fn spawn_chat_with_failover(
                 let provider = build_openai(&spec, &key, stream_options);
 
                 // P1-4:即将发起 HTTPS 连接(TLS 握手 + 排队等 2xx),知会前端推进占位文案
-                let _ = channel.send(StreamChunk::Phase {
+                let _ = sink.send(StreamChunk::Phase {
                     phase: "connecting".into(),
                 });
 
@@ -181,7 +180,7 @@ pub(super) fn spawn_chat_with_failover(
                             timed_out,
                             first_token_ms,
                             todo_sync_pending,
-                        } = consume_stream(&mut stream, &channel, &started, total_timeout, &attr, todo_nudged)
+                        } = consume_stream(&mut stream, &sink, &started, total_timeout, &attr, todo_nudged)
                             .await;
                         // P2:超时收口 —— 补一个明确的 Error,前端据此保留已生成内容(P1)。
                         // 不执行已请求的工具:结果不完整时执行写入类工具风险更高。
@@ -190,7 +189,7 @@ pub(super) fn spawn_chat_with_failover(
                                 "生成超时(总时长超过 {} 分钟),已中断;已生成内容会保留。",
                                 total_minutes
                             );
-                            let _ = channel.send(StreamChunk::Error { message: msg });
+                            let _ = sink.send(StreamChunk::Error { message: msg });
                             return;
                         }
                         record_success(
@@ -234,7 +233,7 @@ pub(super) fn spawn_chat_with_failover(
                                 continue 'rounds;
                             }
                             // 无法补轮(已达工具轮次上限):补发被吞掉的 Done,保证前端正常收流
-                            let _ = channel.send(StreamChunk::Done {
+                            let _ = sink.send(StreamChunk::Done {
                                 finish_reason: Some("stop".into()),
                                 prompt_tokens: toks.0,
                                 completion_tokens: toks.1,
@@ -246,13 +245,13 @@ pub(super) fn spawn_chat_with_failover(
                         // Phase 5e:模型请求调用工具 → 审批 + 执行 + 回填消息,再发起下一轮
                         if let Some(calls) = pending_calls.take() {
                             if round >= MAX_TOOL_ROUNDS {
-                                let _ = channel.send(StreamChunk::Delta {
+                                let _ = sink.send(StreamChunk::Delta {
                                     content: format!(
                                         "\n\n> 已达到 {MAX_TOOL_ROUNDS} 轮工具调用上限,后续工具调用已停止,请基于已有信息作答。\n"
                                     ),
                                 });
                                 // 收流必须由这里补一个 done,否则前端一轮都等不到结束信号
-                                let _ = channel.send(StreamChunk::Done {
+                                let _ = sink.send(StreamChunk::Done {
                                     finish_reason: Some("tool_round_limit".into()),
                                     prompt_tokens: toks.0,
                                     completion_tokens: toks.1,
@@ -271,7 +270,7 @@ pub(super) fn spawn_chat_with_failover(
                                 &mcp_runtime,
                                 &approval_store,
                                 data_dir.clone(),
-                                &channel,
+                                &sink,
                                 attr.session_id.as_deref(),
                                 sub_llm.as_ref(),
                             )
@@ -312,7 +311,7 @@ pub(super) fn spawn_chat_with_failover(
                         }
                         // 兜底:本轮从未收到过 done(个别中转站流末尾不发)时补发一个,否则前端等不到收流。
                         if !saw_done && stream_err.is_none() {
-                            let _ = channel.send(StreamChunk::Done {
+                            let _ = sink.send(StreamChunk::Done {
                                 finish_reason: Some("stop".into()),
                                 prompt_tokens: toks.0,
                                 completion_tokens: toks.1,
@@ -375,12 +374,12 @@ pub(super) fn spawn_chat_with_failover(
                 }
             }
 
-            let _ = channel.send(StreamChunk::Error {
+            let _ = sink.send(StreamChunk::Error {
                 message: last_error
                     .unwrap_or_else(|| "所有 API Key 均不可用(可能全部被限流)".into()),
             });
             return;
         }
     };
-    runner::launch(work, panic_channel, cancel_state, cancel_id, cancel_rx);
+    runner::launch(work, panic_sink, cancel_state, cancel_id, cancel_rx);
 }

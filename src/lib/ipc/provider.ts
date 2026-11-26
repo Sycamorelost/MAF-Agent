@@ -1,4 +1,4 @@
-import { invoke, Channel } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import type { MemoryStrategy, ProviderTemplate, StreamChunk } from './types';
@@ -377,7 +377,7 @@ export const deleteProviderTemplate = (providerId: string) =>
 /** 补回被删除的内置模板(仅补缺失项)。 */
 export const restoreBuiltinTemplates = () => invoke<void>('restore_builtin_templates');
 
-// ============ chat_stream ============
+// ============ chat run ============
 
 export interface ChatStreamInput {
   provider_id: string;
@@ -392,8 +392,8 @@ export interface ChatStreamInput {
   custom_display_name?: string | null;
   /** 会话 id(用于按助手归因;可选) */
   session_id?: string | null;
-  /** 前端生成的取消句柄;cancel() 时凭它通知后端中止 HTTP 请求(M-2) */
-  cancel_id?: string;
+  /** 前端生成的 run 句柄:事件关联键,同时是「停止生成」的取消 id */
+  run_id: string;
   /** Phase 5e:MCP 工具定义(OpenAI function-calling);空/缺省 = 不启用工具调用 */
   tools?: ToolDef[];
 }
@@ -408,60 +408,41 @@ export interface ToolDef {
   };
 }
 
+export type RunStatus = 'running' | 'done' | 'error' | 'cancelled';
+
+/** `chat_run_state` 返回体:状态 + 指定序号之后的 chunk(按 seq 去重重放)。 */
+export interface ChatRunState {
+  run_id: string;
+  status: RunStatus;
+  chunks: { seq: number; chunk: StreamChunk }[];
+  truncated: boolean;
+}
+
 /** 通知后端中止指定的流式请求(chat / translate)。
  *  P0-2b:不再吞错,让调用方决定是否兜底。 */
 export const cancelStream = (cancelId: string) =>
   invoke<void>('cancel_stream', { cancelId });
 
-/**
- * 流式对话。返回一个 { done, cancel } 句柄:
- *   - done:Promise<StreamChunk & {type:'done'}>,结束后 resolve
- *   - 通过 onChunk 回调收每个 chunk
- *   - cancel():本地停止渲染 + 通知后端中断请求(不再继续计费,M-2)
- */
-export function chatStream(
-  input: ChatStreamInput,
-  onChunk: (chunk: StreamChunk) => void,
-): { done: Promise<void>; cancel: () => Promise<void> } {
-  const channel = new Channel<StreamChunk>();
-  let cancelled = false;
-  let resolveDone!: () => void;
-  let rejectDone!: (e: unknown) => void;
-  const done = new Promise<void>((res, rej) => {
-    resolveDone = res;
-    rejectDone = rej;
-  });
+/** 启动一次后端生成任务,立即返回 run_id;chunk 通过 `chat:run` 事件下发。 */
+export const startChatRun = (input: ChatStreamInput) =>
+  invoke<string>('chat_start_run', { input });
 
-  channel.onmessage = (chunk) => {
-    if (cancelled) return;
-    onChunk(chunk);
-    if (chunk.type === 'done') {
-      resolveDone();
-    } else if (chunk.type === 'error') {
-      rejectDone(new Error(chunk.message));
-    }
-  };
+/** 拉取 run 状态与 afterSeq 之后的 chunk(页面刷新/重挂时重放)。 */
+export const chatRunState = (runId: string, afterSeq = 0) =>
+  invoke<ChatRunState>('chat_run_state', { runId, afterSeq });
 
-  const cancelId = input.cancel_id ?? crypto.randomUUID();
-  void invoke<void>('chat_stream', { input: { ...input, cancel_id: cancelId }, channel })
-    // 注意:chat_stream 在 spawn 后台流任务后**立即返回**,invoke 完成 ≠ 流结束。
-    // 只能等后端显式下发的 done chunk(每条结束路径都会发),否则会在第一个
-    // chunk 到达前就收流,表现为「光标一直闪 + 回复不落库」。
-    .catch((e) => {
-      if (!cancelled) rejectDone(e);
-    });
+/** 监听流式 chunk 广播。 */
+export function onChatRun(
+  cb: (p: { run_id: string; seq: number; chunk: StreamChunk }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ run_id: string; seq: number; chunk: StreamChunk }>('chat:run', (e) => cb(e.payload));
+}
 
-  return {
-    done,
-    // P0-2b:cancel 改为 async,等 cancelStream 送达后端后再 resolveDone;
-    //        cancelStream 失败也 resolveDone(前端停止渲染即可),不 reject done
-    cancel: async () => {
-      if (cancelled) return;
-      cancelled = true;
-      try { await cancelStream(cancelId); } catch { /* 送达失败也收流 */ }
-      resolveDone();
-    },
-  };
+/** 监听 run 终态(正常结束 / 报错 / 取消)。 */
+export function onChatRunEnd(
+  cb: (p: { run_id: string; status: RunStatus }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ run_id: string; status: RunStatus }>('chat:run_end', (e) => cb(e.payload));
 }
 
 // ============ events ============

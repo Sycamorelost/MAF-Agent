@@ -13,8 +13,8 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 use tauri::Emitter;
-use tauri::ipc::Channel;
 
+use crate::commands::provider::chat::run::RunSink;
 use crate::provider::{ChatMessage, StreamChunk, ToolCall};
 
 use super::approval::{APPROVAL_TIMEOUT_SECS, ApprovalResult, ApprovalStore};
@@ -42,7 +42,7 @@ pub async fn dispatch_tool_calls(
     runtime: &McpRuntime,
     approval: &ApprovalStore,
     data_dir: PathBuf,
-    channel: &Channel<StreamChunk>,
+    sink: &RunSink,
     session_id: Option<&str>,
     sub_llm: Option<&crate::provider::SubLlm>,
 ) -> ToolDispatchOutcome {
@@ -74,7 +74,7 @@ pub async fn dispatch_tool_calls(
                     "工具 `{tool_name}` 的参数不是合法 JSON({e});通常是单次输出被截断。\
                      请缩小单次参数,写大文件改用 fs_write_begin → fs_write_chunk(多次)→ fs_write_finish 分批写入后重试。"
                 );
-                let _ = channel.send(StreamChunk::ToolCallResult {
+                let _ = sink.send(StreamChunk::ToolCallResult {
                     tool_call_id: tc.id.clone(),
                     tool_name: tool_name.clone(),
                     server_name: "builtin".into(),
@@ -143,7 +143,7 @@ pub async fn dispatch_tool_calls(
             {
                 crate::diagnostics::safe_emit(app, &format!("session-todos-{sid}"), ());
             }
-            let _ = channel.send(StreamChunk::ToolCallResult {
+            let _ = sink.send(StreamChunk::ToolCallResult {
                 tool_call_id: tc.id.clone(),
                 tool_name: tool_name.clone(),
                 server_name: "builtin".into(),
@@ -166,7 +166,7 @@ pub async fn dispatch_tool_calls(
         let Some((server, tool_name)) = runtime.resolve_tool(&called_name).await else {
             all_ok = false;
             let msg = format!("未找到提供工具 `{called_name}` 的已启用 MCP server,调用已跳过。如需使用外部工具,先用 tool_load 加载对应 server 或工具。");
-            let _ = channel.send(StreamChunk::ToolCallResult {
+            let _ = sink.send(StreamChunk::ToolCallResult {
                 tool_call_id: tc.id.clone(),
                 tool_name: called_name.clone(),
                 server_name: "(unknown)".into(),
@@ -194,7 +194,7 @@ pub async fn dispatch_tool_calls(
                     "用户拒绝执行工具 `{tool_name}`(call_id={})。请改用其他方式回答,不要重复调用。",
                     tc.id
                 );
-                let _ = channel.send(StreamChunk::ToolCallResult {
+                let _ = sink.send(StreamChunk::ToolCallResult {
                     tool_call_id: tc.id.clone(),
                     tool_name: called_name.clone(),
                     server_name: server.clone(),
@@ -220,7 +220,7 @@ pub async fn dispatch_tool_calls(
         {
             all_ok = false;
             let msg = format!("工具调用被安全策略拒绝:{e}");
-            let _ = channel.send(StreamChunk::ToolCallResult {
+            let _ = sink.send(StreamChunk::ToolCallResult {
                 tool_call_id: tc.id.clone(),
                 tool_name: tool_name.clone(),
                 server_name: server.clone(),
@@ -263,7 +263,7 @@ pub async fn dispatch_tool_calls(
 
         // 5. 结果推前端(UI 展示工具卡片);P4:外部工具同样记录全文并回传 log id
         let log_id = record_tool_log(session_id, &called_name, &exec_args, &content);
-        let _ = channel.send(StreamChunk::ToolCallResult {
+        let _ = sink.send(StreamChunk::ToolCallResult {
             tool_call_id: tc.id.clone(),
             tool_name: called_name.clone(),
             server_name: server,

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import StreamingBubble from '../../components/StreamingBubble';
 import OutlinePanel from '../../components/OutlinePanel';
@@ -20,6 +20,7 @@ import { ChatHeader } from './ChatHeader';
 import { useModelHandoff } from './useModelHandoff';
 import { ChatTodos } from './ChatTodos';
 import { useChatSend } from './useChatSend';
+import { resumeChatRun } from './chatRuntime';
 import { useDraftHandoff } from './useDraftHandoff';
 import { useChatInspector } from './useChatInspector';
 import { ChatBanners } from './ChatBanners';
@@ -134,6 +135,11 @@ export default function ChatPage({ compactTools = false }: { compactTools?: bool
     forkAndReload,
   });
   const activeBranch = session?.active_branch ?? 'main';
+
+  // 刷新/重进页面时恢复仍在进行的生成(sessionStorage 记录 → chat_run_state 重放)
+  useEffect(() => {
+    if (sessionId) void resumeChatRun(sessionId);
+  }, [sessionId]);
 
   // 会话数据加载、分支重载、智能体模板/模型配置加载与思考档初始化
   useChatSessionEffects({

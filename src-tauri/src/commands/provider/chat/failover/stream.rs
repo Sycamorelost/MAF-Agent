@@ -2,10 +2,10 @@
 
 use crate::provider::{StreamChunk, ToolCall};
 use std::time::{Duration, Instant};
-use tauri::ipc::Channel;
 
 use super::Attribution;
 use super::guards::{awaiting_user_decision, remaining_budget, todos_sync_needed};
+use super::super::run::RunSink;
 
 /// 一轮流式消费的结果(供主循环判定下一步)。
 pub(super) struct StreamOutcome {
@@ -30,7 +30,7 @@ pub(super) struct StreamOutcome {
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn consume_stream<S>(
     stream: &mut S,
-    channel: &Channel<StreamChunk>,
+    sink: &RunSink,
     started: &Instant,
     total_timeout: Duration,
     attr: &Attribution,
@@ -145,8 +145,8 @@ where
             // Phase 5e 新增的两个变体:不影响 token 采集,直接转发前端
             _ => {}
         }
-        if channel.send(chunk).is_err() {
-            break; // 前端已关闭 channel
+        if sink.send(chunk).is_err() {
+            break; // 发送端已失效(前端长期不在线)
         }
     }
     out

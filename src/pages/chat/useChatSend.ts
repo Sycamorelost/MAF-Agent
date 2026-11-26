@@ -5,6 +5,8 @@ import { useMessagesStore } from '../../stores/messages';
 import { useMemoryStore } from '../../stores/memory';
 import { useSessionsStore } from '../../stores/sessions';
 import { useThinkingStore } from '../../stores/thinking';
+import { useChatRunsStore } from '../../stores/chatRuns';
+import { cancelChatRun } from './chatRuntime';
 import type { AttachmentMeta, AgentTemplate, MessageRow, MemoryStrategy, SessionRow } from '../../lib/ipc';
 import * as ipc from '../../lib/ipc';
 import { composeSystemPrompt, compressMemoryIfOverBudget } from './memoryContext';
@@ -49,24 +51,30 @@ export function useChatSend({
   const loadMemory = useMemoryStore((s) => s.load);
   const setWebSearch = useSessionsStore((s) => s.setWebSearch);
   const thinkingSel = useThinkingStore((s) => (sessionId ? s.bySession[sessionId] : undefined));
-  const [sending, setSending] = useState(false);
+  /** 发送/错误状态收敛到全局 run store:页面卸载后重挂仍能看到「正在生成」与错误 */
+  const runInfo = useChatRunsStore((s) => (sessionId ? s.bySession[sessionId] : undefined));
+  const sending = !!runInfo && (runInfo.preparing || runInfo.runId !== null);
+  const error = runInfo?.error ?? null;
+  const setError = useCallback(
+    (msg: string | null) => {
+      if (sessionId) useChatRunsStore.getState().setError(sessionId, msg);
+    },
+    [sessionId],
+  );
   const [searching, setSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   /** 本会话已解析文档清单:常驻 system 尾部,滑窗滚过后模型仍知道有哪些文件 */
   const [docManifest, setDocManifest] = useState('');
   /** 记忆自动压缩提示(D3.5) */
   const [compressNotice, setCompressNotice] = useState<string | null>(null);
-  const cancelRef = useRef<(() => void) | null>(null);
   /** P2-8:准备阶段(预检索/联网搜索/落库)的取消标记 —— 此时流式句柄尚未创建 */
   const prepCancelRef = useRef(false);
   // 工作台运行状态条/底部状态栏的「停止」按钮通过窗口事件请求取消(与 Composer 停止同一入口)
   useEffect(() => {
     const onCancelReq = (e: Event) => {
       if ((e as CustomEvent<string>).detail === sessionId) {
-        // P2-8:与 onCancel 同口径 —— 准备阶段也能停止
+        // P2-8:与 onCancel 同口径 —— 准备阶段也能停止;跨页面同样生效
         prepCancelRef.current = true;
-        cancelRef.current?.();
-        // P0-2c:不立即 setSending(false) —— 统一由 runStream.finally 释放,阻止并发两条流
+        if (sessionId) cancelChatRun(sessionId);
       }
     };
     window.addEventListener(CHAT_CANCEL_EVENT, onCancelReq);
@@ -121,7 +129,7 @@ export function useChatSend({
   );
   // 流式发送子流程(组装请求 / 写流式缓冲 / 落库助手消息 / 自动提炼)
   const runStream = useChatStream({
-    sessionId, current, agent, thinkCap, thinkingSel, setSending, setError, cancelRef,
+    sessionId, current, agent, thinkCap, thinkingSel,
   });
   /** 用新分支的最新历史组装 system + 附件注入(F4 重新生成 / F5 换模型重试共用)。
    *  P0:完整历史交给后端,条数窗口与跨轮压缩由后端按会话设置/预算统一处理。 */
@@ -173,7 +181,8 @@ export function useChatSend({
     // 引用在发送前定格:成功后清空,失败时随输入框一起回填
     const quoteRefs = quotes;
     const text = (overrideText ?? composerText).trim();
-    if ((!text && atts.length === 0) || sending) return;
+    // 用 store 的实时忙碌态判断:连点两次时闭包里的 sending 可能还没刷新
+    if ((!text && atts.length === 0) || useChatRunsStore.getState().isBusy(sessionId)) return;
     // 会话可能已被空对话清理逻辑删除(如离开后返回),发送前校验存在性
     if (!session) {
       setError('会话不存在或已被删除，请返回首页重新创建对话');
@@ -194,7 +203,7 @@ export function useChatSend({
     // 即时响应:气泡出现后再点亮占位,随后做联网搜索/落库/记忆预算等耗时准备;
     // 正文/思考内容等流式 chunk 到达后才填充显示(runStream 内的 startStreaming 为幂等复位)
     startStreaming(sessionId);
-    setSending(true);
+    useChatRunsStore.getState().prepare(sessionId);
     prepCancelRef.current = false;
     // 输入框/附件立即清空(必须在任何 await 之前):否则只要后续准备步骤(预检索/落库/
     // 记忆预算/工具收集)稍慢,就会出现「已经显示正在思考,但文本还卡在输入框」的错位。
@@ -290,14 +299,14 @@ export function useChatSend({
       // 即时占位清理:此时错误必来自 runStream 之前的准备步骤,
       // 若流式占位仍在则收掉,避免留下永久光标
       endStreaming(sessionId);
-      setSending(false);
+      useChatRunsStore.getState().finish(sessionId);
     }
   };
   const onCancel = () => {
-    // P2-8:准备阶段(搜索/预检索/落库,流式句柄尚未创建)也允许停止
+    // P2-8:准备阶段(搜索/预检索/落库,run 尚未登记)也允许停止
     prepCancelRef.current = true;
-    cancelRef.current?.();
-    // P0-2c:不立即 setSending(false) —— 统一由 runStream.finally 释放,阻止并发两条流
+    if (sessionId) cancelChatRun(sessionId);
+    // P0-2c:不立即释放忙碌态 —— 统一由 runtime 收尾,阻止并发两条流
   };
   const onRecall = () => {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');

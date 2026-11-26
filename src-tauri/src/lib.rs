@@ -105,6 +105,7 @@ pub fn run() {
         .manage(memory::watcher::WatcherState::default())
         .manage(provider::rotation::RotationState::default())
         .manage(commands::provider::StreamCancelState::default())
+        .manage(commands::provider::chat::run::ChatRunRegistry::default())
         .manage(export::path::ExportPathTokens::default())
         .manage(commands::mcp::McpState(std::sync::Mutex::new(
             mcp::McpConfig::default(),

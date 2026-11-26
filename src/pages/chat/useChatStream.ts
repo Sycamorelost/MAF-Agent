@@ -1,13 +1,9 @@
 import { useCallback } from 'react';
 import type { AgentTemplate, ReasoningCapability, SourceItem } from '../../lib/ipc';
-import * as ipc from '../../lib/ipc';
-import type { ThinkingSelection } from '../../stores/thinking';
 import { useMessagesStore } from '../../stores/messages';
-import { useDeliverablesStore } from '../../stores/deliverables';
-import { runningTask, useTasksStore } from '../../stores/tasks';
-import { maybeAutoSummarize } from './memoryContext';
-import { collectSessionTools, resolveReasoningEffort } from './chatTools';
-import { createStreamChunks } from './chatStream';
+import { useChatRunsStore } from '../../stores/chatRuns';
+import type { ThinkingSelection } from '../../stores/thinking';
+import { runChatStream } from './chatRuntime';
 
 /** 一次流式发送的入参:历史 + 可选来源 + 可选仅本次生效的模型覆盖。 */
 export type RunChatStream = (
@@ -22,126 +18,27 @@ interface ChatStreamParams {
   agent: AgentTemplate | null;
   thinkCap: ReasoningCapability | null;
   thinkingSel: ThinkingSelection | undefined;
-  setSending: (v: boolean) => void;
-  setError: (msg: string | null) => void;
-  cancelRef: { current: (() => void | Promise<void>) | null };
 }
 
-/** 流式发送子流程:组装请求、写流式缓冲、落库助手消息、触发记忆自动提炼。 */
+/** 薄适配层:模型兜底后交给模块级 runtime,生成不再绑定组件生命周期。 */
 export function useChatStream({
-  sessionId, current, agent, thinkCap, thinkingSel, setSending, setError, cancelRef,
+  sessionId, current, agent, thinkCap, thinkingSel,
 }: ChatStreamParams): RunChatStream {
-  const {
-    appendAssistant, startStreaming, pushStreamDelta,
-    pushStreamReasoning, setStreamReasoningTokens, endStreaming, setStreamPhase,
-  } = useMessagesStore();
-  /** F5:用指定模型(缺省当前模型)跑一次流式;modelOverride 只影响本次,不改全局/会话模型,
-   *  新消息 model_id 记录为 override 模型。 */
-  const runStream = useCallback(
-    async (
-      history: { id?: number; role: string; content: string; images?: string[] }[],
-      sources?: ipc.SourceItem[] | null,
-      modelOverride?: { providerId: string; model: string },
-    ) => {
+  return useCallback(
+    async (history, sources, modelOverride) => {
       if (!sessionId) return;
       const eff = modelOverride ?? current;
       if (!eff) {
-        // 调用方(onSend)可能已提前点亮占位:这里收掉,避免永久光标
-        endStreaming(sessionId);
-        setSending(false);
-        setError('请先在右上角配置 API Key 并选择模型');
+        useMessagesStore.getState().endStreaming(sessionId);
+        useChatRunsStore.getState().finish(sessionId);
+        useChatRunsStore.getState().setError(sessionId, '请先在右上角配置 API Key 并选择模型');
         return;
       }
-      setSending(true);
-      setError(null);
-      /** 用户主动停止或超时:已生成内容按「部分内容」落库,不当作完整回答 */
-      let interrupted = false;
-      let chunks: ReturnType<typeof createStreamChunks> | null = null;
-      const sourcesJson = sources && sources.length > 0 ? JSON.stringify(sources) : null;
-      // P0-2a:token 在 try 外声明,以便 catch 里的 endStreaming 也能访问
-      let token = 0;
-      try {
-        // P0-2a:startStreaming 现在返回 token,旧流 endStreaming 不匹配时丢弃缓冲
-        token = startStreaming(sessionId);
-        // 包装 push 函数带 token 归属校验
-        const pushDelta = (sid: string, delta: string) => pushStreamDelta(sid, delta, token);
-        const pushReasoning = (sid: string, delta: string) => pushStreamReasoning(sid, delta, token);
-        // 思考参数:模型不支持 → null(后端能力门控二次兜底);用户关闭 → 'off';否则档位
-        const reasoningEffort = resolveReasoningEffort(thinkCap, thinkingSel);
-        // P2-8:工具收集(MCP list_tools)也可能耗时数秒 —— 期间允许「停止」:
-        // 先挂一个预取消标记,chatStream 句柄创建后再换成真正的 cancel
-        let preCancelled = false;
-        cancelRef.current = () => {
-          preCancelled = true;
-        };
-        // Phase 5e:收集已启用 MCP server 的工具定义(按会话预设裁剪;空则不启用工具调用)
-        const tools = await collectSessionTools(agent, sessionId);
-        if (preCancelled) {
-          // 工具收集期间被停止:未发起任何请求,直接收掉占位
-          endStreaming(sessionId, token);
-          return;
-        }
-        chunks = createStreamChunks(
-          sessionId,
-          { pushStreamDelta: pushDelta, pushStreamReasoning: pushReasoning, setStreamReasoningTokens, setStreamPhase },
-          // 工具块打上当前进行中任务 id(val.md §5.4):检查器流水/产物按任务归集
-          () => runningTask(useTasksStore.getState().bySession[sessionId])?.id ?? null,
-        );
-        const { done, cancel } = ipc.chatStream(
-          {
-            provider_id: eff.providerId, model: eff.model, messages: history,
-            // 智能体采样温度偏好(v2):null = 跟随模型默认
-            temperature: agent?.temperature ?? null, max_tokens: null, top_p: null,
-            custom_base_url: null, custom_display_name: null,
-            session_id: sessionId, reasoning_effort: reasoningEffort,
-            tools,
-          },
-          chunks.onChunk,
-        );
-        cancelRef.current = () => {
-          interrupted = true;
-          cancel();
-        };
-        if (preCancelled) {
-          // 句柄刚创建就被停止:走正常 cancel 路径(通知后端中断)
-          cancelRef.current();
-        }
-        await done;
-        const { content: fullText, reasoning } = endStreaming(sessionId, token);
-        if (fullText) {
-          await appendAssistant(
-            sessionId, fullText, eff.model, chunks.getTokens(),
-            sourcesJson, reasoning, interrupted,
-          );
-        }
-        maybeAutoSummarize(sessionId, eff.providerId, eff.model, agent?.memory_write ?? true);
-      } catch (e) {
-        // P1:断流/报错时已生成的内容不能丢 —— 以 partial 落库,气泡标记「已中断」,
-        // 用户仍可复制、搜索、让模型在此基础上续写。
-        const { content: partialText, reasoning: partialReasoning } = endStreaming(sessionId, token);
-        if (partialText.trim()) {
-          try {
-            await appendAssistant(
-              sessionId, partialText, eff.model, chunks?.getTokens() ?? 0,
-              sourcesJson, partialReasoning, true,
-            );
-          } catch {
-            // 落库失败不掩盖原始错误
-          }
-        }
-        setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setSending(false);
-        cancelRef.current = null;
-        // M2:助手消息落库后刷新产物(本轮 present 登记的交付物已绑定到该消息)
-        void useDeliverablesStore.getState().load(sessionId, true);
-      }
+      await runChatStream({
+        sessionId, providerId: eff.providerId, model: eff.model,
+        history, sources, agent, thinkCap, thinkingSel,
+      });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      sessionId, current, agent, thinkCap, thinkingSel, startStreaming, pushStreamDelta,
-      pushStreamReasoning, setStreamReasoningTokens, endStreaming, appendAssistant,
-    ],
+    [sessionId, current, agent, thinkCap, thinkingSel],
   );
-  return runStream;
 }

@@ -1,6 +1,7 @@
-//! `chat_stream` Tauri 命令:组装请求并启动带故障转移的后台流任务。
-
-use tauri::ipc::Channel;
+//! `chat_start_run` Tauri 命令:组装请求并启动带故障转移的后台生成任务。
+//!
+//! 返回 run_id;后续 chunk 通过窗口事件 `chat:run` 广播,
+//! 前端可随时用 `chat_run_state` 重放,生成不随页面卸载而中断。
 
 use crate::provider::{
     ChatRequest, StreamChunk, keychain, model_config,
@@ -13,8 +14,9 @@ use super::super::stream::StreamCancelState;
 use super::ChatStreamInput;
 use super::failover::{Attribution, spawn_chat_with_failover};
 use super::reasoning::merge_reasoning;
+use super::run::ChatRunRegistry;
 
-/// 流式对话。结果通过 `channel` 逐 chunk 推给前端,命令本身立即返回。
+/// 启动一次流式对话,立即返回 run_id。
 ///
 /// API 流转(多 Key 轮换):同一 Provider 的多把 Key 轮流承担请求;
 /// 仅当**初始 HTTP 响应非 2xx 且尚未推送任何 chunk** 时轮换重试,
@@ -22,15 +24,15 @@ use super::reasoning::merge_reasoning;
 // 参数多为 Tauri State 注入与 IPC 契约字段,无法收敛为结构体
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
-pub async fn chat_stream(
+pub async fn chat_start_run(
     state: tauri::State<'_, RotationState>,
     cancel_state: tauri::State<'_, StreamCancelState>,
+    runs: tauri::State<'_, ChatRunRegistry>,
     mcp_runtime: tauri::State<'_, crate::mcp::McpRuntime>,
     approval_store: tauri::State<'_, crate::mcp::ApprovalStore>,
     app: tauri::AppHandle,
     mut input: ChatStreamInput,
-    channel: Channel<StreamChunk>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     // P1-8:项目级模型覆盖作为「未显式指定模型」时的回退(格式 provider_id::model_id)
     if input.model.trim().is_empty()
         && let Some(sid) = input.session_id.as_deref()
@@ -55,9 +57,6 @@ pub async fn chat_stream(
     {
         return Err(format!("provider {} 未配置 API Key", spec.provider_id));
     }
-    let cancel_id = input.cancel_id.clone();
-    // token 已存入注册表供 cancel_stream 查找;接收端交给后台任务
-    let (_, cancel_rx) = cancel_state.register(&cancel_id);
 
     // 2. 构造请求(单模型配置的默认参数在 input 未显式传值时兜底,迭代 D8;
     //    思考档位合并规则见 merge_reasoning,v1.9.0 工作块 I)
@@ -147,16 +146,18 @@ pub async fn chat_stream(
         .unwrap_or_default();
     let pricing = pricing_for(&spec.provider_id, &input.model);
 
-    // P1-4:首个事件必须 <200ms 到达前端 —— spawn 之前先回「准备中」心跳,
-    // 否则工具收集/连接建立/模型排队这整段前端完全无感知(空窗)。
-    let _ = channel.send(StreamChunk::Phase {
+    // 4. 登记 run(同会话互斥),取消句柄沿用 run_id(前端凭它调 cancel_stream)
+    let sink = runs.start(app.clone(), input.run_id.clone(), input.session_id.clone())?;
+    // P1-4:首个事件必须 <200ms 到达前端 —— spawn 之前先推「准备中」心跳
+    let _ = sink.send(StreamChunk::Phase {
         phase: "preparing".into(),
     });
+    let (_, cancel_rx) = cancel_state.register(&input.run_id);
 
     spawn_chat_with_failover(
         spec,
         req,
-        channel,
+        sink,
         state.inner().clone(),
         cfg,
         Attribution {
@@ -166,11 +167,11 @@ pub async fn chat_stream(
             pricing,
         },
         cancel_state.inner().clone(),
-        cancel_id,
+        input.run_id.clone(),
         cancel_rx,
         app,
         mcp_runtime.inner().clone(),
         approval_store.inner().clone(),
     );
-    Ok(())
+    Ok(input.run_id)
 }

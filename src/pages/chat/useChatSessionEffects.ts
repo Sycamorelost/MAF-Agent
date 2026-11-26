@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { mcpClearSessionAllowed } from '../../lib/ipc/mcp';
 import { useSessionsStore } from '../../stores/sessions';
+import { isChatRunBusy } from '../../stores/chatRuns';
 import type { AgentTemplate, ProviderModelConfig, SessionRow } from '../../lib/ipc';
 import { agentThinking, type ThinkingLevel } from '../../stores/thinking';
 
@@ -50,7 +51,10 @@ export function useChatSessionEffects({
     // 离开会话时:空对话默认不保留(后端按真实消息数判断,流式中/已有内容的会话不受影响)
     // 同时清空 MCP「始终允许」会话缓存,避免跨会话静默放行(Phase 5e 安全要求)
     return () => {
-      void useSessionsStore.getState().removeIfEmpty(sessionId);
+      // 生成仍在进行(含准备阶段)时不能清理:后端还在跑,会话删了会丢消息/幽灵行
+      if (!isChatRunBusy(sessionId)) {
+        void useSessionsStore.getState().removeIfEmpty(sessionId);
+      }
       void mcpClearSessionAllowed().catch(() => {});
     };
   }, [sessionId, load, loadMemory, loadDeliverables]);

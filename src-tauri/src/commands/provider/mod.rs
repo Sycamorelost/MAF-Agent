@@ -19,7 +19,7 @@ pub(crate) mod usage;
 
 // ---------- 命令与对外类型(保持 crate::commands::provider::xxx 原路径可用)----------
 
-pub use chat::{ChatStreamInput, chat_stream};
+pub use chat::{ChatRunRegistry, ChatStreamInput, chat_start_run};
 pub use keys::{
     KeySlotView, delete_api_key, delete_provider_key, get_rotation_configs, has_api_key,
     list_provider_keys, list_stored_provider_ids, save_api_key, save_provider_key,

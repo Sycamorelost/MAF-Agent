@@ -1,7 +1,8 @@
-//! 流式对话:chat_stream 命令与带故障转移的后台流任务(模块门面)。
+//! 流式对话:chat_start_run 命令与带故障转移的后台流任务(模块门面)。
 //!
 //! 职责拆分:
-//! - `command.rs`:`chat_stream` Tauri 命令入口(组装请求 + 启动后台任务);
+//! - `command.rs`:`chat_start_run` Tauri 命令入口(组装请求 + 启动后台任务);
+//! - `run.rs`:后台 run 注册表 / 事件广播 / 序号重放;
 //! - `reasoning.rs`:思考档位解析与合并;
 //! - `failover.rs`:多 Key 轮换/故障转移的流式主循环;
 //! - `context.rs`:上下文预算裁剪;
@@ -11,6 +12,7 @@ pub(crate) mod command;
 pub(crate) mod context;
 mod failover;
 mod reasoning;
+pub(crate) mod run;
 
 #[cfg(test)]
 mod tests;
@@ -37,8 +39,8 @@ pub struct ChatStreamInput {
     pub custom_display_name: Option<String>,
     /// 会话 id(用于按助手归因;可选,缺失时记为未绑定助手)
     pub session_id: Option<String>,
-    /// 前端生成的取消句柄;「停止生成」时凭它调 cancel_stream(M-2)
-    pub cancel_id: String,
+    /// 前端生成的 run 句柄:既是取消 id(停止生成时凭它调 cancel_stream),也是事件关联键
+    pub run_id: String,
     /// Phase 5e:启用 MCP 时前端下发的工具定义(OpenAI function-calling 格式)。
     /// 为空 = 不启用工具调用,行为与既有版本完全一致。
     #[serde(default)]
@@ -46,4 +48,6 @@ pub struct ChatStreamInput {
 }
 
 #[allow(unused_imports)]
-pub use command::chat_stream;
+pub use command::chat_start_run;
+#[allow(unused_imports)]
+pub use run::{ChatRunRegistry, RunStatus, chat_run_state};

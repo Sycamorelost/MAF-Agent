@@ -60,8 +60,8 @@ export function useMessageActions({
       if (isStreaming(sessionId)) { showToast('请等待当前回复生成完毕'); return; }
       // F4:分叉替代物理删除;新分支可见历史 = 该 AI 消息之前的前缀
       await forkAndReload(msg.id);
-      // 用新分支的最新历史重发(无新用户消息)
-      await runStream(rebuildHistory());
+      // 用新分支的最新历史重发(无新用户消息);错误已写入 run store
+      await runStream(rebuildHistory()).catch(() => {});
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessionId, forkAndReload, runStream, isStreaming, showToast],
@@ -76,7 +76,7 @@ export function useMessageActions({
       if (isStreaming(sessionId)) { showToast('请等待当前回复生成完毕'); return; }
       // F4:分叉替代物理删除
       await forkAndReload(msg.id);
-      await runStream(rebuildHistory(), null, { providerId, model });
+      await runStream(rebuildHistory(), null, { providerId, model }).catch(() => {});
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessionId, retryTarget, forkAndReload, runStream, isStreaming, showToast],
