@@ -28,7 +28,7 @@ export function AboutView({ appVersion }: AboutViewProps) {
         <div className="set-product-info">
           <div className="set-product-name">myAgent</div>
           <div className="set-product-ver">
-            版本 {appVersion ? `${appVersion}` : '2.10.0'} · 桌面端 · Windows
+            版本 {appVersion ? `${appVersion}` : '2.10.1'} · 桌面端 · Windows
           </div>
           <div className="set-product-tagline">
             MAF 团队旗下的 Agent 产品,一款专为学习、调研而创造的智能体框架软件。完全免费且无广告,开发者:梧桐吾桐及其团队。
@@ -47,8 +47,11 @@ export function AboutView({ appVersion }: AboutViewProps) {
 
       {/* 更新内容:每段覆盖一个主题,避免按版本号重复相近内容 */}
       <div className="set-card">
-        <div className="set-card-h">更新内容 · v1.17.1 → v2.10.0</div>
+        <div className="set-card-h">更新内容 · v1.17.1 → v2.10.1</div>
         <div className="set-card-b">
+          <p>
+            <b>归档、多选与托盘修正(v2.10.1)：</b>会话右键新增「多选」与「归档会话」——多选后可批量归档 / 恢复 / 移入项目 / 删除,批量卡片复用弹窗主题令牌;归档只置 <code>archived</code> 标记,消息、记忆、附件、项目归属与更新时间全部不动,导航新增「归档」页可查看、打开与恢复;<b>项目同样可归档</b>,归档时级联其会话、恢复时一并回来,不会出现「项目已隐藏但会话仍在列表」。托盘菜单宽度按最长文字自适应并紧贴图标,子菜单在窗口底部 / 右侧会自动上移或翻转到左侧,不再被裁切;附件中心右侧预览支持图片缩略图与文档正文开头(<code>1200</code> 字上限)。
+          </p>
           <p>
             <b>历史压缩与项目模型(v2.10)：</b>压缩快照首次落盘(<code>session_compactions</code> 表),水位线按 <code>id &gt; watermark</code> 单调推进,删除/回滚不再跳水位;会话可绑定项目目录,继承项目 <code>model_override</code> 与项目 <code>shared_context</code> 作为项目 guard 快照,旧预设壳只留占位不再影响运行。
           </p>

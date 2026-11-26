@@ -76,7 +76,10 @@ export default function ChatPage({ compactTools = false }: { compactTools?: bool
   const [modelSwitchOpen, setModelSwitchOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
 
-  const session = sessions.find((s) => s.id === sessionId);
+  // 已归档会话同样可打开查看/继续对话,查找时需覆盖归档列表
+  const session =
+    sessions.find((s) => s.id === sessionId) ??
+    useSessionsStore.getState().archived.find((s) => s.id === sessionId);
   const messages = sessionId ? (bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
 
   // ---------- 检查器(P3-1:工作台能力永久开启,检查器默认开) ----------

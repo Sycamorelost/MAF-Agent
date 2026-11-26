@@ -19,7 +19,9 @@ pub mod compaction;
 pub mod events;
 pub mod messages;
 pub mod projects;
+pub mod project_archive;
 pub mod schema;
+pub mod session_archive;
 pub mod session_tools;
 pub mod sessions;
 pub mod todos;
@@ -29,10 +31,32 @@ pub mod usage;
 /// 全局连接句柄(Mutex 串行化写;读多写少场景够用)。
 static DB: OnceLock<Mutex<Connection>> = OnceLock::new();
 
-/// V39/V40 建表:按需工具加载状态 + 跨轮压缩摘要(合并成一次调用,避免迁移段膨胀)。
+/// V39/V40/V41/V42 迁移:按需工具加载状态 + 跨轮压缩摘要 + 会话/项目归档列。
+/// (合并成一次调用,避免迁移段膨胀)
 pub fn migrate_tool_and_compaction(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(session_tools::DDL)?;
     conn.execute_batch(compaction::DDL)?;
+    ensure_flag_column(conn, "sessions", "archived")?;
+    ensure_flag_column(conn, "projects", "archived")?;
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_archived ON sessions(archived, updated);
+         CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived, sort);",
+    )?;
+    Ok(())
+}
+
+/// 给表补 `archived INTEGER NOT NULL DEFAULT 0` 列(旧库升级用,幂等)。
+fn ensure_flag_column(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<()> {
+    let has: i64 = conn.query_row(
+        &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name='{column}'"),
+        [],
+        |r| r.get(0),
+    )?;
+    if has == 0 {
+        conn.execute_batch(&format!(
+            "ALTER TABLE {table} ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0;"
+        ))?;
+    }
     Ok(())
 }
 

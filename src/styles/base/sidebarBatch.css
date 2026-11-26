@@ -1,0 +1,67 @@
+/**
+ * 侧栏多选与归档(V41)。
+ * 批量操作卡片直接复用弹窗(.dialog)的皮肤令牌,按钮复用 .btn 体系,
+ * 保证浅色/深色主题与其它弹窗完全一致。
+ */
+
+/* 卡片:与 .dialog 同一套表面/描边/圆角/阴影 */
+.side-batch {
+  margin: var(--space-2) var(--space-2) 0;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--composer-border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-frame);
+}
+.side-batch-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-micro);
+  color: var(--text-3);
+}
+.side-batch-count { flex: 1; color: var(--text-1); font-weight: 600; }
+.side-batch-link {
+  border: 0; padding: 0; background: transparent;
+  font-size: var(--font-micro); color: var(--brand);
+  cursor: pointer;
+}
+.side-batch-link:hover { text-decoration: underline; }
+
+/* 操作按钮:与弹窗底部按钮同高、同字体,平均分配宽度 */
+.side-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(4px * var(--ui-scale));
+}
+.side-batch-actions .btn {
+  flex: 1 1 auto;
+  justify-content: center;
+  height: var(--ctl-h);
+  padding: 0 var(--space-2);
+  font-size: var(--font-micro);
+  white-space: nowrap;
+}
+.side-batch-actions .btn.danger { color: var(--err); }
+.side-batch-actions .btn.danger:hover:not(:disabled) { background: var(--err-soft); }
+
+/* 勾选框:占位与文字缩进对齐,选中用品牌色填充 */
+.side-check {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: calc(14px * var(--ui-scale)); height: calc(14px * var(--ui-scale));
+  border: 1px solid var(--composer-border); border-radius: calc(3px * var(--ui-scale));
+  margin-right: calc(6px * var(--ui-scale));
+  font-size: calc(10px * var(--ui-scale));
+  line-height: 1;
+  color: #fff;
+}
+.side-check.on { background: var(--brand); border-color: var(--brand); }
+.side-item.picked { background: var(--bg-hover); color: var(--text-1); }
+
+/* 已归档:弱化显示,悬停恢复正常对比度 */
+.side-item.archived { opacity: .62; }
+.side-item.archived:hover { opacity: 1; }

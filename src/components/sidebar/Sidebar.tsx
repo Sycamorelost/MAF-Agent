@@ -21,6 +21,7 @@ import { SidebarHeader, SidebarSections } from './SidebarSections';
 import { SidebarResize } from './SidebarResize';
 import { SidebarOverlays } from './SidebarOverlays';
 import { buildProjectMenu, buildSessionMenu, type SidebarMenuContext } from './sidebarMenuItems';
+import { useSessionBatch } from './useSessionBatch';
 
 /**
  * Sidebar 主容器(DeepSeek 风格):
@@ -40,6 +41,7 @@ export default function Sidebar() {
   const width = useUiStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUiStore((s) => s.setSidebarWidth);
   const sessions = useSessionsStore((s) => s.sessions);
+  const archived = useSessionsStore((s) => s.archived);
   const sessionsStore = useSessionsStore();
 
   /** 显示模式:展开态与主区同层推挤;折叠时整个节点不渲染(不使用浮层) */
@@ -55,6 +57,8 @@ export default function Sidebar() {
   const [projectsOpen, setProjectsOpen] = useState(readProjectsOpen);
   const [sessionsOpen, setSessionsOpen] = useState(true);
   const { toast, showToast, hideToast } = useToast();
+  /** 多选与批量操作(V41):归档 / 恢复 / 移动 / 删除 */
+  const batch = useSessionBatch(showToast);
 
   // ====== 分区数据(知识库按需加载) ======
   const [notes, setNotes] = useState<NoteMeta[]>([]);
@@ -169,18 +173,17 @@ export default function Sidebar() {
     return { projectGroups, uncatItems };
   }, [sessions, projects]);
 
-  /** 当前会话所属项目:用于高亮项目行。 */
+  /** 当前会话所属项目:用于高亮项目行(已归档会话同样保留其项目归属)。 */
   const activeProjectId = useMemo(
-    () => sessions.find((s) => s.id === activeId)?.project_id ?? null,
-    [sessions, activeId],
+    () => (sessions.find((s) => s.id === activeId) ?? archived.find((s) => s.id === activeId))?.project_id ?? null,
+    [sessions, archived, activeId],
   );
 
-  /** 记忆库/知识库当前选中项(来自地址参数,用于侧栏高亮)。 */
+  /** 记忆库/知识库当前选中项(来自地址参数,用于侧栏高亮);下面顺带解析。 */
   const locParams = useMemo(() => new URLSearchParams(loc.search), [loc.search]);
   const activeMemorySession = locParams.get('session');
   const activeNoteId = locParams.get('id');
 
-  // ====== 操作:新建 ======
   /** 新建空笔记并跳转知识库编辑器(页内保存后广播 notes_changed,列表随之刷新)。 */
   const handleNewNote = useCallback(async () => {
     try {
@@ -268,15 +271,25 @@ export default function Sidebar() {
   /** 菜单构建所需的项目/会话与回调;状态仍由本组件持有。 */
   const menuCtx: SidebarMenuContext = {
     projects,
-    projectGroups: grouped.projectGroups,
+    projectCounts: batch.projectCounts,
     onNewSession: (pid) => void handleNewSession(pid),
     onChangeProjectPath: (p) => void handleChangeProjectPath(p),
     onStartRenameProject: startRenameProject,
+    onArchiveProject: (p) => void ipc.setProjectArchived(p.id, true)
+      .then(() => { void refreshProjects(); return sessionsStore.refresh(); })
+      .then(() => showToast(`已归档项目「${p.name}」,可在归档页恢复`))
+      .catch((e) => showToast(`归档失败:${String(e)}`)),
     onRequestDeleteProject: setPendingProjectDel,
     onStartRenameSession: startRenameSession,
     onRequestDeleteSession: setPendingDel,
     onSetSessionProject: (sid, pid) => void sessionsStore.setProject(sid, pid),
     onNavigateToSession: (sid) => nav(sessionPath(sid)),
+    onBeginSelect: (id) => batch.sel.begin(id),
+    onToggleArchive: (s) => {
+      void (s.archived ? sessionsStore.unarchive([s.id]) : sessionsStore.archive([s.id]))
+        .then(() => showToast(s.archived ? '已恢复到会话列表' : '已归档,可在「已归档」中找回'))
+        .catch((e) => showToast(`操作失败:${String(e)}`));
+    },
   };
 
   // ====== 删除确认 ======
@@ -313,6 +326,9 @@ export default function Sidebar() {
               projectGroups={grouped.projectGroups}
               uncatItems={grouped.uncatItems}
               sessions={sessions}
+              archived={archived}
+              sel={batch.sel}
+              batch={batch}
               notes={notes}
               collapsed={collapsed}
               projectsExpanded={projectsOpen}

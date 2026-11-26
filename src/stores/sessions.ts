@@ -3,10 +3,20 @@ import * as ipc from '../lib/ipc';
 
 interface SessionsState {
   sessions: ipc.SessionRow[];
+  /** 已归档会话(侧栏「已归档」分组;与 sessions 互斥) */
+  archived: ipc.SessionRow[];
   /** 是否已完成至少一次加载(用于区分「还没拉取」与「确实不存在」) */
   loaded: boolean;
   loading: boolean;
   refresh: () => Promise<void>;
+  /** 批量归档(V41):仅隐藏,数据与属性保留 */
+  archive: (ids: string[]) => Promise<void>;
+  /** 批量恢复归档 */
+  unarchive: (ids: string[]) => Promise<void>;
+  /** 批量移入/移出项目 */
+  setProjectMany: (ids: string[], projectId: string | null) => Promise<void>;
+  /** 批量删除(含磁盘目录清理) */
+  removeMany: (ids: string[]) => Promise<void>;
   create: (title: string, modelId: string, agentId?: string | null) => Promise<string>;
   rename: (id: string, title: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -36,6 +46,7 @@ interface SessionsState {
 
 export const useSessionsStore = create<SessionsState>((set, get) => ({
   sessions: [],
+  archived: [],
   loaded: false,
   loading: false,
   pendingComposer: null,
@@ -44,11 +55,34 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   refresh: async () => {
     set({ loading: true });
     try {
-      const sessions = await ipc.listSessions();
-      set({ sessions });
+      const [sessions, archived] = await Promise.all([
+        ipc.listSessions(),
+        ipc.listArchivedSessions(),
+      ]);
+      set({ sessions, archived });
     } finally {
       set({ loading: false, loaded: true });
     }
+  },
+
+  archive: async (ids) => {
+    await ipc.setSessionsArchived(ids, true);
+    await get().refresh();
+  },
+
+  unarchive: async (ids) => {
+    await ipc.setSessionsArchived(ids, false);
+    await get().refresh();
+  },
+
+  setProjectMany: async (ids, projectId) => {
+    await ipc.setSessionsProject(ids, projectId);
+    await get().refresh();
+  },
+
+  removeMany: async (ids) => {
+    await ipc.deleteSessions(ids);
+    await get().refresh();
   },
 
   create: async (title, modelId, agentId) => {

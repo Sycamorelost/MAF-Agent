@@ -1,5 +1,5 @@
 import { IconChevronRight, IconFolder, IconFolderOpen, IconMore } from '../icons';
-import type { ProjectGroup } from './types';
+import type { ProjectGroup, SelectApi } from './types';
 import type { ProjectRow, SessionRow } from '../../lib/ipc';
 import { SessionRowItem } from './SessionRow';
 
@@ -13,6 +13,8 @@ interface Props {
   activeProjectId?: string | null;
   editingId: string | null;
   editingText: string;
+  /** 多选状态与操作(可选) */
+  sel?: SelectApi;
   onToggleCollapsed: (projectId: string) => void;
   onNewSessionInProject: (projectId: string | null) => void;
   onProjectContextMenu: (e: React.MouseEvent, p: ProjectRow) => void;
@@ -32,6 +34,7 @@ export function ProjectListView({
   activeProjectId = null,
   editingId,
   editingText,
+  sel,
   onToggleCollapsed,
   onNewSessionInProject,
   onProjectContextMenu,
@@ -111,6 +114,9 @@ export function ProjectListView({
                     onCommitRename={onCommitRename}
                     onCancelRename={onCancelRename}
                     onContextMenu={onSessionContextMenu}
+                    selectMode={sel?.mode}
+                    selected={sel?.selected.has(s.id)}
+                    onToggleSelect={sel?.toggle}
                   />
                 ))}
               </div>

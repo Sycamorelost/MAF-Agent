@@ -24,7 +24,7 @@ use v16::{
 };
 
 /// 当前 schema 版本。每次结构变更 +1 并追加迁移 SQL。
-pub const SCHEMA_VERSION: i32 = 40;
+pub const SCHEMA_VERSION: i32 = 42;
 
 // V29(P8.1 项目化升级):folders → projects,加字段对齐 Cursor Projects 设计。
 // - 重命名 folders → projects(SQLite ALTER TABLE RENAME)

@@ -7,11 +7,26 @@
 
 #![allow(dead_code)]
 
-use crate::db::{projects, sessions};
+use crate::db::{project_archive, projects, session_archive, sessions};
 
 #[tauri::command]
 pub fn project_list() -> Result<Vec<projects::ProjectRow>, String> {
     projects::list()
+}
+
+/// 已归档项目列表(归档视图用)。
+#[tauri::command]
+pub fn project_list_archived() -> Result<Vec<projects::ProjectRow>, String> {
+    project_archive::list_archived()
+}
+
+/// 归档 / 恢复项目:级联处理项目下的全部会话,
+/// 保证「项目隐藏时其会话也不同时出现在会话列表」,恢复时一起回来。
+#[tauri::command]
+pub fn project_set_archived(id: String, archived: bool) -> Result<(), String> {
+    project_archive::set_archived(&id, archived)?;
+    let ids = session_archive::session_ids_in_project(&id)?;
+    session_archive::set_archived_many(&ids, archived)
 }
 
 /// 创建项目 —— path 必须是用户选定的绝对路径且目录存在。

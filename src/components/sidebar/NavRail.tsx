@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
 import * as ipc from '../../lib/ipc';
 import { isNavActive } from './utils';
-import { IconAttach, IconBrain, IconChat, IconFileText, IconSettings } from '../icons';
+import { IconArchive, IconAttach, IconBrain, IconChat, IconFileText, IconSettings } from '../icons';
 
 /** 一级导航(设置固定在最底部,不参与排序与隐藏)。 */
 const NAV_MAIN = [
@@ -11,6 +11,7 @@ const NAV_MAIN = [
   { key: 'memory', Icon: IconBrain, label: '记忆库', path: '/memory' },
   { key: 'knowledge', Icon: IconFileText, label: '知识库', path: '/knowledge' },
   { key: 'attachments', Icon: IconAttach, label: '附件', path: '/attachments' },
+  { key: 'archive', Icon: IconArchive, label: '归档', path: '/archive' },
 ];
 
 const NAV_FOOT = [{ key: 'settings', Icon: IconSettings, label: '设置', path: '/settings' }];

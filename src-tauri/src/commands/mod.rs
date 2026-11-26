@@ -45,6 +45,12 @@ macro_rules! all_commands {
             crate::commands::memory::crud::delete_session,
             crate::commands::memory::crud::delete_session_if_empty,
             crate::commands::memory::crud::prune_empty_sessions,
+            // 归档与批量操作(V41)
+            crate::commands::memory::archive::list_archived_sessions,
+            crate::commands::memory::archive::set_session_archived,
+            crate::commands::memory::archive::set_sessions_archived,
+            crate::commands::memory::archive::set_sessions_project,
+            crate::commands::memory::archive::delete_sessions,
             crate::commands::memory::crud::update_session_settings,
             crate::commands::memory::crud::set_session_web_search,
             crate::commands::memory::crud::set_session_workbench_mode,
@@ -141,6 +147,8 @@ macro_rules! all_commands {
             crate::commands::provider::usage::usage_recalc,
             // 项目(P8.1 项目化升级)
             crate::commands::projects::project_list,
+            crate::commands::projects::project_list_archived,
+            crate::commands::projects::project_set_archived,
             crate::commands::projects::project_create,
             crate::commands::projects::project_rename,
             crate::commands::projects::project_update_path,
@@ -172,6 +180,7 @@ macro_rules! all_commands {
             crate::commands::popout::dock_popout,
             // 托盘自定义菜单动作(显示主窗 / 小窗 / 收起 / 退出)
             crate::commands::tray::tray_menu_action,
+            crate::commands::tray::tray_menu_fit,
             // 知识库 / 笔记库(迭代 D8)
             crate::commands::notes::notes_list,
             crate::commands::notes::notes_get,

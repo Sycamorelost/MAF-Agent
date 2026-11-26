@@ -47,6 +47,9 @@ export function ContextMenu({ x, y, items, onClose, _inline }: ContextMenuProps)
   const ref = useRef<HTMLDivElement>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [renderPos, setRenderPos] = useState({ x, y });
+  /** 子菜单越界修正:右侧放不下翻到左侧,底部放不下上移 */
+  const [flipX, setFlipX] = useState(false);
+  const [shiftY, setShiftY] = useState(0);
 
   // 顶级菜单:首挂载测尺寸修正越界;子菜单:由父控制布局
   useEffect(() => {
@@ -92,17 +95,39 @@ export function ContextMenu({ x, y, items, onClose, _inline }: ContextMenuProps)
     };
   }, [onClose, _inline]);
 
+  // 子菜单:父级只做布局,越界需要自己修正,否则贴底时后半截被视口裁掉
+  useEffect(() => {
+    if (!_inline) return;
+    const el = ref.current;
+    if (!el) return;
+    const M = 8;
+    const rect = el.getBoundingClientRect();
+    if (!flipX && rect.right > window.innerWidth - M) {
+      setFlipX(true); // 翻到父菜单左侧,下一轮再校验纵向
+      return;
+    }
+    const over = rect.bottom - (window.innerHeight - M);
+    // 上移量不超过视口顶部,避免把子菜单顶出屏幕
+    const limit = Math.max(0, rect.top - M);
+    setShiftY(over > 0 ? -Math.min(over, limit) : 0);
+  }, [_inline, flipX, openKey]);
+
   const handleClick = (item: MenuItem) => {
     if (item.disabled || item.divider || item.children) return;
     item.onClick?.();
     onClose();
   };
 
+  const hasSub = items.some((it) => !!it.children);
   const body = (
     <div
       ref={ref}
-      className={`ctx-menu${_inline ? ' ctx-sub' : ''}`}
-      style={_inline ? undefined : { position: 'fixed', left: renderPos.x, top: renderPos.y, zIndex: 'var(--z-menu)' }}
+      className={`ctx-menu${_inline ? ' ctx-sub' : ''}${hasSub ? ' has-sub' : ''}${flipX ? ' flip-x' : ''}`}
+      style={
+        _inline
+          ? { transform: shiftY ? `translateY(${shiftY}px)` : undefined }
+          : { position: 'fixed', left: renderPos.x, top: renderPos.y, zIndex: 'var(--z-menu)' }
+      }
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((it) => {

@@ -153,7 +153,10 @@ export default function AttachmentsPage() {
   };
 
   const onLocate = (e: AttachmentEntry) => {
-    const sess = sessions.find((s) => s.id === e.session_id);
+    // 已归档会话不在 sessions 里,但附件仍会聚合展示,需一并查找
+    const sess =
+      sessions.find((s) => s.id === e.session_id) ??
+      useSessionsStore.getState().archived.find((s) => s.id === e.session_id);
     if (sess && sess.active_branch !== e.branch_id) {
       void setActiveBranch(e.session_id, e.branch_id).catch(() => {});
     }

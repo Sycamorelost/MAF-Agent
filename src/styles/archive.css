@@ -1,0 +1,50 @@
+/** 归档视图(/archive)。骨架复用 .att-page/.att-head/.att-body 等附件中心样式,只补行内布局。 */
+
+.arc-hint {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-sub);
+  color: var(--text-3);
+}
+
+.arc-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--ui-scale));
+}
+
+/* 行卡片:与附件卡片同一表面/描边/圆角,横排布局 */
+.arc-row {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  padding: calc(8px * var(--ui-scale)) var(--space-3);
+  background: var(--bg-main);
+}
+
+.arc-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-1);
+  font-size: var(--font-body);
+  cursor: pointer;
+}
+button.arc-title:hover { color: var(--brand); }
+
+.arc-when {
+  flex: 0 1 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-micro);
+  color: var(--text-3);
+}
+.arc-actions { flex: 0 0 auto; display: flex; gap: calc(4px * var(--ui-scale)); }
+.arc-actions .att-btn { height: auto; padding: calc(3px * var(--ui-scale)) var(--space-2); }

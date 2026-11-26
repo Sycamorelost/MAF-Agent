@@ -8,6 +8,7 @@
 // 这些 re-export 在本 crate 内没有直接调用点。
 #![allow(unused_imports)]
 
+pub(crate) mod archive;
 pub(crate) mod crud;
 pub(crate) mod diff;
 pub(crate) mod longterm;

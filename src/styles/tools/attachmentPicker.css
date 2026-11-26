@@ -1,0 +1,132 @@
+/**
+ * 附件中心选择器(Composer → 从附件中心导入)。
+ * 从 attachment.css 拆出,保持单文件 ≤400 行体积守卫。
+ */
+
+.att-pick-empty {
+  padding: var(--space-4) 0;
+  text-align: center;
+  font-size: var(--font-caption);
+  color: var(--text-4);
+}
+/* 两栏布局:左侧列表伸缩,右侧预览固定宽度;容器过窄时由容器查询隐藏预览 */
+.att-pick-dialog { container-type: inline-size; }
+.att-pick-body {
+  display: flex;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow: hidden;
+}
+.att-pick-left {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.att-pick-left .att-pick-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.att-pick-preview {
+  flex: 0 0 auto;
+  width: calc(300px * var(--ui-scale));
+  max-width: 40%;
+  overflow-y: auto;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border);
+}
+@container (max-width: 720px) {
+  .att-pick-preview { display: none; }
+}
+
+/* ---------- 右侧预览栏 ---------- */
+.att-prev-head { display: flex; align-items: flex-start; gap: var(--space-2); }
+.att-prev-icon { flex: 0 0 auto; color: var(--text-3); }
+.att-prev-title { min-width: 0; }
+.att-prev-name {
+  font-size: var(--font-sub); font-weight: 600; color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.att-prev-sub { margin-top: calc(2px * var(--ui-scale)); font-size: var(--font-micro); color: var(--text-4); }
+/* 图片缩略图:等比缩放,超出高度裁边,不撑破预览栏 */
+.att-prev-thumb {
+  margin-top: var(--space-3);
+  display: flex; align-items: center; justify-content: center;
+  min-height: calc(72px * var(--ui-scale));
+  max-height: calc(180px * var(--ui-scale));
+  overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius-s);
+  background: var(--bg-main);
+}
+.att-prev-thumb img {
+  display: block; max-width: 100%; max-height: calc(180px * var(--ui-scale));
+  object-fit: contain;
+}
+.att-prev-thumb-fail { padding: var(--space-2); font-size: var(--font-micro); color: var(--text-4); }
+.att-prev-section { margin-top: var(--space-3); }
+.att-prev-label { font-size: var(--font-micro); color: var(--text-4); margin-bottom: calc(4px * var(--ui-scale)); }
+/* 正文开头:等宽字体 + 滚动,最多 220px 高,长文不撑爆弹窗 */
+.att-prev-text {
+  margin: 0; padding: var(--space-2);
+  max-height: calc(220px * var(--ui-scale));
+  overflow: auto;
+  border-radius: var(--radius-s);
+  background: var(--bg-main);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-micro);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+.att-prev-more { margin-top: calc(4px * var(--ui-scale)); font-size: var(--font-micro); color: var(--text-4); }
+.att-prev-summary {
+  margin: 0;
+  font-size: var(--font-caption);
+  line-height: 1.65;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.att-prev-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(4px * var(--ui-scale)) var(--space-2);
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-micro);
+}
+.att-prev-fields dt { color: var(--text-4); white-space: nowrap; }
+.att-prev-fields dd {
+  margin: 0; color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.att-prev-warn { color: var(--warn); }
+
+/* ---------- 左侧列表 ---------- */
+.att-pick-list { display: flex; flex-direction: column; gap: calc(4px * var(--ui-scale)); }
+.att-pick-item {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  width: 100%; padding: var(--space-2); text-align: left;
+  border: 1px solid transparent; border-radius: var(--radius-m);
+  background: transparent; color: var(--text-1); cursor: pointer;
+}
+.att-pick-item:hover { background: var(--bg-hover); }
+.att-pick-item.on { border-color: var(--brand-line); background: var(--bg-hover); }
+.att-pick-item.off { opacity: .55; cursor: not-allowed; }
+.att-pick-box {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: calc(16px * var(--ui-scale)); height: calc(16px * var(--ui-scale));
+  margin-top: calc(2px * var(--ui-scale));
+  border: 1px solid var(--composer-border); border-radius: var(--radius-s);
+  color: #fff;
+}
+.att-pick-box.on { background: var(--ink); border-color: var(--ink); }
+.att-pick-main { display: flex; flex-direction: column; gap: calc(2px * var(--ui-scale)); min-width: 0; flex: 1; }
+.att-pick-name {
+  font-size: var(--font-caption); color: var(--text-1);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.att-pick-meta { font-size: var(--font-micro); color: var(--text-4); }
+.att-pick-sum {
+  font-size: var(--font-micro); color: var(--text-3); line-height: 1.5;
+  display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}

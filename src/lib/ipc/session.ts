@@ -13,6 +13,24 @@ export const createSession = (title: string, modelId: string, agentId?: string |
 
 export const listSessions = () => invoke<SessionRow[]>('list_sessions');
 
+/** 已归档会话列表(侧栏「已归档」分组)。 */
+export const listArchivedSessions = () => invoke<SessionRow[]>('list_archived_sessions');
+
+/** 单个会话归档 / 恢复(V41)。 */
+export const setSessionArchived = (id: string, archived: boolean) =>
+  invoke<void>('set_session_archived', { id, archived });
+
+/** 批量归档 / 恢复,返回处理条数。 */
+export const setSessionsArchived = (ids: string[], archived: boolean) =>
+  invoke<number>('set_sessions_archived', { ids, archived });
+
+/** 批量移入项目(projectId=null 移出项目)。 */
+export const setSessionsProject = (ids: string[], projectId: string | null) =>
+  invoke<void>('set_sessions_project', { ids, projectId });
+
+/** 批量删除会话,返回删除条数。 */
+export const deleteSessions = (ids: string[]) => invoke<number>('delete_sessions', { ids });
+
 export const getSession = (id: string) => invoke<SessionRow | null>('get_session', { id });
 
 // ============ harness 任务清单 ============

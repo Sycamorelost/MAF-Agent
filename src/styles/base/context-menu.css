@@ -11,6 +11,8 @@
   border-radius:var(--radius-m);
   box-shadow:var(--shadow-card-h);
 }
+/* 含子菜单时不裁切:overflow-y:auto 会把 absolute 定位的子菜单整块切掉 */
+.ctx-menu.has-sub{overflow:visible}
 /* 子菜单:inline 渲染,relative 容器内 absolute 定位在父项右侧 */
 .ctx-menu .ctx-sub{
   position:absolute;top:-4px;left:100%;

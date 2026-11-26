@@ -26,9 +26,11 @@ pub struct ProjectRow {
     pub sort: i64,
     pub created: String,
     pub updated: String,
+    /// 是否已归档(V42):归档项目会级联归档其会话,项目与数据全部保留
+    pub archived: bool,
 }
 
-fn row_to_project(r: &rusqlite::Row) -> rusqlite::Result<ProjectRow> {
+pub(crate) fn row_to_project(r: &rusqlite::Row) -> rusqlite::Result<ProjectRow> {
     Ok(ProjectRow {
         id: r.get(0)?,
         name: r.get(1)?,
@@ -38,16 +40,19 @@ fn row_to_project(r: &rusqlite::Row) -> rusqlite::Result<ProjectRow> {
         sort: r.get(5)?,
         created: r.get(6)?,
         updated: r.get(7)?,
+        archived: r.get::<_, i64>(8)? != 0,
     })
 }
+
+pub(crate) const PROJECT_COLS: &str =
+    "id, name, path, model_override, shared_context, sort, created, updated, archived";
 
 pub fn list() -> Result<Vec<ProjectRow>, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare(
-            "SELECT id, name, path, model_override, shared_context, sort, created, updated \
-             FROM projects ORDER BY sort ASC, created ASC",
-        )
+        .prepare(&format!(
+            "SELECT {PROJECT_COLS} FROM projects WHERE archived=0 ORDER BY sort ASC, created ASC"
+        ))
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], row_to_project)
@@ -149,6 +154,7 @@ pub fn create(name: &str, path: &str) -> Result<ProjectRow, String> {
         sort,
         created: now.clone(),
         updated: now,
+        archived: false,
     })
 }
 
@@ -223,10 +229,7 @@ pub fn update_sort(id: &str, sort: i64) -> Result<(), String> {
 pub fn get(id: &str) -> Result<Option<ProjectRow>, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare(
-            "SELECT id, name, path, model_override, shared_context, sort, created, updated \
-             FROM projects WHERE id=?1",
-        )
+        .prepare(&format!("SELECT {PROJECT_COLS} FROM projects WHERE id=?1"))
         .map_err(|e| e.to_string())?;
     let row = stmt.query_row([id], row_to_project).ok();
     Ok(row)

@@ -17,10 +17,22 @@ export interface ProjectRow {
   sort: number;
   created: string;
   updated: string;
+  /** 是否已归档(V42):归档会级联隐藏项目下会话,数据全部保留 */
+  archived: boolean;
 }
 
 export function listProjects(): Promise<ProjectRow[]> {
   return invoke<ProjectRow[]>('project_list');
+}
+
+/** 已归档项目列表(归档视图用)。 */
+export function listArchivedProjects(): Promise<ProjectRow[]> {
+  return invoke<ProjectRow[]>('project_list_archived');
+}
+
+/** 归档 / 恢复项目(级联处理项目下全部会话)。 */
+export function setProjectArchived(id: string, archived: boolean): Promise<void> {
+  return invoke<void>('project_set_archived', { id, archived });
 }
 
 export function createProject(name: string, path: string): Promise<ProjectRow> {

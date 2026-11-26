@@ -1,5 +1,5 @@
 import { HashRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -35,6 +35,7 @@ const ChatPage = lazy(() => import('./pages/ChatPage'));
 const MemoryPage = lazy(() => import('./pages/MemoryPage'));
 const NotesPage = lazy(() => import('./pages/NotesPage'));
 const AttachmentsPage = lazy(() => import('./pages/AttachmentsPage'));
+const ArchivePage = lazy(() => import('./pages/ArchivePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 /** 首页门:工作台页已并入会话页,首页永远是 HomePage。 */
@@ -46,9 +47,12 @@ function HomeGate() {
 function SessionGate() {
   const { id } = useParams<{ id: string }>();
   const sessions = useSessionsStore((s) => s.sessions);
+  const archived = useSessionsStore((s) => s.archived);
   const loaded = useSessionsStore((s) => s.loaded);
   if (!id) return <Navigate to="/" replace />;
-  const session = sessions.find((s) => s.id === id);
+  // 已归档会话仍可通过链接/已归档分组打开,不能视为「不存在」
+  const session =
+    sessions.find((s) => s.id === id) ?? archived.find((s) => s.id === id);
   // 会话不存在且列表已加载完成(如删除后从历史栈返回):回首页,避免落在空白会话页
   if (!session && loaded) return <Navigate to="/" replace />;
   return <ChatPage />;
@@ -85,24 +89,28 @@ function OnboardingGate() {
 function PopoutApp() {
   const nav = useNavigate();
   const [err, setErr] = useState<string | null>(null);
-  // popout 一启动就创建新会话、跳到 /chat/:id、定位到右下角贴任务栏
+  // StrictMode 双调用守卫:确保整个 popout 生命周期内只创建一次会话。
+  // 不用局部 disposed 是因为 StrictMode mount→unmount→mount 之间 disposed 会重置。
+  const bootedRef = useRef(false);
   useEffect(() => {
-    let disposed = false;
+    if (bootedRef.current) return;
+    bootedRef.current = true;
+    let cancelled = false;
     (async () => {
       try {
         // 窗口创建时已在 Rust 端锚定右下角;这里再调一次作为防御(幂等,不产生跳位)
         await invoke('dock_popout').catch(() => {});
         const { id } = await ipc.createSession('', '');
-        if (disposed) return;
+        if (cancelled) return;
         // 让 useSessionsStore 也拿到这个新会话(同 DB,主窗口也能看到)
         await useSessionsStore.getState().refresh();
-        if (!disposed) nav(`/chat/${id}`, { replace: true });
+        if (!cancelled) nav(`/chat/${id}`, { replace: true });
       } catch (e) {
-        if (!disposed) setErr(String(e ?? '新建会话失败'));
+        if (!cancelled) setErr(String(e ?? '新建会话失败'));
       }
     })();
-    return () => { disposed = true; };
-    // 仅 mount 时跑一次
+    return () => { cancelled = true; };
+    // 仅 mount 时跑一次;bootedRef 保证 StrictMode 下也不会二次执行
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -204,6 +212,7 @@ function MainApp() {
                 <Route path="/knowledge" element={<NotesPage />} />
                 <Route path="/notes" element={<NotesPage />} />
                 <Route path="/attachments" element={<AttachmentsPage />} />
+                <Route path="/archive" element={<ArchivePage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

@@ -1,12 +1,26 @@
+import { useState } from 'react';
 import type { NoteMeta, ProjectRow, SessionRow } from '../../lib/ipc';
 import { whenLabel } from './utils';
 import type { SideSection } from './utils';
-import type { ProjectGroup } from './types';
+import type { ProjectGroup, SelectApi } from './types';
 import { IconChevronRight, IconPlus } from '../icons';
 import { NavRail } from './NavRail';
 import { ProjectListView } from './ProjectList';
 import { SectionFlatList } from './SectionFlatList';
 import { TimeListView } from './TimeList';
+import { SessionRowItem } from './SessionRow';
+import { SidebarBatchBar } from './SidebarBatchBar';
+
+/** 批量操作回调(由 useSessionBatch 提供,此处只做透传) */
+export interface BatchActions {
+  count: number;
+  activeCount: number;
+  archivedCount: number;
+  archive: () => void;
+  restore: () => void;
+  move: (projectId: string | null) => void;
+  remove: () => void;
+}
 
 /** 顶部固定区:新对话按钮,全宽胶囊 + 贴顶部 + 右侧与会话区同高 */
 export function SidebarHeader({ onNewSession }: { onNewSession: () => void }) {
@@ -32,7 +46,12 @@ interface Props {
   projectGroups: ProjectGroup[];
   uncatItems: SessionRow[];
   sessions: SessionRow[];
+  /** 已归档会话(V41;单独分组展示) */
+  archived: SessionRow[];
   notes: NoteMeta[];
+  /** 多选状态与批量操作 */
+  sel: SelectApi;
+  batch: BatchActions;
   collapsed: Record<string, boolean>;
   projectsExpanded: boolean;
   sessionsOpen: boolean;
@@ -65,7 +84,10 @@ export function SidebarSections({
   projectGroups,
   uncatItems,
   sessions,
+  archived,
   notes,
+  sel,
+  batch,
   collapsed,
   projectsExpanded,
   sessionsOpen,
@@ -93,10 +115,26 @@ export function SidebarSections({
 }: Props) {
   // 会话分区:项目列表常驻可折叠;无项目时仍显示「会话」分组承载全部会话
   const showSessions = uncatItems.length > 0 || projects.length === 0;
+  /** 已归档分组默认折叠;勾选/批量恢复都在此分组内进行 */
+  const [archivedOpen, setArchivedOpen] = useState(false);
 
   return (
     <>
       <NavRail />
+      {section === 'chat' && sel.mode && (
+        <SidebarBatchBar
+          sel={sel}
+          count={batch.count}
+          activeCount={batch.activeCount}
+          archivedCount={batch.archivedCount}
+          projects={projects}
+          allIds={[...sessions, ...archived].map((s) => s.id)}
+          onArchive={batch.archive}
+          onRestore={batch.restore}
+          onMove={batch.move}
+          onRemove={batch.remove}
+        />
+      )}
       {section === 'chat' && (
         <div className="side-proj-sec">
           <div className="side-sec-head">
@@ -144,6 +182,7 @@ export function SidebarSections({
                   activeProjectId={activeProjectId}
                   editingId={editingSessionId}
                   editingText={editingSessionText}
+                  sel={sel}
                   onToggleCollapsed={onToggleProjectCollapsed}
                   onNewSessionInProject={onNewSession}
                   onProjectContextMenu={onProjectContextMenu}
@@ -187,6 +226,7 @@ export function SidebarSections({
                 activeId={activeId}
                 editingId={editingSessionId}
                 editingText={editingSessionText}
+                sel={sel}
                 onSessionNavigate={onNavigateSession}
                 onSessionStartRename={onSessionStartRename}
                 onEditingTextChange={onEditingTextChange}
@@ -194,6 +234,51 @@ export function SidebarSections({
                 onCancelRename={onCancelRename}
                 onSessionContextMenu={onSessionContextMenu}
               />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 已归档分组(V41):默认折叠,展开后可查看 / 恢复 / 删除;数据完整保留 */}
+      {section === 'chat' && archived.length > 0 && (
+        <div className="side-sec">
+          <div className="side-sec-head">
+            <button
+              type="button"
+              className="side-sec-toggle"
+              aria-expanded={archivedOpen}
+              aria-label={archivedOpen ? '折叠已归档' : '展开已归档'}
+              onClick={() => setArchivedOpen((v) => !v)}
+            >
+              <IconChevronRight
+                size={12}
+                className={`chevron${archivedOpen ? ' down' : ''}`}
+              />
+              <span className="side-sec-title">已归档</span>
+              <span className="side-sec-count">{archived.length}</span>
+            </button>
+          </div>
+          {archivedOpen && (
+            <div className="side-list">
+              {archived.map((s) => (
+                <SessionRowItem
+                  key={s.id}
+                  session={s}
+                  indentClass="side-flat-item"
+                  activeId={activeId}
+                  editingId={editingSessionId}
+                  editingText={editingSessionText}
+                  onNavigate={onNavigateSession}
+                  onStartRename={onSessionStartRename}
+                  onEditingTextChange={onEditingTextChange}
+                  onCommitRename={onCommitRename}
+                  onCancelRename={onCancelRename}
+                  onContextMenu={onSessionContextMenu}
+                  selectMode={sel.mode}
+                  selected={sel.selected.has(s.id)}
+                  onToggleSelect={sel.toggle}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -210,6 +295,20 @@ export function SidebarSections({
           activeId={activeMemorySession}
           emptyText="还没有会话记忆,先去对话页聊一句吧。"
           onSelect={onSelectMemory}
+        />
+      )}
+
+      {section === 'archive' && (
+        <SectionFlatList
+          title="已归档会话"
+          rows={archived.map((s) => ({
+            id: s.id,
+            title: s.title || '未命名会话',
+            when: whenLabel(s.updated),
+          }))}
+          activeId={activeId ?? null}
+          emptyText="还没有归档的会话。右键任意会话选择「归档会话」即可。"
+          onSelect={onNavigateSession}
         />
       )}
 

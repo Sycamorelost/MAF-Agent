@@ -11,11 +11,15 @@ body.tray-menu-window {
 }
 
 .tray-menu {
-  margin: 0;
+  /* 1px 透明留白:避免高 DPI 下窗口按物理像素取整把边框/文字切掉 */
+  margin: 1px;
   padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* 宽度跟随最长文字:窗口由前端测量后收缩,不留透明空白 */
+  width: max-content;
+  min-width: 96px;
   border-radius: 10px;
   border: 1px solid var(--border-strong);
   background: color-mix(in srgb, var(--bg-surface) 98%, transparent);

@@ -34,10 +34,11 @@ pub struct SessionRow {
     pub permission_mode: String,
     /// 所属文件夹(V28 / P8):None = 未分类
     pub project_id: Option<String>,
+    /// 是否已归档(V41):归档后从会话列表隐藏,但数据与会话属性完全保留
+    pub archived: bool,
 }
 
-fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRow> {
-    Ok(SessionRow {
+pub(crate) fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRow> {    Ok(SessionRow {
         id: r.get(0)?,
         title: r.get(1)?,
         created: r.get(2)?,
@@ -53,10 +54,11 @@ fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRow> {
         workbench_mode: r.get(12)?,
         permission_mode: r.get(13)?,
         project_id: r.get(14)?,
+        archived: r.get::<_, i64>(15)? != 0,
     })
 }
 
-const SELECT_COLS: &str = "id, title, created, updated, model_id, memory_version, system_prompt, max_context_messages, web_search_enabled, memory_injection_strategy, agent_id, active_branch, workbench_mode, permission_mode, project_id";
+pub(crate) const SELECT_COLS: &str = "id, title, created, updated, model_id, memory_version, system_prompt, max_context_messages, web_search_enabled, memory_injection_strategy, agent_id, active_branch, workbench_mode, permission_mode, project_id, archived";
 
 pub fn get(id: &str) -> Result<Option<SessionRow>, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
@@ -77,7 +79,7 @@ pub fn list() -> Result<Vec<SessionRow>, String> {
     let conn = db::conn().lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(&format!(
-            "SELECT {} FROM sessions ORDER BY updated DESC",
+            "SELECT {} FROM sessions WHERE archived=0 ORDER BY updated DESC",
             SELECT_COLS
         ))
         .map_err(|e| e.to_string())?;
@@ -363,7 +365,7 @@ pub fn prune_empty(grace_secs: i64) -> Result<Vec<String>, String> {
     let cutoff = (chrono::Local::now() - chrono::Duration::seconds(grace_secs.max(0))).to_rfc3339();
     let mut stmt = conn
         .prepare(
-            "SELECT id FROM sessions WHERE updated < ?1 \
+            "SELECT id FROM sessions WHERE updated < ?1 AND archived=0 \
              AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.session_id = sessions.id)",
         )
         .map_err(|e| e.to_string())?;

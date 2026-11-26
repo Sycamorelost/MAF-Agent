@@ -33,12 +33,13 @@ export function sidebarMode(open: boolean): SidebarMode {
 }
 
 /** 侧栏分区:由当前路由决定,切换导航时列表内容随之切换。 */
-export type SideSection = 'chat' | 'memory' | 'knowledge' | 'attachments';
+export type SideSection = 'chat' | 'memory' | 'knowledge' | 'attachments' | 'archive';
 
 export function sectionFromPath(pathname: string): SideSection {
   if (pathname.startsWith('/knowledge') || pathname.startsWith('/notes')) return 'knowledge';
   if (pathname.startsWith('/memory')) return 'memory';
   if (pathname.startsWith('/attachments')) return 'attachments';
+  if (pathname.startsWith('/archive')) return 'archive';
   return 'chat';
 }
 

@@ -31,6 +31,8 @@ export interface SessionRow {
   permission_mode: PermissionMode;
   /** 所属文件夹(V28 / P8):null = 未分类 */
   project_id: string | null;
+  /** 是否已归档(V41):归档后从会话列表隐藏,数据与属性全部保留,可随时恢复 */
+  archived: boolean;
 }
 
 /** Agent 模板(迭代 B2,与后端 AgentTemplate 对齐)。 */
