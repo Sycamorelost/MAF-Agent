@@ -205,6 +205,12 @@ pub fn run() {
                 log::error!("tray setup failed: {e}");
             }
 
+            // 小窗预建(隐藏):WebView2 在托盘事件回调里创建会初始化不完整(白屏卡死),
+            // 与 tray-menu 一样放到 setup 阶段建,托盘双击时只 show。
+            if let Err(e) = crate::commands::popout::preload(app.handle()) {
+                log::warn!("小窗预建失败: {e}");
+            }
+
             // DEF-01 首帧白屏自愈:dev 模式下窗口创建与 Vite 首次编译存在竞态,
             // WebView 可能停在空白导航(UIA 树为空、F5 后才恢复)。
             // 延迟 2s 由页面自评:body 无可见文本则自动 reload;正常页面无副作用。

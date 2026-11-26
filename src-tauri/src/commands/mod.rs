@@ -176,6 +176,7 @@ macro_rules! all_commands {
             crate::commands::search::search_all,
             // 小窗 Popout
             crate::commands::popout::toggle_popout,
+            crate::commands::popout::popout_open_state,
             crate::commands::popout::move_popout,
             crate::commands::popout::dock_popout,
             // 托盘自定义菜单动作(显示主窗 / 小窗 / 收起 / 退出)

@@ -1,5 +1,5 @@
 import { HashRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -84,35 +84,63 @@ function OnboardingGate() {
   return <OnboardingDialog onDone={() => setNeed(false)} />;
 }
 
+/** 小窗会话只建一次:模块级 Promise 同时兜住 StrictMode 的两次 effect。
+ *  用 ref + cleanup 取消标志会出问题——第一次 cleanup 会把取消标志永久置真,
+ *  后续导航被吞掉,页面一直停在「正在新建会话…」。 */
+let popoutBoot: Promise<string> | null = null;
+function bootPopoutSession(): Promise<string> {
+  if (!popoutBoot) {
+    popoutBoot = (async () => {
+      // 窗口创建时已在 Rust 端锚定右下角;这里再调一次作为防御(幂等,不产生跳位)
+      await invoke('dock_popout').catch(() => {});
+      const { id } = await ipc.createSession('', '');
+      // 让 useSessionsStore 也拿到这个新会话(同 DB,主窗口也能看到)
+      await useSessionsStore.getState().refresh();
+      return id;
+    })();
+  }
+  return popoutBoot;
+}
+
 /** Popout 小窗简化内容:无 Sidebar / Titlebar / Inspector,只留消息区 + Composer。
  *  内部用 CSS 隐藏 ChatPage 的额外面板,复用同一套会话/Send/Stream 逻辑。 */
 function PopoutApp() {
   const nav = useNavigate();
   const [err, setErr] = useState<string | null>(null);
-  // StrictMode 双调用守卫:确保整个 popout 生命周期内只创建一次会话。
-  // 不用局部 disposed 是因为 StrictMode mount→unmount→mount 之间 disposed 会重置。
-  const bootedRef = useRef(false);
+  /** 小窗在启动时就预建并隐藏(在托盘回调里新建 WebView2 会白屏卡死),
+   *  真正展示时后端广播 popout_shown,这里才开始建会话。 */
+  const [opened, setOpened] = useState(false);
   useEffect(() => {
-    if (bootedRef.current) return;
-    bootedRef.current = true;
-    let cancelled = false;
-    (async () => {
-      try {
-        // 窗口创建时已在 Rust 端锚定右下角;这里再调一次作为防御(幂等,不产生跳位)
-        await invoke('dock_popout').catch(() => {});
-        const { id } = await ipc.createSession('', '');
-        if (cancelled) return;
-        // 让 useSessionsStore 也拿到这个新会话(同 DB,主窗口也能看到)
-        await useSessionsStore.getState().refresh();
-        if (!cancelled) nav(`/chat/${id}`, { replace: true });
-      } catch (e) {
-        if (!cancelled) setErr(String(e ?? '新建会话失败'));
-      }
-    })();
-    return () => { cancelled = true; };
-    // 仅 mount 时跑一次;bootedRef 保证 StrictMode 下也不会二次执行
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let alive = true;
+    const un = listen('popout_shown', () => {
+      if (alive) setOpened(true);
+    });
+    // 补一次状态查询:展示事件可能早于监听建立(启动后立刻双击托盘)
+    invoke<boolean>('popout_open_state')
+      .then((v) => {
+        if (alive && v) setOpened(true);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+      void un.then((f) => f());
+    };
   }, []);
+
+  useEffect(() => {
+    if (!opened) return;
+    let alive = true;
+    bootPopoutSession()
+      .then((id) => {
+        if (alive) nav(`/chat/${id}`, { replace: true });
+      })
+      .catch((e) => {
+        if (alive) setErr(String(e ?? '新建会话失败'));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [opened, nav]);
 
   return (
     <div className="popout-root">

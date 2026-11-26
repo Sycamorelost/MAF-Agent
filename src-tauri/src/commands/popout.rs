@@ -8,9 +8,11 @@
 //! 窗口在创建时就由 Rust 端算好目标显示器工作区右下角坐标,首帧即落在正确位置,
 //! 不存在「先居中、再由前端调整」的跳位。
 
-use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const POPOUT_LABEL: &str = "popout";
+/// 小窗首次展示时广播给前端:预建时页面一直挂着等待,收到后开始建会话。
+const OPENED_EVENT: &str = "popout_shown";
 /// 小窗默认逻辑尺寸(与 inner_size 保持一致)
 const POPOUT_W: f64 = 340.0;
 const POPOUT_H: f64 = 420.0;
@@ -54,17 +56,8 @@ fn anchor_bottom_right(app: &AppHandle, win_w: f64, win_h: f64) -> Option<(f64, 
     ))
 }
 
-/// 确保 popout 窗口存在并 visible。已存在则 show+focus,不存在则创建。
-/// 创建时直接定位到光标所在显示器工作区右下角,避免先居中再跳位。
-pub fn ensure_popout(app: &AppHandle) -> Result<WebviewWindow, String> {
-    if let Some(w) = app.get_webview_window(POPOUT_LABEL) {
-        let _ = w.set_skip_taskbar(true);
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
-        return Ok(w);
-    }
-    // 创建:无装饰 + 始终置顶 + 不在任务栏
+/// 构建小窗窗口(默认隐藏,由 `preload` 在启动阶段调用)。
+fn build_popout(app: &AppHandle, visible: bool) -> Result<WebviewWindow, String> {
     let mut builder = WebviewWindowBuilder::new(app, POPOUT_LABEL, tauri::WebviewUrl::default())
         .title("myAgent")
         // 默认最窄尺寸（右下角贴任务栏出现时看起来像个迷你气泡）
@@ -75,16 +68,47 @@ pub fn ensure_popout(app: &AppHandle) -> Result<WebviewWindow, String> {
         .decorations(false)
         .transparent(false)
         .always_on_top(true)
-        .skip_taskbar(true);
+        .skip_taskbar(true)
+        .visible(visible);
     // 构建前就给出右下角坐标:窗口首次显示即在目标位置,没有居中帧。
     // 仅在完全拿不到屏幕信息时才退回居中。
     builder = match anchor_bottom_right(app, POPOUT_W, POPOUT_H) {
         Some((x, y)) => builder.position(x, y),
         None => builder.center(),
     };
-    let w = builder
+    builder
         .build()
-        .map_err(|e| format!("创建 popout 窗口失败:{e}"))?;
+        .map_err(|e| format!("创建 popout 窗口失败:{e}"))
+}
+
+/// 启动时预建隐藏的小窗。
+///
+/// 不能在托盘事件回调里现场创建:WebView2 在托盘回调的执行上下文里初始化不完整
+/// (顶层窗口在、渲染子窗口始终隐藏且没有 RenderWidgetHost,页面根本没加载),
+/// 表现为弹出纯白窗口并卡死。与 tray-menu 一样改到 setup 阶段建,点击时只 show。
+pub fn preload(app: &AppHandle) -> Result<(), String> {
+    if app.get_webview_window(POPOUT_LABEL).is_some() {
+        return Ok(());
+    }
+    build_popout(app, false).map(|_| ())
+}
+
+/// 确保 popout 窗口存在并 visible。已存在则 show+focus,不存在则创建(兜底)。
+pub fn ensure_popout(app: &AppHandle) -> Result<WebviewWindow, String> {
+    let w = match app.get_webview_window(POPOUT_LABEL) {
+        Some(w) => w,
+        // 兜底:预建失败时仍按旧路径现场创建(可能白屏,但至少给用户一个窗口)
+        None => build_popout(app, false)?,
+    };
+    let was_visible = w.is_visible().unwrap_or(false);
+    let _ = w.set_skip_taskbar(true);
+    let _ = w.show();
+    let _ = w.unminimize();
+    let _ = w.set_focus();
+    if !was_visible {
+        // 预建的页面一直挂着等这个信号;事件早于前端监听建立时由 `popout_open_state` 兜底
+        let _ = w.emit(OPENED_EVENT, ());
+    }
     Ok(w)
 }
 
@@ -114,6 +138,13 @@ pub fn toggle_popout(app: AppHandle) -> Result<bool, String> {
         let w = ensure_popout(&app)?;
         Ok(w.is_visible().unwrap_or(false))
     }
+}
+
+/// 前端查询:小窗当前是否已展示。
+/// 用于补「展示事件早于监听建立」(启动后立刻双击托盘)的竞态。
+#[tauri::command]
+pub fn popout_open_state(app: AppHandle) -> bool {
+    popout_visible(&app)
 }
 
 /// 前端调整 popout 位置(load 后算好右下角再调)。
